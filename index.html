@@ -29,6 +29,7 @@
             color: var(--text-color);
             margin: 0;
             padding: 1rem;
+            font-size: 16px;
         }
 
         .container {
@@ -111,6 +112,11 @@
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
         }
+        
+        .input-field input:read-only {
+            background-color: #f4f4f9;
+            cursor: not-allowed;
+        }
 
         .table-container { overflow-x: auto; }
 
@@ -140,10 +146,22 @@
             border: 1px solid var(--border-color);
             border-radius: 6px;
             box-sizing: border-box;
+            font-size: 1rem;
         }
         
+        td input:read-only {
+            background-color: transparent;
+            border: none;
+            cursor: default;
+        }
+        
+        td input.no {
+            min-width: 80px;
+        }
+
         td.read-only {
             font-weight: 500;
+            font-size: 1rem;
         }
 
         .action-bar {
@@ -157,7 +175,7 @@
             padding: 0.65rem 1.25rem;
             border: none;
             border-radius: 8px;
-            font-size: 0.95rem;
+            font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -221,8 +239,11 @@
             justify-content: space-between;
             align-items: center;
             border: 1px solid var(--border-color);
+            gap: 1rem;
         }
-        #recentTransactionsList li span { font-weight: 600; }
+        #recentTransactionsList li span { font-weight: 600; flex-grow: 1; }
+        #recentTransactionsList .button-group { display: flex; gap: 0.5rem; }
+
 
         @media print {
             body { padding: 0; background-color: white; }
@@ -264,7 +285,7 @@
                 <div class="input-group">
                     <div class="input-field">
                         <label for="todayDate">Today's Date</label>
-                        <input type="date" id="todayDate">
+                        <input type="text" id="todayDate" placeholder="DD/MM/YYYY">
                     </div>
                     <div class="input-field">
                         <label for="interestRate">Monthly Interest Rate (%)</label>
@@ -289,10 +310,13 @@
                     </table>
                 </div>
 
-                <div class="action-bar">
+                <div class="action-bar" id="mainActionBar">
                     <button class="btn btn-primary" onclick="addRow()">Add Loan</button>
                     <button class="btn btn-secondary" onclick="sortRows()">Sort by No</button>
                     <button class="btn btn-primary" onclick="printAndSave()">Print & Save</button>
+                </div>
+                 <div class="action-bar" id="viewModeActionBar" style="display: none;">
+                    <button class="btn btn-secondary" onclick="exitViewMode()">Back to Calculator</button>
                 </div>
 
                 <div class="totals-summary">
@@ -333,29 +357,58 @@
         const totalInterestEl = document.getElementById('totalInterest');
         const finalTotalEl = document.getElementById('finalTotal');
         const recentTransactionsListEl = document.getElementById('recentTransactionsList');
+        const mainActionBar = document.getElementById('mainActionBar');
+        const viewModeActionBar = document.getElementById('viewModeActionBar');
+
+        // --- Smart Date Parsing ---
+        const parseDate = (dateString) => {
+            if (!dateString) return null;
+            const parts = dateString.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+            if (!parts) return null;
+            
+            let day = parseInt(parts[1], 10);
+            let month = parseInt(parts[2], 10);
+            let year = parseInt(parts[3], 10);
+
+            if (year < 100) {
+                year += (new Date().getFullYear() - (new Date().getFullYear() % 100)) - (year > (new Date().getFullYear() % 100) ? 100 : 0);
+            }
+            
+            if (day > 0 && day <= 31 && month > 0 && month <= 12) {
+                return new Date(year, month - 1, day);
+            }
+            return null;
+        };
+        
+        const formatDateToDDMMYYYY = (date) => {
+            if (!date || isNaN(date.getTime())) return '';
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        };
 
         // --- Calculation Logic ---
         const roundToNearest = (num, nearest) => Math.round(num / nearest) * nearest;
-        const formatDate = (date) => new Date(date).toISOString().split('T')[0];
 
         const calculateDurationInDays = (loanDate, todayDate) => {
             if (!loanDate || !todayDate) return 0;
-            const start = new Date(loanDate);
-            const end = new Date(todayDate);
+            const start = loanDate;
+            const end = todayDate;
             if (start > end) return 0;
             const diffTime = Math.abs(end - start);
             return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         };
 
         const calculateInterest = (principal, rate, durationInDays) => {
+            const effectiveDuration = (durationInDays > 0 && durationInDays < 30) ? 30 : durationInDays;
             const monthlyRate = rate / 100;
             const dailyRate = monthlyRate / 30;
-            const rawInterest = principal * dailyRate * durationInDays;
-            return rawInterest;
+            return principal * dailyRate * effectiveDuration;
         };
         
         const updateAllCalculations = () => {
-            const todayDate = todayDateEl.value;
+            const todayDate = parseDate(todayDateEl.value);
             const interestRate = parseFloat(interestRateEl.value) || 0;
             
             let totalPrincipal = 0;
@@ -363,7 +416,7 @@
 
             document.querySelectorAll('#loanTable tbody tr').forEach(row => {
                 const principal = parseFloat(row.querySelector('.principal').value) || 0;
-                const loanDate = row.querySelector('.date').value;
+                const loanDate = parseDate(row.querySelector('.date').value);
                 const durationEl = row.querySelector('.duration');
                 const interestEl = row.querySelector('.interest');
 
@@ -396,18 +449,39 @@
                 <td>${rowCount + 1}</td>
                 <td><input type="text" class="no" value="${loan.no}"></td>
                 <td><input type="number" class="principal" placeholder="0.00" value="${loan.principal}"></td>
-                <td><input type="date" class="date" value="${loan.date}"></td>
+                <td><input type="text" class="date" placeholder="DD/MM/YYYY" value="${loan.date}"></td>
                 <td class="read-only duration"></td>
                 <td class="read-only interest"></td>
                 <td><button class="btn btn-danger" onclick="removeRow(this)">X</button></td>
             `;
-            row.querySelectorAll('input').forEach(input => input.addEventListener('input', updateAllCalculations));
+            
+            const dateInput = row.querySelector('.date');
+            dateInput.addEventListener('blur', (e) => {
+                const parsed = parseDate(e.target.value);
+                if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
+                updateAllCalculations();
+            });
+
+            const inputs = row.querySelectorAll('input.no, input.principal');
+            inputs.forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const currentRow = e.target.closest('tr');
+                    if (currentRow.isSameNode(loanTableBody.lastChild)) {
+                        addRow();
+                    }
+                    updateAllCalculations();
+                });
+            });
+            dateInput.addEventListener('input', updateAllCalculations);
         };
         
         const removeRow = (button) => {
-            button.closest('tr').remove();
-            renumberRows();
-            updateAllCalculations();
+            const row = button.closest('tr');
+            if (loanTableBody.rows.length > 1) {
+                row.remove();
+                renumberRows();
+                updateAllCalculations();
+            }
         };
 
         const renumberRows = () => {
@@ -418,23 +492,36 @@
         
         const sortRows = () => {
             const rows = Array.from(loanTableBody.querySelectorAll('tr'));
-            rows.sort((a, b) => {
+            rows.forEach(row => {
+                const noVal = row.querySelector('.no').value.trim();
+                const principalVal = row.querySelector('.principal').value.trim();
+                if (!noVal && !principalVal && loanTableBody.rows.length > 1) {
+                   row.remove();
+                }
+            });
+            
+            const sortedRows = Array.from(loanTableBody.querySelectorAll('tr'));
+            sortedRows.sort((a, b) => {
                 const valA = a.querySelector('.no').value.trim().toLowerCase();
                 const valB = b.querySelector('.no').value.trim().toLowerCase();
                 return valA.localeCompare(valB, undefined, {numeric: true, sensitivity: 'base'});
             });
-            rows.forEach(row => loanTableBody.appendChild(row));
+
+            sortedRows.forEach(row => loanTableBody.appendChild(row));
             renumberRows();
             saveCurrentState();
         };
 
         // --- State Management ---
         const saveCurrentState = () => {
-            const loans = Array.from(document.querySelectorAll('#loanTable tbody tr')).map(row => ({
-                no: row.querySelector('.no').value,
-                principal: row.querySelector('.principal').value,
-                date: row.querySelector('.date').value
-            }));
+            const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
+                .map(row => ({
+                    no: row.querySelector('.no').value,
+                    principal: row.querySelector('.principal').value,
+                    date: row.querySelector('.date').value
+                }))
+                .filter(loan => loan.no || loan.principal);
+
             const currentState = {
                 todayDate: todayDateEl.value,
                 interestRate: interestRateEl.value,
@@ -445,19 +532,27 @@
         
         const loadCurrentState = () => {
             const savedState = JSON.parse(localStorage.getItem('interestLedgerState'));
+            loanTableBody.innerHTML = '';
             if (savedState) {
-                todayDateEl.value = savedState.todayDate || formatDate(new Date());
+                todayDateEl.value = savedState.todayDate || formatDateToDDMMYYYY(new Date());
                 interestRateEl.value = savedState.interestRate || '1.75';
-                loanTableBody.innerHTML = '';
                 if (savedState.loans && savedState.loans.length > 0) {
                     savedState.loans.forEach(loan => addRow(loan));
-                } else {
-                    for (let i=0; i < 5; i++) addRow();
                 }
             } else {
-                todayDateEl.value = formatDate(new Date());
-                for (let i=0; i < 5; i++) addRow();
+                todayDateEl.value = formatDateToDDMMYYYY(new Date());
             }
+            
+            while(loanTableBody.rows.length < 5) {
+                addRow();
+            }
+
+            if (loanTableBody.rows.length > 0 && !loanTableBody.lastChild.querySelector('.principal').value) {
+                // all good
+            } else {
+                 addRow();
+            }
+
             updateAllCalculations();
         };
         
@@ -479,7 +574,7 @@
                     duration: row.querySelector('.duration').textContent,
                     interest: row.querySelector('.interest').textContent
                 }))
-                .filter(loan => loan.principal); // Only include rows with a principal
+                .filter(loan => loan.principal);
 
             if (loans.length === 0) {
                 alert("Please add at least one loan with a principal amount to save a report.");
@@ -501,7 +596,6 @@
             savedReports.unshift(report);
             localStorage.setItem('interestLedgerReports', JSON.stringify(savedReports));
 
-            // Prepare for printing
             document.getElementById('printTitle').textContent = `Interest Report`;
             document.getElementById('printDate').textContent = `As of ${todayDateEl.value}`;
             window.print();
@@ -521,8 +615,9 @@
                 const li = document.createElement('li');
                 li.innerHTML = `
                     <span>Report from ${report.reportDate}</span>
-                    <div>
-                        <button class="btn btn-secondary" onclick="viewReport(${index})">View</button>
+                    <div class="button-group">
+                        <button class="btn btn-secondary" onclick="viewReport(${index}, false)">View</button>
+                        <button class="btn btn-primary" onclick="viewReport(${index}, true)">Edit</button>
                         <button class="btn btn-danger" onclick="deleteReport(${index})">Delete</button>
                     </div>
                 `;
@@ -530,7 +625,27 @@
             });
         };
 
-        const viewReport = (index) => {
+        const setViewMode = (isViewOnly) => {
+            const isEditable = !isViewOnly;
+            mainActionBar.style.display = isEditable ? 'flex' : 'none';
+            viewModeActionBar.style.display = isViewOnly ? 'flex' : 'none';
+            
+            todayDateEl.readOnly = isViewOnly;
+            interestRateEl.readOnly = isViewOnly;
+
+            document.querySelectorAll('#loanTable tbody tr').forEach(row => {
+                row.querySelectorAll('input').forEach(input => input.readOnly = isViewOnly);
+                const deleteBtn = row.querySelector('.btn-danger');
+                if(deleteBtn) deleteBtn.style.display = isEditable ? 'inline-flex' : 'none';
+            });
+        };
+
+        const exitViewMode = () => {
+            setViewMode(false);
+            loadCurrentState(); // Reload the last editable state
+        };
+
+        const viewReport = (index, isEditable) => {
             const savedReports = JSON.parse(localStorage.getItem('interestLedgerReports')) || [];
             const report = savedReports[index];
             
@@ -539,7 +654,16 @@
             interestRateEl.value = report.interestRate;
             loanTableBody.innerHTML = '';
             
-            report.loans.forEach(loan => addRow(loan));
+            if(report.loans) {
+                report.loans.forEach(loan => addRow(loan));
+            }
+            
+            if (isEditable) {
+                addRow(); // Add a trailing empty row for editing
+                setViewMode(false);
+            } else {
+                 setViewMode(true);
+            }
             updateAllCalculations();
         };
         
@@ -554,7 +678,13 @@
         // --- Initial Load ---
         document.addEventListener('DOMContentLoaded', () => {
             loadCurrentState();
-            [todayDateEl, interestRateEl].forEach(el => el.addEventListener('input', updateAllCalculations));
+            todayDateEl.addEventListener('input', updateAllCalculations);
+            interestRateEl.addEventListener('input', updateAllCalculations);
+            todayDateEl.addEventListener('blur', (e) => {
+                const parsed = parseDate(e.target.value);
+                if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
+                updateAllCalculations();
+            });
         });
     </script>
 </body>
