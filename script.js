@@ -68,16 +68,27 @@ const formatDateToDDMMYYYY = (date) => {
 // --- Calculation Logic ---
 const roundToNearest = (num, nearest) => Math.round(num / nearest) * nearest;
 
-const calculateDurationInDays = (loanDate, todayDate) => {
-    if (!loanDate || !todayDate) return 0;
-    const start = loanDate;
-    const end = todayDate;
-    if (start > end) return 0;
-    const diffTime = Math.abs(end - start);
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+// FIX: Implement DAYS360 logic
+const days360 = (startDate, endDate) => {
+    if (!startDate || !endDate || startDate > endDate) return 0;
+
+    let d1 = startDate.getDate();
+    let m1 = startDate.getMonth() + 1;
+    let y1 = startDate.getFullYear();
+
+    let d2 = endDate.getDate();
+    let m2 = endDate.getMonth() + 1;
+    let y2 = endDate.getFullYear();
+
+    if (d1 === 31) d1 = 30;
+    if (d2 === 31 && d1 === 30) d2 = 30;
+
+    return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
 };
 
+
 const calculateInterest = (principal, rate, durationInDays) => {
+    // Interest calculation still uses the effective duration
     const effectiveDuration = (durationInDays > 0 && durationInDays < 30) ? 30 : durationInDays;
     const monthlyRate = rate / 100;
     const dailyRate = monthlyRate / 30;
@@ -97,11 +108,14 @@ const updateAllCalculations = () => {
         const durationEl = row.querySelector('.duration');
         const interestEl = row.querySelector('.interest');
 
-        const duration = calculateDurationInDays(loanDate, todayDate);
+        const duration = days360(loanDate, todayDate);
         const interest = calculateInterest(principal, interestRate, duration);
         const roundedInterest = roundToNearest(interest, 5);
         
-        durationEl.textContent = duration > 0 ? duration : '';
+        // FIX: Display 30 if actual duration is less than 30
+        const displayDuration = (duration > 0 && duration < 30) ? 30 : duration;
+        durationEl.textContent = displayDuration > 0 ? displayDuration : '';
+
         interestEl.textContent = roundedInterest > 0 ? roundedInterest.toFixed(2) : '';
 
         totalPrincipal += principal;
@@ -430,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Event Listeners
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
-    addRowBtn.addEventListener('click', addRow);
+    addRowBtn.addEventListener('click', () => addRow());
     sortRowsBtn.addEventListener('click', sortRows);
     printSaveBtn.addEventListener('click', printAndSave);
     exitViewModeBtn.addEventListener('click', exitViewMode);
