@@ -80,7 +80,7 @@
             gap: 1rem;
             padding: 0.75rem 1.5rem;
         }
-        #googleSignInBtn:hover {
+        #googleSignInBtn:hover:not(:disabled) {
             background-color: #357ae8;
         }
         #googleSignInBtn svg {
@@ -249,6 +249,7 @@
         .btn:disabled {
             background-color: #d1d1d6;
             cursor: not-allowed;
+            opacity: 0.7;
         }
 
         .btn-primary {
@@ -340,7 +341,7 @@
     <div id="loginOverlay">
         <div class="login-box">
             <h1>Interest Ledger</h1>
-            <p>Sign in to access your synced reports.</p>
+            <p id="loginMessage">Sign in to access your synced reports.</p>
             <button class="btn" id="googleSignInBtn" onclick="signInWithGoogle()">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,5 12,5C14.6,5 16.14,6.35 16.81,7.02L18.83,5.18C17.11,3.76 14.85,3 12,3C7.5,3 4,6.58 4,12C4,17.42 7.5,21 12,21C17,21 20.7,17.5 20.7,12.33C20.7,11.67 20.7,11.34 20.7,11.1H21.35Z"/></svg>
                 Sign in with Google
@@ -468,6 +469,8 @@
         const recentTransactionsListEl = document.getElementById('recentTransactionsList');
         const mainActionBar = document.getElementById('mainActionBar');
         const viewModeActionBar = document.getElementById('viewModeActionBar');
+        const googleSignInBtn = document.getElementById('googleSignInBtn');
+        const loginMessage = document.getElementById('loginMessage');
 
         // --- Smart Date Parsing ---
         const parseDate = (dateString) => {
@@ -816,10 +819,7 @@
         // --- Authentication ---
         const signInWithGoogle = () => {
             const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).catch(error => {
-                console.error("Google Sign-in failed: ", error);
-                alert("Could not sign in with Google. Please try again.");
-            });
+            auth.signInWithRedirect(provider);
         };
 
         const signOut = () => {
@@ -828,6 +828,24 @@
 
         // --- Initial Load & Auth ---
         document.addEventListener('DOMContentLoaded', () => {
+            // FIX: Check for supported auth environment
+            const isSupportedAuthEnv = ['http:', 'https:', 'chrome-extension:'].includes(window.location.protocol);
+
+            if (!isSupportedAuthEnv) {
+                loginMessage.textContent = 'Sign-in is disabled in this environment. Please use the hosted website link.';
+                googleSignInBtn.disabled = true;
+                return;
+            }
+
+            auth.getRedirectResult()
+                .then((result) => {
+                    // This is just to handle the redirect flow. 
+                    // The onAuthStateChanged observer will handle the user state.
+                }).catch((error) => {
+                    console.error("Google Sign-in redirect failed: ", error);
+                    alert("Could not complete sign in. Please try again.");
+                });
+
             auth.onAuthStateChanged(firebaseUser => {
                 if (firebaseUser) {
                     user = firebaseUser;
