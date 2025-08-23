@@ -19,7 +19,6 @@ let reportsCollection = null;
 const loginOverlay = document.getElementById('loginOverlay');
 const appContainer = document.getElementById('appContainer');
 const authStatusEl = document.getElementById('authStatus');
-const printSaveBtn = document.getElementById('printSaveBtn');
 const todayDateEl = document.getElementById('todayDate');
 const interestRateEl = document.getElementById('interestRate');
 const loanTableBody = document.querySelector('#loanTable tbody');
@@ -33,7 +32,8 @@ const googleSignInBtn = document.getElementById('googleSignInBtn');
 const loginMessage = document.getElementById('loginMessage');
 const signOutBtn = document.getElementById('signOutBtn');
 const addRowBtn = document.getElementById('addRowBtn');
-const sortRowsBtn = document.getElementById('sortRowsBtn');
+const saveReportBtn = document.getElementById('saveReportBtn');
+const printReportBtn = document.getElementById('printReportBtn');
 const exitViewModeBtn = document.getElementById('exitViewModeBtn');
 
 
@@ -68,7 +68,6 @@ const formatDateToDDMMYYYY = (date) => {
 // --- Calculation Logic ---
 const roundToNearest = (num, nearest) => Math.round(num / nearest) * nearest;
 
-// FIX: Implement DAYS360 logic
 const days360 = (startDate, endDate) => {
     if (!startDate || !endDate || startDate > endDate) return 0;
 
@@ -86,9 +85,7 @@ const days360 = (startDate, endDate) => {
     return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
 };
 
-
 const calculateInterest = (principal, rate, durationInDays) => {
-    // Interest calculation still uses the effective duration
     const effectiveDuration = (durationInDays > 0 && durationInDays < 30) ? 30 : durationInDays;
     const monthlyRate = rate / 100;
     const dailyRate = monthlyRate / 30;
@@ -112,11 +109,10 @@ const updateAllCalculations = () => {
         const interest = calculateInterest(principal, interestRate, duration);
         const roundedInterest = roundToNearest(interest, 5);
         
-        // FIX: Display 30 if actual duration is less than 30
         const displayDuration = (duration > 0 && duration < 30) ? 30 : duration;
         durationEl.textContent = displayDuration > 0 ? displayDuration : '';
 
-        interestEl.textContent = roundedInterest > 0 ? roundedInterest.toFixed(2) : '';
+        interestEl.textContent = roundedInterest > 0 ? Math.round(roundedInterest) : '';
 
         totalPrincipal += principal;
         totalInterestRaw += interest;
@@ -124,9 +120,9 @@ const updateAllCalculations = () => {
     
     const roundedTotalInterest = roundToNearest(totalInterestRaw, 10);
 
-    totalPrincipalEl.textContent = totalPrincipal.toFixed(2);
-    totalInterestEl.textContent = roundedTotalInterest.toFixed(2);
-    finalTotalEl.textContent = (totalPrincipal + roundedTotalInterest).toFixed(2);
+    totalPrincipalEl.textContent = Math.round(totalPrincipal);
+    totalInterestEl.textContent = Math.round(roundedTotalInterest);
+    finalTotalEl.textContent = Math.round(totalPrincipal + roundedTotalInterest);
     
     saveCurrentState();
 };
@@ -139,7 +135,7 @@ const addRow = (loan = { no: '', principal: '', date: '' }) => {
     row.innerHTML = `
         <td>${rowCount + 1}</td>
         <td><input type="text" class="no" value="${loan.no}"></td>
-        <td><input type="number" class="principal" placeholder="0.00" value="${loan.principal}"></td>
+        <td><input type="number" class="principal" placeholder="0" value="${loan.principal}"></td>
         <td><input type="text" class="date" placeholder="DD/MM/YYYY" value="${loan.date}"></td>
         <td class="read-only duration"></td>
         <td class="read-only interest"></td>
@@ -181,7 +177,7 @@ const renumberRows = () => {
     });
 };
 
-const sortRows = () => {
+const cleanAndSortTable = () => {
     const rows = Array.from(loanTableBody.querySelectorAll('tr'));
     rows.forEach(row => {
         const noVal = row.querySelector('.no').value.trim();
@@ -200,12 +196,13 @@ const sortRows = () => {
 
     sortedRows.forEach(row => loanTableBody.appendChild(row));
     renumberRows();
+    updateAllCalculations();
     saveCurrentState();
 };
 
 // --- State Management (Local Storage for active state) ---
 const saveCurrentState = () => {
-    if (!user) return; // Don't save if not logged in
+    if (!user) return;
     const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
         .map(row => ({
             no: row.querySelector('.no').value,
@@ -260,12 +257,14 @@ const showTab = (tabId) => {
     }
 };
 
-// --- Print & Save (Now with Firestore) ---
-const printAndSave = async () => {
+// --- Save & Print ---
+const saveReport = async () => {
     if (!reportsCollection) {
         alert("Database not connected. Please wait.");
         return;
     }
+    
+    cleanAndSortTable();
 
     const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
         .map(row => ({
@@ -282,7 +281,14 @@ const printAndSave = async () => {
         return;
     }
 
+    // Generate unique report name
+    const baseName = `Summary of ${todayDateEl.value}`;
+    const querySnapshot = await reportsCollection.where("reportDate", "==", todayDateEl.value).get();
+    const count = querySnapshot.size;
+    const reportName = count > 0 ? `${baseName} (${count + 1})` : baseName;
+
     const report = {
+        reportName: reportName,
         reportDate: todayDateEl.value,
         interestRate: interestRateEl.value,
         loans: loans,
@@ -296,16 +302,21 @@ const printAndSave = async () => {
     
     try {
         await reportsCollection.add(report);
-        document.getElementById('printTitle').textContent = `Interest Report`;
-        document.getElementById('printDate').textContent = `As of ${todayDateEl.value}`;
-        window.print();
+        alert(`Report "${reportName}" saved successfully!`);
     } catch (error) {
         console.error("Error saving report: ", error);
-        alert("Could not save report to the database. Please check your connection.");
+        alert("Could not save report to the database.");
     }
 };
 
-// --- Recent Transactions (Now with Firestore) ---
+const printReport = () => {
+    cleanAndSortTable();
+    document.getElementById('printTitle').textContent = `Interest Report`;
+    document.getElementById('printDate').textContent = `As of ${todayDateEl.value}`;
+    window.print();
+};
+
+// --- Recent Transactions ---
 const loadRecentTransactions = () => {
     if (!reportsCollection) {
         recentTransactionsListEl.innerHTML = '<li>Connecting to database...</li>';
@@ -323,7 +334,7 @@ const loadRecentTransactions = () => {
             const report = doc.data();
             const li = document.createElement('li');
             li.innerHTML = `
-                <span>Report from ${report.reportDate}</span>
+                <span>${report.reportName || `Report from ${report.reportDate}`}</span>
                 <div class="button-group">
                     <button class="btn btn-secondary" onclick="viewReport('${doc.id}', false)">View</button>
                     <button class="btn btn-primary" onclick="viewReport('${doc.id}', true)">Edit</button>
@@ -445,8 +456,8 @@ document.addEventListener('DOMContentLoaded', () => {
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow());
-    sortRowsBtn.addEventListener('click', sortRows);
-    printSaveBtn.addEventListener('click', printAndSave);
+    saveReportBtn.addEventListener('click', saveReport);
+    printReportBtn.addEventListener('click', printReport);
     exitViewModeBtn.addEventListener('click', exitViewMode);
 
     document.querySelectorAll('.tab-button').forEach(button => {
