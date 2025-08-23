@@ -45,12 +45,23 @@
         header {
             padding: 1.5rem 2rem;
             border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         header h1 {
             margin: 0;
             font-size: 1.75rem;
             font-weight: 700;
+        }
+        
+        #authStatus {
+            font-size: 0.8rem;
+            color: var(--subtle-text-color);
+            background-color: var(--background-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
         }
 
         .tabs {
@@ -183,24 +194,29 @@
             align-items: center;
             gap: 0.5rem;
         }
+        
+        .btn:disabled {
+            background-color: #d1d1d6;
+            cursor: not-allowed;
+        }
 
         .btn-primary {
             background-color: var(--primary-color);
             color: white;
         }
-        .btn-primary:hover { background-color: #0056b3; }
+        .btn-primary:hover:not(:disabled) { background-color: #0056b3; }
 
         .btn-secondary {
             background-color: #e5e5ea;
             color: var(--text-color);
         }
-        .btn-secondary:hover { background-color: #d1d1d6; }
+        .btn-secondary:hover:not(:disabled) { background-color: #d1d1d6; }
         
         .btn-danger {
             background-color: var(--danger-color);
             color: white;
         }
-        .btn-danger:hover { background-color: #c51a0d; }
+        .btn-danger:hover:not(:disabled) { background-color: #c51a0d; }
 
         .totals-summary {
             background: #f9f9fb;
@@ -273,6 +289,7 @@
     <div class="container">
         <header>
             <h1>Interest Ledger</h1>
+            <span id="authStatus">Connecting...</span>
         </header>
 
         <div class="tabs">
@@ -313,7 +330,7 @@
                 <div class="action-bar" id="mainActionBar">
                     <button class="btn btn-primary" onclick="addRow()">Add Loan</button>
                     <button class="btn btn-secondary" onclick="sortRows()">Sort by No</button>
-                    <button class="btn btn-primary" onclick="printAndSave()">Print & Save</button>
+                    <button class="btn btn-primary" id="printSaveBtn" onclick="printAndSave()" disabled>Print & Save</button>
                 </div>
                  <div class="action-bar" id="viewModeActionBar" style="display: none;">
                     <button class="btn btn-secondary" onclick="exitViewMode()">Back to Calculator</button>
@@ -349,7 +366,33 @@
         </div>
     </div>
 
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
     <script>
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
+          authDomain: "interest-calculator-8d997.firebaseapp.com",
+          projectId: "interest-calculator-8d997",
+          storageBucket: "interest-calculator-8d997.appspot.com",
+          messagingSenderId: "187925519090",
+          appId: "1:187925519090:web:c875d2fb788d02b5bf4e6b"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        let user = null;
+        let reportsCollection = null;
+
+        const authStatusEl = document.getElementById('authStatus');
+        const printSaveBtn = document.getElementById('printSaveBtn');
+
+        // --- App Variables ---
         const todayDateEl = document.getElementById('todayDate');
         const interestRateEl = document.getElementById('interestRate');
         const loanTableBody = document.querySelector('#loanTable tbody');
@@ -371,7 +414,7 @@
             let year = parseInt(parts[3], 10);
 
             if (year < 100) {
-                year += (new Date().getFullYear() - (new Date().getFullYear() % 100)) - (year > (new Date().getFullYear() % 100) ? 100 : 0);
+                 year += (new Date().getFullYear() - (new Date().getFullYear() % 100)) - (year > (new Date().getFullYear() % 100) ? 100 : 0);
             }
             
             if (day > 0 && day <= 31 && month > 0 && month <= 12) {
@@ -512,7 +555,7 @@
             saveCurrentState();
         };
 
-        // --- State Management ---
+        // --- State Management (Local Storage for active state) ---
         const saveCurrentState = () => {
             const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
                 .map(row => ({
@@ -548,7 +591,7 @@
             }
 
             if (loanTableBody.rows.length > 0 && !loanTableBody.lastChild.querySelector('.principal').value) {
-                // all good
+                // all good, there's an empty row
             } else {
                  addRow();
             }
@@ -564,8 +607,13 @@
             if (tabId === 'recentTransactionsTab') loadRecentTransactions();
         };
 
-        // --- Print & Save ---
-        const printAndSave = () => {
+        // --- Print & Save (Now with Firestore) ---
+        const printAndSave = async () => {
+            if (!reportsCollection) {
+                alert("Database not connected. Please wait.");
+                return;
+            }
+
             const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
                 .map(row => ({
                     no: row.querySelector('.no').value,
@@ -585,6 +633,7 @@
                 reportDate: todayDateEl.value,
                 interestRate: interestRateEl.value,
                 loans: loans,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 totals: {
                     principal: totalPrincipalEl.textContent,
                     interest: totalInterestEl.textContent,
@@ -592,36 +641,47 @@
                 }
             };
             
-            const savedReports = JSON.parse(localStorage.getItem('interestLedgerReports')) || [];
-            savedReports.unshift(report);
-            localStorage.setItem('interestLedgerReports', JSON.stringify(savedReports));
-
-            document.getElementById('printTitle').textContent = `Interest Report`;
-            document.getElementById('printDate').textContent = `As of ${todayDateEl.value}`;
-            window.print();
+            try {
+                await reportsCollection.add(report);
+                document.getElementById('printTitle').textContent = `Interest Report`;
+                document.getElementById('printDate').textContent = `As of ${todayDateEl.value}`;
+                window.print();
+            } catch (error) {
+                console.error("Error saving report: ", error);
+                alert("Could not save report to the database. Please check your connection.");
+            }
         };
 
-        // --- Recent Transactions ---
+        // --- Recent Transactions (Now with Firestore) ---
         const loadRecentTransactions = () => {
-            recentTransactionsListEl.innerHTML = '';
-            const savedReports = JSON.parse(localStorage.getItem('interestLedgerReports')) || [];
-            
-            if (savedReports.length === 0) {
-                recentTransactionsListEl.innerHTML = '<li>No saved transactions yet.</li>';
+            if (!reportsCollection) {
+                recentTransactionsListEl.innerHTML = '<li>Connecting to database...</li>';
                 return;
             }
 
-            savedReports.forEach((report, index) => {
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <span>Report from ${report.reportDate}</span>
-                    <div class="button-group">
-                        <button class="btn btn-secondary" onclick="viewReport(${index}, false)">View</button>
-                        <button class="btn btn-primary" onclick="viewReport(${index}, true)">Edit</button>
-                        <button class="btn btn-danger" onclick="deleteReport(${index})">Delete</button>
-                    </div>
-                `;
-                recentTransactionsListEl.appendChild(li);
+            recentTransactionsListEl.innerHTML = '<li>Loading reports...</li>';
+            reportsCollection.orderBy("createdAt", "desc").get().then(querySnapshot => {
+                recentTransactionsListEl.innerHTML = '';
+                if (querySnapshot.empty) {
+                    recentTransactionsListEl.innerHTML = '<li>No saved transactions yet.</li>';
+                    return;
+                }
+                querySnapshot.forEach(doc => {
+                    const report = doc.data();
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <span>Report from ${report.reportDate}</span>
+                        <div class="button-group">
+                            <button class="btn btn-secondary" onclick="viewReport('${doc.id}', false)">View</button>
+                            <button class="btn btn-primary" onclick="viewReport('${doc.id}', true)">Edit</button>
+                            <button class="btn btn-danger" onclick="deleteReport('${doc.id}')">Delete</button>
+                        </div>
+                    `;
+                    recentTransactionsListEl.appendChild(li);
+                });
+            }).catch(error => {
+                console.error("Error loading reports: ", error);
+                recentTransactionsListEl.innerHTML = '<li>Could not load reports.</li>';
             });
         };
 
@@ -642,42 +702,66 @@
 
         const exitViewMode = () => {
             setViewMode(false);
-            loadCurrentState(); // Reload the last editable state
+            loadCurrentState();
         };
 
-        const viewReport = (index, isEditable) => {
-            const savedReports = JSON.parse(localStorage.getItem('interestLedgerReports')) || [];
-            const report = savedReports[index];
-            
-            showTab('calculatorTab');
-            todayDateEl.value = report.reportDate;
-            interestRateEl.value = report.interestRate;
-            loanTableBody.innerHTML = '';
-            
-            if(report.loans) {
-                report.loans.forEach(loan => addRow(loan));
-            }
-            
-            if (isEditable) {
-                addRow(); // Add a trailing empty row for editing
-                setViewMode(false);
-            } else {
-                 setViewMode(true);
-            }
-            updateAllCalculations();
+        const viewReport = (docId, isEditable) => {
+            reportsCollection.doc(docId).get().then(doc => {
+                if (!doc.exists) {
+                    alert("Report not found!");
+                    return;
+                }
+                const report = doc.data();
+                
+                showTab('calculatorTab');
+                todayDateEl.value = report.reportDate;
+                interestRateEl.value = report.interestRate;
+                loanTableBody.innerHTML = '';
+                
+                if(report.loans) {
+                    report.loans.forEach(loan => addRow(loan));
+                }
+                
+                if (isEditable) {
+                    addRow();
+                    setViewMode(false);
+                } else {
+                     setViewMode(true);
+                }
+                updateAllCalculations();
+            });
         };
         
-        const deleteReport = (index) => {
+        const deleteReport = (docId) => {
             if (!confirm("Are you sure you want to delete this report?")) return;
-            let savedReports = JSON.parse(localStorage.getItem('interestLedgerReports')) || [];
-            savedReports.splice(index, 1);
-            localStorage.setItem('interestLedgerReports', JSON.stringify(savedReports));
-            loadRecentTransactions();
+            reportsCollection.doc(docId).delete().then(() => {
+                loadRecentTransactions();
+            }).catch(error => {
+                console.error("Error deleting report: ", error);
+                alert("Could not delete report.");
+            });
         };
 
-        // --- Initial Load ---
+        // --- Initial Load & Auth ---
         document.addEventListener('DOMContentLoaded', () => {
-            loadCurrentState();
+            auth.onAuthStateChanged(firebaseUser => {
+                if (firebaseUser) {
+                    user = firebaseUser;
+                    authStatusEl.textContent = `Online`;
+                    reportsCollection = db.collection('reports').doc(user.uid).collection('userReports');
+                    printSaveBtn.disabled = false;
+                    loadCurrentState();
+                } else {
+                    authStatusEl.textContent = `Offline`;
+                    printSaveBtn.disabled = true;
+                }
+            });
+
+            auth.signInAnonymously().catch(error => {
+                console.error("Anonymous sign-in failed: ", error);
+                authStatusEl.textContent = `Login Failed`;
+            });
+
             todayDateEl.addEventListener('input', updateAllCalculations);
             interestRateEl.addEventListener('input', updateAllCalculations);
             todayDateEl.addEventListener('blur', (e) => {
@@ -689,3 +773,4 @@
     </script>
 </body>
 </html>
+
