@@ -50,6 +50,10 @@ const reportSearchInput = document.getElementById('reportSearchInput');
 const syncStatusEl = document.getElementById('syncStatus');
 const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
+// New Scan Feature Elements
+const scanImageBtn = document.getElementById('scanImageBtn');
+const imageUploadInput = document.getElementById('imageUploadInput');
+
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -110,9 +114,10 @@ const syncData = async () => {
 
 // --- Custom Modal Logic ---
 let resolveConfirm;
-const showConfirm = (title, message) => {
+const showConfirm = (title, message, showCancel = true) => {
     confirmTitleEl.textContent = title;
     confirmMessageEl.textContent = message;
+    confirmCancelBtn.style.display = showCancel ? 'inline-flex' : 'none';
     confirmModal.style.display = 'flex';
     return new Promise(resolve => {
         resolveConfirm = resolve;
@@ -178,7 +183,7 @@ const updateAllCalculations = () => {
     saveCurrentState();
 };
 
-// --- Table Management (Unchanged) ---
+// --- Table Management ---
 const addRow = (loan = { no: '', principal: '', date: '' }) => {
     const rowCount = loanTableBody.rows.length;
     const row = loanTableBody.insertRow();
@@ -190,6 +195,11 @@ const addRow = (loan = { no: '', principal: '', date: '' }) => {
         <td class="read-only duration"></td>
         <td class="read-only interest"></td>
         <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeRow(this)">X</button></td>`;
+    
+    // Automatically add a new row if the user types in the last row (handled by delegation)
+    // Re-number rows after adding
+    renumberRows();
+    updateAllCalculations();
 };
 const removeRow = (button) => {
     const row = button.closest('tr');
@@ -227,8 +237,8 @@ const loadCurrentState = () => {
         interestRateEl.value = savedState.interestRate || '1.75';
         if (savedState.loans && savedState.loans.length > 0) savedState.loans.forEach(loan => addRow(loan));
     } else { todayDateEl.value = formatDateToDDMMYYYY(new Date()); }
-    while (loanTableBody.rows.length < 5) addRow();
-    if (!loanTableBody.lastChild.querySelector('.principal').value) {} else { addRow(); }
+    while (loanTableBody.rows.length < 5) addRow({no:'', principal:'', date:''}); // Pass empty object
+    if (!loanTableBody.lastChild.querySelector('.principal').value) {} else { addRow({no:'', principal:'', date:''}); }
     updateAllCalculations();
 };
 
@@ -239,7 +249,6 @@ const showTab = (tabId) => {
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
     if (user) {
         if (tabId === 'recentTransactionsTab') {
-            // **FIX**: Clear list before loading to prevent flash of old content.
             recentTransactionsListEl.innerHTML = '';
             recentTransactionsLoader.style.display = 'flex';
             loadRecentTransactions();
@@ -264,7 +273,7 @@ const printAndSave = async () => {
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
-    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.");
+    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
     
     const reportDate = todayDateEl.value;
     const report = {
@@ -282,13 +291,13 @@ const printAndSave = async () => {
         report.createdAt = firebase.firestore.FieldValue.serverTimestamp();
         try {
             await reportsCollection.add(report);
-            showConfirm("Success", "Report saved to the cloud.");
+            await showConfirm("Success", "Report saved to the cloud.", false);
         } catch (error) { console.error("Error saving online:", error); }
     } else {
         report.localId = `local_${Date.now()}`;
         report.reportName = `(Unsynced) Summary of ${reportDate}`;
         await localDb.put('unsyncedReports', report);
-        showConfirm("Offline", "Report saved locally. It will sync when you're back online.");
+        await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
     document.getElementById('printTitle').textContent = `Interest Report`;
     document.getElementById('printDate').textContent = `As of ${reportDate}`;
@@ -300,7 +309,7 @@ const exportToPDF = async () => {
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans();
-    if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.");
+    if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -331,25 +340,19 @@ const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
         loanTableBody.innerHTML = '';
-        while(loanTableBody.rows.length < 5) addRow();
+        while(loanTableBody.rows.length < 5) addRow({no:'', principal:'', date:''});
         updateAllCalculations();
     }
 };
 
 // --- Recent Transactions ---
-
-// **NEW**: Renders the transaction list based on the cached data and an optional search filter.
 const renderRecentTransactions = (filter = '') => {
     recentTransactionsListEl.innerHTML = '';
     const searchTerm = filter.toLowerCase();
 
     const filteredReports = cachedReports.filter(report => {
-        if (!searchTerm) return true; // Show all if no filter
-
-        // Check report name
+        if (!searchTerm) return true;
         if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
-
-        // Check inside loans for 'no' or 'principal'
         return report.loans?.some(loan => 
             loan.no?.toLowerCase().includes(searchTerm) ||
             loan.principal?.toLowerCase().includes(searchTerm)
@@ -376,7 +379,6 @@ const renderRecentTransactions = (filter = '') => {
     });
 };
 
-// **MODIFIED**: Fetches data and then calls the new render function.
 const loadRecentTransactions = async () => {
     if (!user) return;
     
@@ -395,7 +397,7 @@ const loadRecentTransactions = async () => {
     cachedReports = [...localReports, ...onlineReports].sort((a, b) => (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt));
     
     recentTransactionsLoader.style.display = 'none';
-    renderRecentTransactions(reportSearchInput.value); // Render with current search term
+    renderRecentTransactions(reportSearchInput.value);
 };
 
 const setViewMode = (isViewOnly) => {
@@ -415,13 +417,13 @@ const exitViewMode = () => { setViewMode(false); loadCurrentState(); };
 
 const viewReport = (reportId, isEditable) => {
     const report = cachedReports.find(r => r.id === reportId);
-    if (!report) return showConfirm("Error", "Report not found!");
+    if (!report) return showConfirm("Error", "Report not found!", false);
     showTab('calculatorTab');
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
     if(report.loans) report.loans.forEach(loan => addRow(loan));
-    if (isEditable) { addRow(); setViewMode(false); } else { setViewMode(true); }
+    if (isEditable) { addRow({no:'', principal:'', date:''}); setViewMode(false); } else { setViewMode(true); }
     updateAllCalculations();
 };
 
@@ -467,13 +469,7 @@ const renderDashboard = async () => {
     if(pieChartInstance) pieChartInstance.destroy();
     pieChartInstance = new Chart(pieCtx, {
         type: 'pie',
-        data: {
-            labels: ['Total Principal', 'Total Interest'],
-            datasets: [{
-                data: [totalPrincipalAll, totalInterestAll],
-                backgroundColor: ['#3D52D5', '#fca311'],
-            }]
-        },
+        data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] },
     });
 
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
@@ -481,29 +477,72 @@ const renderDashboard = async () => {
     if(barChartInstance) barChartInstance.destroy();
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
-        data: {
-            labels: recentReports.map(r => r.reportDate),
-            datasets: [{
-                label: 'Total Principal',
-                data: recentReports.map(r => r.totals.principal),
-                backgroundColor: '#3D52D5',
-            }]
-        },
+        data: { labels: recentReports.map(r => r.reportDate), datasets: [{ label: 'Total Principal', data: recentReports.map(r => r.totals.principal), backgroundColor: '#3D52D5' }] },
         options: { scales: { y: { beginAtZero: true } } }
     });
 };
 
+// --- NEW: Image Scan Feature ---
+const handleImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    showConfirm("Processing", "Scanning image for data...", false);
+    try {
+        const extractedData = await extractDataFromImage(file);
+        if (extractedData) {
+            // Find the first empty row or add a new one
+            let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r => !r.querySelector('.principal').value && !r.querySelector('.no').value);
+            if (!targetRow) {
+                addRow({no:'', principal:'', date:''});
+                targetRow = loanTableBody.lastChild;
+            }
+            targetRow.querySelector('.no').value = extractedData.no;
+            targetRow.querySelector('.principal').value = extractedData.principal;
+            targetRow.querySelector('.date').value = extractedData.date;
+            updateAllCalculations();
+            closeConfirm(true); // Close the "Processing" modal
+            await showConfirm("Success", "Data has been filled from the image.", false);
+        } else {
+            await showConfirm("Failed", "Could not extract data from the image. Please ensure it's clear.", false);
+        }
+    } catch (error) {
+        console.error("Image processing error:", error);
+        await showConfirm("Error", "An error occurred during image processing.", false);
+    }
+    imageUploadInput.value = ''; // Reset file input
+};
+
+const extractDataFromImage = async (file) => {
+    // --- DEMONSTRATION / MOCK FUNCTION ---
+    // In a real application, you would replace this with a call to a server-side
+    // function (e.g., a Firebase Cloud Function) that uses an OCR service
+    // like Google Cloud Vision API to analyze the image.
+    // This prevents exposing your API key on the client-side.
+
+    console.log("Simulating AI analysis for file:", file.name);
+
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Return the hardcoded data from the user's sample image.
+    // A real API would return structured JSON based on the image text.
+    return {
+        no: 'D.450',
+        principal: '10000',
+        date: '22/09/2024'
+    };
+};
 
 // --- Authentication ---
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
     auth.signInWithPopup(provider).catch(error => {
         console.error("Google Sign-in failed: ", error);
-        showConfirm("Sign-In Failed", "Could not sign in with Google. Please ensure pop-ups are not blocked.");
+        showConfirm("Sign-In Failed", "Could not sign in with Google. Please ensure pop-ups are not blocked.", false);
     });
 };
 const signOut = () => auth.signOut();
-
 
 // --- Initial Load & Event Listeners ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -532,22 +571,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Action Listeners ---
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
-    addRowBtn.addEventListener('click', () => addRow());
+    addRowBtn.addEventListener('click', () => addRow({no:'', principal:'', date:''}));
     printAndSaveBtn.addEventListener('click', printAndSave);
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
     exportPdfBtn.addEventListener('click', exportToPDF);
     exportViewPdfBtn.addEventListener('click', exportToPDF);
+    scanImageBtn.addEventListener('click', () => imageUploadInput.click()); // New
+    imageUploadInput.addEventListener('change', handleImageUpload); // New
+    
+    // Modal Listeners
     confirmOkBtn.addEventListener('click', () => closeConfirm(true));
     confirmCancelBtn.addEventListener('click', () => closeConfirm(false));
     confirmModal.addEventListener('click', (e) => { if (e.target === confirmModal) closeConfirm(false); });
     
-    // --- Tab Listeners ---
+    // Tab Listeners
     document.querySelectorAll('.tab-button').forEach(button => {
         button.addEventListener('click', (e) => showTab(e.target.dataset.tab));
     });
 
-    // --- Input & Search Listeners ---
+    // Input & Search Listeners
     todayDateEl.addEventListener('input', updateAllCalculations);
     interestRateEl.addEventListener('input', updateAllCalculations);
     todayDateEl.addEventListener('blur', (e) => {
@@ -555,22 +598,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
         updateAllCalculations();
     });
-
-    // **NEW**: Listener for the single, relocated search bar.
     reportSearchInput.addEventListener('input', e => {
         renderRecentTransactions(e.target.value);
     });
     
-    // --- Offline/Online Listeners ---
+    // Offline/Online Listeners
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
 
-    // --- Event Delegation for Loan Table ---
+    // Event Delegation for Loan Table
     loanTableBody.addEventListener('input', e => {
         if (e.target.matches('input')) {
             const currentRow = e.target.closest('tr');
             if (currentRow && currentRow.isSameNode(loanTableBody.lastChild) && (e.target.classList.contains('principal') || e.target.classList.contains('no'))) {
-                addRow();
+                addRow({no:'', principal:'', date:''});
             }
             updateAllCalculations();
         }
