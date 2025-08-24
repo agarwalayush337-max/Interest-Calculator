@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interest Calculator</title>
+    <title>Interest Ledger</title>
     <meta name="theme-color" content="#ffffff">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192x192.png">
@@ -13,51 +13,46 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="background-shapes">
-        <div class="shape shape1"></div>
-        <div class="shape shape2"></div>
-        <div class="shape shape3"></div>
-    </div>
 
     <div id="loginOverlay">
-        <div class="login-box glass-effect">
-            <h1>Interest Calculator</h1>
+        <div class="login-box">
+            <h1>Interest Ledger</h1>
             <p id="loginMessage">Sign in to access your synced reports.</p>
-            <button class="btn" id="googleSignInBtn">
+            <button class="btn" id="googleSignInBtn" onclick="signInWithGoogle()">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,5 12,5C14.6,5 16.14,6.35 16.81,7.02L18.83,5.18C17.11,3.76 14.85,3 12,3C7.5,3 4,6.58 4,12C4,17.42 7.5,21 12,21C17,21 20.7,17.5 20.7,12.33C20.7,11.67 20.7,11.34 20.7,11.1H21.35Z"/></svg>
                 Sign in with Google
             </button>
         </div>
     </div>
 
-    <div class="container glass-effect" id="appContainer">
+    <div class="container" id="appContainer">
         <header>
-            <h1>Interest Calculator</h1>
+            <h1>Interest Ledger</h1>
             <div class="header-right">
                 <span id="authStatus"></span>
-                <button class="btn btn-secondary" id="signOutBtn">Sign Out</button>
+                <button class="btn btn-secondary" id="signOutBtn" onclick="signOut()">Sign Out</button>
             </div>
         </header>
 
         <div class="tabs">
-            <button class="tab-button active" data-tab="calculatorTab">Calculator</button>
-            <button class="tab-button" data-tab="recentTransactionsTab">Recent Transactions</button>
+            <button class="tab-button active" onclick="showTab('calculatorTab')">Calculator</button>
+            <button class="tab-button" onclick="showTab('recentTransactionsTab')">Recent Transactions</button>
         </div>
 
         <div id="calculatorTab" class="tab-content active">
             <div class="main-content">
                 <div class="input-group">
-                    <div class="input-field glass-effect">
+                    <div class="input-field">
                         <label for="todayDate">Today's Date</label>
                         <input type="text" id="todayDate" placeholder="DD/MM/YYYY">
                     </div>
-                    <div class="input-field glass-effect">
+                    <div class="input-field">
                         <label for="interestRate">Monthly Interest Rate (%)</label>
                         <input type="number" id="interestRate" value="1.75" step="0.01">
                     </div>
                 </div>
 
-                <div class="table-container glass-effect">
+                <div class="table-container">
                     <table id="loanTable">
                         <thead>
                             <tr>
@@ -75,26 +70,26 @@
                 </div>
 
                 <div class="action-bar" id="mainActionBar">
-                    <button class="btn btn-primary" id="addRowBtn">Add Loan</button>
-                    <button class="btn btn-secondary" id="saveReportBtn">Save Report</button>
-                    <button class="btn btn-secondary" id="printReportBtn">Print Report</button>
+                    <button class="btn btn-primary" onclick="addRow()">Add Loan</button>
+                    <button class="btn btn-secondary" onclick="sortRows()">Sort by No</button>
+                    <button class="btn btn-primary" id="printSaveBtn" onclick="printAndSave()">Print & Save</button>
                 </div>
                  <div class="action-bar" id="viewModeActionBar" style="display: none;">
-                    <button class="btn btn-secondary" id="exitViewModeBtn">Back to Calculator</button>
+                    <button class="btn btn-secondary" onclick="exitViewMode()">Back to Calculator</button>
                 </div>
 
                 <div class="totals-summary">
-                    <div class="total-item glass-effect">
+                    <div class="total-item">
                         <h3>Total Principal</h3>
-                        <p id="totalPrincipal">0</p>
+                        <p id="totalPrincipal">0.00</p>
                     </div>
-                    <div class="total-item glass-effect">
+                    <div class="total-item">
                         <h3>Total Interest</h3>
-                        <p id="totalInterest">0</p>
+                        <p id="totalInterest">0.00</p>
                     </div>
-                    <div class="total-item glass-effect">
+                    <div class="total-item">
                         <h3>Final Total Amount</h3>
-                        <p id="finalTotal">0</p>
+                        <p id="finalTotal">0.00</p>
                     </div>
                 </div>
                 
