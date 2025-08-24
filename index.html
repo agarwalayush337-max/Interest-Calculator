@@ -13,9 +13,14 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="background-shapes">
+        <div class="shape shape1"></div>
+        <div class="shape shape2"></div>
+        <div class="shape shape3"></div>
+    </div>
 
     <div id="loginOverlay">
-        <div class="login-box">
+        <div class="login-box glass-effect">
             <h1>Interest Calculator</h1>
             <p id="loginMessage">Sign in to access your synced reports.</p>
             <button class="btn" id="googleSignInBtn">
@@ -25,7 +30,7 @@
         </div>
     </div>
 
-    <div class="container" id="appContainer">
+    <div class="container glass-effect" id="appContainer">
         <header>
             <h1>Interest Calculator</h1>
             <div class="header-right">
@@ -42,17 +47,17 @@
         <div id="calculatorTab" class="tab-content active">
             <div class="main-content">
                 <div class="input-group">
-                    <div class="input-field">
+                    <div class="input-field glass-effect">
                         <label for="todayDate">Today's Date</label>
                         <input type="text" id="todayDate" placeholder="DD/MM/YYYY">
                     </div>
-                    <div class="input-field">
+                    <div class="input-field glass-effect">
                         <label for="interestRate">Monthly Interest Rate (%)</label>
                         <input type="number" id="interestRate" value="1.75" step="0.01">
                     </div>
                 </div>
 
-                <div class="table-container">
+                <div class="table-container glass-effect">
                     <table id="loanTable">
                         <thead>
                             <tr>
@@ -79,15 +84,15 @@
                 </div>
 
                 <div class="totals-summary">
-                    <div class="total-item">
+                    <div class="total-item glass-effect">
                         <h3>Total Principal</h3>
                         <p id="totalPrincipal">0</p>
                     </div>
-                    <div class="total-item">
+                    <div class="total-item glass-effect">
                         <h3>Total Interest</h3>
                         <p id="totalInterest">0</p>
                     </div>
-                    <div class="total-item">
+                    <div class="total-item glass-effect">
                         <h3>Final Total Amount</h3>
                         <p id="finalTotal">0</p>
                     </div>
@@ -108,10 +113,12 @@
         </div>
     </div>
 
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     
+    <!-- Your App's Logic -->
     <script src="script.js"></script>
 </body>
 </html>
