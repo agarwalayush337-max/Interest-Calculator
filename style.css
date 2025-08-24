@@ -153,6 +153,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
                calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
 }
+.btn svg { vertical-align: middle; } /* Align icon */
 .btn:active {
     box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
                inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
@@ -193,7 +194,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 #recentTransactionsList li span { font-weight: 600; flex-grow: 1; }
 #recentTransactionsList .button-group { display: flex; gap: 0.5rem; }
 
-/* --- New: Dashboard Styles --- */
+/* Dashboard Styles */
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -212,7 +213,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     font-weight: 600;
     color: var(--subtle-text-color);
 }
-/* --- New: Sync Status Indicator --- */
+/* Sync Status Indicator */
 #syncStatus {
     font-size: 0.8rem;
     font-weight: 600;
