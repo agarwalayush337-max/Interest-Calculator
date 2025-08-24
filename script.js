@@ -266,15 +266,7 @@ const printAndSave = async () => {
     }
     
     cleanAndSortTable();
-    const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
-        .map(row => ({
-            no: row.querySelector('.no').value,
-            principal: row.querySelector('.principal').value,
-            date: row.querySelector('.date').value,
-            duration: row.querySelector('.duration').textContent,
-            interest: row.querySelector('.interest').textContent
-        }))
-        .filter(loan => loan.principal);
+    const loans = getCurrentLoans();
 
     if (loans.length === 0) {
         alert("Please add at least one loan with a principal amount to save a report.");
@@ -311,7 +303,7 @@ const printAndSave = async () => {
 };
 
 const clearSheet = () => {
-    if (confirm("Are you sure you want to clear the sheet? This action cannot be undone.")) {
+    if (confirm("Are you sure you want to clear the sheet? This action will not save your current work and cannot be undone.")) {
         loanTableBody.innerHTML = '';
         while(loanTableBody.rows.length < 5) {
             addRow();
