@@ -4,6 +4,8 @@
     --text-color: #3D3D3D;
     --subtle-text-color: #9B9B9B;
     --danger-color: #D90429;
+    --success-color: #2a9d8f;
+    --warning-color: #fca311;
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --shadow-light: #ffffff;
     --shadow-dark: #a3b1c6;
@@ -18,7 +20,7 @@ body {
     padding: 1rem;
     font-size: 16px;
 }
-#appContainer { display: none; } /* Hidden by default */
+#appContainer { display: none; }
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -69,7 +71,7 @@ header {
 header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
 .header-right { display: flex; align-items: center; gap: 1rem; }
 #authStatus { font-size: 0.9rem; color: var(--subtle-text-color); font-weight: 500; }
-.tabs { display: flex; padding: 0 1rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.tabs { display: flex; padding: 0 1rem; border-bottom: 1px solid rgba(0,0,0,0.05); flex-wrap: wrap; }
 .tab-button {
     flex-grow: 1;
     padding: 1rem;
@@ -90,9 +92,10 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 1.5rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
 }
 .input-field label { font-weight: 600; margin-bottom: 0.5rem; display: block; font-size: 0.9rem; }
+.input-field.search-bar { margin-bottom: 1.5rem; }
 .input-field input {
     width: 100%;
     padding: 0.75rem;
@@ -190,7 +193,62 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 #recentTransactionsList li span { font-weight: 600; flex-grow: 1; }
 #recentTransactionsList .button-group { display: flex; gap: 0.5rem; }
 
-/* --- New Modal Styles --- */
+/* --- New: Dashboard Styles --- */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+.chart-container {
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+.chart-container h3 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+    color: var(--subtle-text-color);
+}
+/* --- New: Sync Status Indicator --- */
+#syncStatus {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+#syncStatus::before {
+    content: '';
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+#syncStatus.online {
+    color: var(--success-color);
+    background: var(--background-color);
+    box-shadow: inset 3px 3px 5px var(--shadow-dark), inset -3px -3px 5px var(--shadow-light);
+}
+#syncStatus.online::before { background-color: var(--success-color); }
+#syncStatus.offline {
+    color: var(--warning-color);
+    background: var(--background-color);
+    box-shadow: inset 3px 3px 5px var(--shadow-dark), inset -3px -3px 5px var(--shadow-light);
+}
+#syncStatus.offline::before { background-color: var(--warning-color); }
+#recentTransactionsList li.unsynced span::after {
+    content: ' (unsynced)';
+    font-style: italic;
+    font-weight: 400;
+    color: var(--warning-color);
+}
+
+/* Modal Styles */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -217,7 +275,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 .modal-box h2 { margin-top: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; }
 
-/* --- New Loader Styles --- */
+/* Loader Styles */
 .loader-container { display: flex; justify-content: center; padding: 2rem; }
 .loader {
     border: 5px solid var(--background-color);
@@ -230,11 +288,11 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* --- Print Styles --- */
+/* Print Styles */
 @media print {
     body { padding: 0; background: white; color: black; }
     .container, .login-box, .total-item, #recentTransactionsList li, .table-container { box-shadow: none; border-radius: 0; border: none; background: white; }
-    header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child, td:last-child { display: none; }
+    header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child, td:last-child, .dashboard-grid, .search-bar { display: none; }
     .main-content { padding: 0; }
     .input-group { display: none !important; }
     .print-header { display: block !important; text-align: center; margin-bottom: 2rem; }
