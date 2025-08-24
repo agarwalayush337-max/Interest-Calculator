@@ -46,8 +46,7 @@ const confirmOkBtn = document.getElementById('confirmOkBtn');
 const confirmCancelBtn = document.getElementById('confirmCancelBtn');
 const exportPdfBtn = document.getElementById('exportPdfBtn');
 const exportViewPdfBtn = document.getElementById('exportViewPdfBtn');
-const loanSearchInput = document.getElementById('loanSearchInput');
-const transactionSearchInput = document.getElementById('transactionSearchInput');
+const reportSearchInput = document.getElementById('reportSearchInput');
 const syncStatusEl = document.getElementById('syncStatus');
 const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
@@ -87,7 +86,7 @@ const syncData = async () => {
     for (const report of unsynced) {
         try {
             const reportToSave = { ...report };
-            delete reportToSave.localId; // Don't save localId to Firebase
+            delete reportToSave.localId;
             await reportsCollection.add(reportToSave);
             await localDb.delete('unsyncedReports', report.localId);
         } catch (error) { console.error('Failed to sync new report:', error); }
@@ -104,7 +103,7 @@ const syncData = async () => {
     
     updateSyncStatus();
     if(document.querySelector('.tab-button[data-tab="recentTransactionsTab"].active')) {
-        loadRecentTransactions(); // Refresh list after sync
+        loadRecentTransactions();
     }
 };
 
@@ -239,8 +238,15 @@ const showTab = (tabId) => {
     document.getElementById(tabId).classList.add('active');
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
     if (user) {
-        if (tabId === 'recentTransactionsTab') loadRecentTransactions();
-        if (tabId === 'dashboardTab') renderDashboard();
+        if (tabId === 'recentTransactionsTab') {
+            // **FIX**: Clear list before loading to prevent flash of old content.
+            recentTransactionsListEl.innerHTML = '';
+            recentTransactionsLoader.style.display = 'flex';
+            loadRecentTransactions();
+        }
+        if (tabId === 'dashboardTab') {
+            renderDashboard();
+        }
     }
 };
 
@@ -257,7 +263,7 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
 const printAndSave = async () => {
     cleanAndSortTable();
     updateAllCalculations();
-    const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date })); // Save only essential data
+    const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
     if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.");
     
     const reportDate = todayDateEl.value;
@@ -265,7 +271,7 @@ const printAndSave = async () => {
         reportDate,
         interestRate: interestRateEl.value,
         loans,
-        createdAt: new Date(), // Use JS date for local storage, serverTimestamp for Firebase
+        createdAt: new Date(),
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
@@ -273,7 +279,7 @@ const printAndSave = async () => {
         const baseName = `Summary of ${reportDate}`;
         const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
         report.reportName = querySnapshot.size > 0 ? `${baseName} (${querySnapshot.size + 1})` : baseName;
-        report.createdAt = firebase.firestore.FieldValue.serverTimestamp(); // Use server timestamp when online
+        report.createdAt = firebase.firestore.FieldValue.serverTimestamp();
         try {
             await reportsCollection.add(report);
             showConfirm("Success", "Report saved to the cloud.");
@@ -287,7 +293,7 @@ const printAndSave = async () => {
     document.getElementById('printTitle').textContent = `Interest Report`;
     document.getElementById('printDate').textContent = `As of ${reportDate}`;
     window.print();
-    loadRecentTransactions(); // Refresh list to show new item
+    loadRecentTransactions();
 };
 
 const exportToPDF = async () => {
@@ -331,10 +337,48 @@ const clearSheet = async () => {
 };
 
 // --- Recent Transactions ---
+
+// **NEW**: Renders the transaction list based on the cached data and an optional search filter.
+const renderRecentTransactions = (filter = '') => {
+    recentTransactionsListEl.innerHTML = '';
+    const searchTerm = filter.toLowerCase();
+
+    const filteredReports = cachedReports.filter(report => {
+        if (!searchTerm) return true; // Show all if no filter
+
+        // Check report name
+        if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
+
+        // Check inside loans for 'no' or 'principal'
+        return report.loans?.some(loan => 
+            loan.no?.toLowerCase().includes(searchTerm) ||
+            loan.principal?.toLowerCase().includes(searchTerm)
+        );
+    });
+
+    if (filteredReports.length === 0) {
+        recentTransactionsListEl.innerHTML = '<li>No matching transactions found.</li>';
+        return;
+    }
+
+    filteredReports.forEach(report => {
+        const li = document.createElement('li');
+        if (report.isLocal) li.classList.add('unsynced');
+        li.dataset.reportId = report.id;
+        li.innerHTML = `
+            <span>${report.reportName || `Report from ${report.reportDate}`}</span>
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
+                <button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button>
+                <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
+            </div>`;
+        recentTransactionsListEl.appendChild(li);
+    });
+};
+
+// **MODIFIED**: Fetches data and then calls the new render function.
 const loadRecentTransactions = async () => {
     if (!user) return;
-    recentTransactionsListEl.innerHTML = '';
-    recentTransactionsLoader.style.display = 'flex';
     
     let onlineReports = [], localReports = [];
     
@@ -351,24 +395,7 @@ const loadRecentTransactions = async () => {
     cachedReports = [...localReports, ...onlineReports].sort((a, b) => (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt));
     
     recentTransactionsLoader.style.display = 'none';
-    if (cachedReports.length === 0) {
-        recentTransactionsListEl.innerHTML = '<li>No saved transactions yet.</li>';
-        return;
-    }
-    
-    cachedReports.forEach(report => {
-        const li = document.createElement('li');
-        if (report.isLocal) li.classList.add('unsynced');
-        li.dataset.reportId = report.id;
-        li.innerHTML = `
-            <span>${report.reportName || `Report from ${report.reportDate}`}</span>
-            <div class="button-group">
-                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
-                <button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button>
-                <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
-            </div>`;
-        recentTransactionsListEl.appendChild(li);
-    });
+    renderRecentTransactions(reportSearchInput.value); // Render with current search term
 };
 
 const setViewMode = (isViewOnly) => {
@@ -405,16 +432,16 @@ const deleteReport = async (docId) => {
     const reportToDelete = cachedReports.find(r => r.id === docId);
     if (!reportToDelete) return;
 
-    if (reportToDelete.isLocal) { // Deleting an unsynced local report
+    if (reportToDelete.isLocal) {
         await localDb.delete('unsyncedReports', docId);
-    } else { // Deleting a synced report
+    } else {
         if (navigator.onLine && reportsCollection) {
             try { await reportsCollection.doc(docId).delete(); } catch(e){ console.error(e); }
         } else {
-            await localDb.put('deletionsQueue', { docId }); // Queue deletion for when online
+            await localDb.put('deletionsQueue', { docId });
         }
     }
-    loadRecentTransactions(); // Refresh UI
+    loadRecentTransactions();
 };
 
 // --- Dashboard ---
@@ -429,7 +456,6 @@ const renderDashboard = async () => {
     }
     dashboardMessage.style.display = 'none';
 
-    // Aggregate data for charts
     let totalPrincipalAll = 0;
     let totalInterestAll = 0;
     cachedReports.forEach(report => {
@@ -437,7 +463,6 @@ const renderDashboard = async () => {
         totalInterestAll += parseFloat(report.totals.interest);
     });
 
-    // Pie Chart
     const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
     if(pieChartInstance) pieChartInstance.destroy();
     pieChartInstance = new Chart(pieCtx, {
@@ -451,7 +476,6 @@ const renderDashboard = async () => {
         },
     });
 
-    // Bar Chart
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
     const recentReports = cachedReports.slice(0, 7).reverse();
     if(barChartInstance) barChartInstance.destroy();
@@ -494,7 +518,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             loginOverlay.style.display = 'none';
             appContainer.style.display = 'block';
             loadCurrentState();
-            syncData(); // Attempt sync on login
+            syncData();
             if(document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
                 loadRecentTransactions();
             }
@@ -531,19 +555,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
         updateAllCalculations();
     });
-    loanSearchInput.addEventListener('input', e => {
-        const searchTerm = e.target.value.toLowerCase();
-        document.querySelectorAll('#loanTable tbody tr').forEach(row => {
-            const no = row.querySelector('.no').value.toLowerCase();
-            const principal = row.querySelector('.principal').value.toLowerCase();
-            row.style.display = (no.includes(searchTerm) || principal.includes(searchTerm)) ? '' : 'none';
-        });
-    });
-    transactionSearchInput.addEventListener('input', e => {
-        const searchTerm = e.target.value.toLowerCase();
-        document.querySelectorAll('#recentTransactionsList li').forEach(li => {
-            li.style.display = li.textContent.toLowerCase().includes(searchTerm) ? '' : 'none';
-        });
+
+    // **NEW**: Listener for the single, relocated search bar.
+    reportSearchInput.addEventListener('input', e => {
+        renderRecentTransactions(e.target.value);
     });
     
     // --- Offline/Online Listeners ---
