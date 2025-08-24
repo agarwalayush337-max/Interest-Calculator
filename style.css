@@ -1,14 +1,12 @@
 :root {
-    --primary-color: #3D52D5;
-    --background-color: #E0E5EC;
-    --text-color: #3D3D3D;
-    --subtle-text-color: #9B9B9B;
+    --primary-color: #BD9E89; /* Tan */
+    --background-color: #F1ECE5; /* Light Cream */
+    --surface-color: #FFFFFF; /* White for panels to contrast */
+    --text-color: #545454; /* Dark Gray */
+    --subtle-text-color: #BD9E89; /* Tan */
+    --border-color: #E4C9B2; /* Beige */
     --danger-color: #D90429;
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --shadow-light: #ffffff;
-    --shadow-dark: #a3b1c6;
-    --shadow-distance: 6px;
-    --shadow-blur: 16px;
 }
 
 body {
@@ -25,11 +23,11 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    background: var(--background-color);
-    border-radius: 20px;
-    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    background: var(--surface-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.07);
     overflow: hidden;
+    border: 1px solid var(--border-color);
 }
 
 /* Login Overlay */
@@ -46,11 +44,12 @@ body {
     z-index: 1000;
 }
 .login-box {
+    background-color: var(--surface-color);
     padding: 3rem;
+    border-radius: 12px;
     text-align: center;
-    border-radius: 20px;
-    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--border-color);
 }
 .login-box h1 {
     font-size: 2rem;
@@ -76,8 +75,10 @@ body {
     height: 24px;
 }
 
+
 header {
     padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -103,8 +104,8 @@ header h1 {
 
 .tabs {
     display: flex;
+    border-bottom: 1px solid var(--border-color);
     padding: 0 1rem;
-    border-bottom: 1px solid rgba(0,0,0,0.05);
 }
 
 .tab-button {
@@ -149,32 +150,29 @@ header h1 {
 .input-field input {
     width: 100%;
     padding: 0.75rem;
-    border: none;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 1rem;
     box-sizing: border-box;
-    background-color: var(--background-color);
-    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
-    transition: box-shadow 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background-color: #F8F4EF;
 }
 
 .input-field input:focus {
     outline: none;
-    box-shadow: inset 3px 3px 7px var(--shadow-dark),
-               inset -3px -3px 7px var(--shadow-light),
-               0 0 0 2px var(--primary-color);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(189, 158, 137, 0.3);
 }
 
 .input-field input:read-only {
+    background-color: #F1ECE5;
     cursor: not-allowed;
 }
 
 .table-container { 
     overflow-x: auto; 
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
 }
 
 table {
@@ -185,11 +183,12 @@ table {
 
 th, td {
     padding: 1rem;
-    border-bottom: 1px solid rgba(0,0,0,0.05);
+    border-bottom: 1px solid var(--border-color);
     vertical-align: middle;
 }
 
 th {
+    background-color: #F8F4EF;
     font-weight: 600;
     font-size: 0.85rem;
     text-transform: uppercase;
@@ -199,19 +198,16 @@ th {
 td input {
     width: 100%;
     padding: 8px;
-    border: none;
+    border: 1px solid #CED1D4;
     border-radius: 6px;
     box-sizing: border-box;
     font-size: 1rem;
     background: transparent;
 }
 
-td input:focus {
-    outline: none;
-    background: #fff;
-}
-
 td input:read-only {
+    background-color: transparent;
+    border: none;
     cursor: default;
 }
 
@@ -237,7 +233,7 @@ td.read-only {
 
 .btn {
     padding: 0.65rem 1.25rem;
-    border: none;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 1rem;
     font-weight: 600;
@@ -246,12 +242,6 @@ td.read-only {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
-}
-.btn:active {
-    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
 }
 
 .btn:disabled {
@@ -262,20 +252,22 @@ td.read-only {
 .btn-primary {
     background-color: var(--primary-color);
     color: white;
+    border-color: var(--primary-color);
 }
-.btn-primary:hover:not(:disabled) { background-color: #4c6ef5; }
+.btn-primary:hover:not(:disabled) { background-color: #A98A75; }
 
 .btn-secondary {
-    background-color: var(--background-color);
+    background-color: transparent;
     color: var(--text-color);
 }
-.btn-secondary:hover:not(:disabled) { background-color: #d1d9e6; }
+.btn-secondary:hover:not(:disabled) { background-color: #F1ECE5; }
 
 .btn-danger {
     background-color: var(--danger-color);
     color: white;
+    border-color: var(--danger-color);
 }
-.btn-danger:hover:not(:disabled) { background-color: #f83c4f; }
+.btn-danger:hover:not(:disabled) { background-color: #B80022; }
 
 .totals-summary {
     display: grid;
@@ -287,8 +279,8 @@ td.read-only {
     padding: 1.5rem;
     text-align: center;
     border-radius: 12px;
-    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    background-color: #F8F4EF;
+    border: 1px solid var(--border-color);
 }
 
 .total-item h3 {
@@ -311,15 +303,15 @@ td.read-only {
     padding: 0;
 }
 #recentTransactionsList li {
+    background: #F8F4EF;
     padding: 1rem 1.5rem;
     border-radius: 8px;
     margin-bottom: 1rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border: 1px solid var(--border-color);
     gap: 1rem;
-    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
 }
 #recentTransactionsList li span { font-weight: 600; flex-grow: 1; }
 #recentTransactionsList .button-group { display: flex; gap: 0.5rem; }
@@ -327,7 +319,7 @@ td.read-only {
 
 @media print {
     body { padding: 0; background: white; color: black; }
-    .container, .login-box, .total-item, #recentTransactionsList li, .table-container { box-shadow: none; border-radius: 0; border: none; background: white; backdrop-filter: none; }
+    .container, .login-box, .total-item, #recentTransactionsList li, .table-container { box-shadow: none; border-radius: 0; border: none; background: white; }
     header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child { display: none; }
     .main-content { padding: 0; }
     .input-group { display: none !important; }
