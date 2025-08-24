@@ -14,7 +14,6 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 let user = null;
 let reportsCollection = null;
-let lastSavedReportState = null; // Variable to track the last saved state
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
@@ -33,8 +32,7 @@ const googleSignInBtn = document.getElementById('googleSignInBtn');
 const loginMessage = document.getElementById('loginMessage');
 const signOutBtn = document.getElementById('signOutBtn');
 const addRowBtn = document.getElementById('addRowBtn');
-const saveReportBtn = document.getElementById('saveReportBtn');
-const printReportBtn = document.getElementById('printReportBtn');
+const printAndSaveBtn = document.getElementById('printAndSaveBtn');
 const clearSheetBtn = document.getElementById('clearSheetBtn');
 const exitViewModeBtn = document.getElementById('exitViewModeBtn');
 
@@ -260,9 +258,15 @@ const showTab = (tabId) => {
     }
 };
 
-// --- Save, Print, and Clear ---
-const getCurrentLoans = () => {
-    return Array.from(document.querySelectorAll('#loanTable tbody tr'))
+// --- Actions: Save, Print, Clear ---
+const printAndSave = async () => {
+    if (!reportsCollection) {
+        alert("Database not connected. Please wait.");
+        return;
+    }
+    
+    cleanAndSortTable();
+    const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
         .map(row => ({
             no: row.querySelector('.no').value,
             principal: row.querySelector('.principal').value,
@@ -271,20 +275,10 @@ const getCurrentLoans = () => {
             interest: row.querySelector('.interest').textContent
         }))
         .filter(loan => loan.principal);
-};
-
-const saveReport = async (isSilent = false) => {
-    if (!reportsCollection) {
-        if (!isSilent) alert("Database not connected. Please wait.");
-        return { success: false };
-    }
-    
-    cleanAndSortTable();
-    const loans = getCurrentLoans();
 
     if (loans.length === 0) {
-        if (!isSilent) alert("Please add at least one loan with a principal amount to save a report.");
-        return { success: false };
+        alert("Please add at least one loan with a principal amount to save a report.");
+        return;
     }
 
     const baseName = `Summary of ${todayDateEl.value}`;
@@ -306,43 +300,24 @@ const saveReport = async (isSilent = false) => {
     };
     
     try {
-        const docRef = await reportsCollection.add(report);
-        lastSavedReportState = JSON.stringify(loans); // Track the state of what was just saved
-        if (!isSilent) alert(`Report "${reportName}" saved successfully!`);
-        return { success: true };
+        await reportsCollection.add(report);
+        document.getElementById('printTitle').textContent = `Interest Report`;
+        document.getElementById('printDate').textContent = `As of ${todayDateEl.value}`;
+        window.print();
     } catch (error) {
         console.error("Error saving report: ", error);
-        if (!isSilent) alert("Could not save report to the database.");
-        return { success: false };
+        alert("Could not save report to the database.");
     }
 };
 
-const printReport = () => {
-    cleanAndSortTable();
-    document.getElementById('printTitle').textContent = `Interest Report`;
-    document.getElementById('printDate').textContent = `As of ${todayDateEl.value}`;
-    window.print();
-};
-
-const clearSheet = async () => {
-    const currentLoans = getCurrentLoans();
-    const isSheetDirty = JSON.stringify(currentLoans) !== lastSavedReportState;
-
-    if (currentLoans.length > 0 && isSheetDirty) {
-        if (confirm("You have unsaved changes. Do you want to save them before clearing the sheet?")) {
-            const saveResult = await saveReport(true); // Save silently
-            if (!saveResult.success) {
-                alert("Could not save the report. Sheet will not be cleared.");
-                return;
-            }
+const clearSheet = () => {
+    if (confirm("Are you sure you want to clear the sheet? This action cannot be undone.")) {
+        loanTableBody.innerHTML = '';
+        while(loanTableBody.rows.length < 5) {
+            addRow();
         }
+        updateAllCalculations();
     }
-    
-    loanTableBody.innerHTML = '';
-    while(loanTableBody.rows.length < 5) {
-        addRow();
-    }
-    updateAllCalculations();
 };
 
 
@@ -414,7 +389,6 @@ const viewReport = (docId, isEditable) => {
         
         if(report.loans) {
             report.loans.forEach(loan => addRow(loan));
-            lastSavedReportState = JSON.stringify(report.loans); // Set the state to match the viewed report
         }
         
         if (isEditable) {
@@ -487,8 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow());
-    saveReportBtn.addEventListener('click', () => saveReport(false));
-    printReportBtn.addEventListener('click', printReport);
+    printAndSaveBtn.addEventListener('click', printAndSave);
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
 
