@@ -85,6 +85,7 @@ const days360 = (startDate, endDate) => {
     return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
 };
 
+
 const calculateInterest = (principal, rate, durationInDays) => {
     const effectiveDuration = (durationInDays > 0 && durationInDays < 30) ? 30 : durationInDays;
     const monthlyRate = rate / 100;
@@ -281,7 +282,6 @@ const saveReport = async () => {
         return;
     }
 
-    // Generate unique report name
     const baseName = `Summary of ${todayDateEl.value}`;
     const querySnapshot = await reportsCollection.where("reportDate", "==", todayDateEl.value).get();
     const count = querySnapshot.size;
