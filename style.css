@@ -1,11 +1,12 @@
 :root {
-    --primary-color: #5e5ce6;
-    --background-color: #1c1c1e;
-    --surface-alpha: rgba(255, 255, 255, 0.1);
-    --border-alpha: rgba(255, 255, 255, 0.2);
-    --text-color: #ffffff;
-    --subtle-text-color: rgba(255, 255, 255, 0.6);
-    --danger-color: #ff453a;
+    --primary-color: #007aff;
+    --secondary-color: #4a4a4a;
+    --background-color: #f4f4f9;
+    --surface-color: #ffffff;
+    --text-color: #1c1c1e;
+    --subtle-text-color: #6b6b6b;
+    --border-color: #e5e5ea;
+    --danger-color: #ff3b30;
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -16,71 +17,18 @@ body {
     margin: 0;
     padding: 1rem;
     font-size: 16px;
-    overflow: hidden;
 }
-
-.background-shapes {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-}
-
-.shape {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(150px);
-}
-
-.shape1 {
-    width: 400px;
-    height: 400px;
-    background: #ff375f;
-    top: -100px;
-    left: -100px;
-    animation: move1 20s infinite alternate;
-}
-
-.shape2 {
-    width: 500px;
-    height: 500px;
-    background: #34c759;
-    bottom: -150px;
-    right: -150px;
-    animation: move2 25s infinite alternate;
-}
-
-.shape3 {
-    width: 300px;
-    height: 300px;
-    background: #007aff;
-    bottom: 10%;
-    left: 20%;
-    animation: move3 15s infinite alternate;
-}
-
-@keyframes move1 { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(100px, 200px) rotate(360deg); } }
-@keyframes move2 { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(-200px, -100px) rotate(-360deg); } }
-@keyframes move3 { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(200px, -200px) rotate(180deg); } }
-
 
 #appContainer { display: none; } /* Hidden by default */
-
-.glass-effect {
-    background: var(--surface-alpha);
-    backdrop-filter: blur(30px);
-    -webkit-backdrop-filter: blur(30px);
-    border: 1px solid var(--border-alpha);
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
 
 .container {
     max-width: 1200px;
     margin: 0 auto;
+    background: var(--surface-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.07);
     overflow: hidden;
+    border: 1px solid var(--border-color);
 }
 
 /* Login Overlay */
@@ -90,15 +38,18 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: transparent;
+    background-color: var(--background-color);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
 }
 .login-box {
+    background-color: var(--surface-color);
     padding: 3rem;
+    border-radius: 12px;
     text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 .login-box h1 {
     font-size: 2rem;
@@ -127,7 +78,7 @@ body {
 
 header {
     padding: 1.5rem 2rem;
-    border-bottom: 1px solid var(--border-alpha);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -153,8 +104,7 @@ header h1 {
 
 .tabs {
     display: flex;
-    border-bottom: 1px solid var(--border-alpha);
-    padding: 0 1rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .tab-button {
@@ -171,7 +121,7 @@ header h1 {
 }
 
 .tab-button.active {
-    color: var(--text-color);
+    color: var(--primary-color);
     border-bottom-color: var(--primary-color);
 }
 
@@ -184,13 +134,9 @@ header h1 {
 
 .input-group {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1.5rem;
     margin-bottom: 2rem;
-}
-
-.input-field {
-    padding: 1rem;
 }
 
 .input-field label {
@@ -198,36 +144,30 @@ header h1 {
     margin-bottom: 0.5rem;
     display: block;
     font-size: 0.9rem;
-    color: var(--subtle-text-color);
 }
 
 .input-field input {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid var(--border-alpha);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 1rem;
     box-sizing: border-box;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    background: transparent;
-    color: var(--text-color);
 }
 
 .input-field input:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.3);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
 }
 
 .input-field input:read-only {
-    background-color: rgba(0,0,0,0.1);
+    background-color: #f4f4f9;
     cursor: not-allowed;
 }
 
-.table-container { 
-    overflow-x: auto; 
-    padding: 1rem;
-}
+.table-container { overflow-x: auto; }
 
 table {
     width: 100%;
@@ -237,12 +177,12 @@ table {
 
 th, td {
     padding: 1rem;
-    border-bottom: 1px solid var(--border-alpha);
+    border-bottom: 1px solid var(--border-color);
     vertical-align: middle;
 }
 
 th {
-    background-color: transparent;
+    background-color: #f9f9fb;
     font-weight: 600;
     font-size: 0.85rem;
     text-transform: uppercase;
@@ -252,12 +192,10 @@ th {
 td input {
     width: 100%;
     padding: 8px;
-    border: 1px solid var(--border-alpha);
+    border: 1px solid var(--border-color);
     border-radius: 6px;
     box-sizing: border-box;
     font-size: 1rem;
-    background: transparent;
-    color: var(--text-color);
 }
 
 td input:read-only {
@@ -267,11 +205,7 @@ td input:read-only {
 }
 
 td input.no {
-    min-width: 60px;
-    text-transform: uppercase;
-}
-td input.date {
-    min-width: 120px;
+    min-width: 80px;
 }
 
 td.read-only {
@@ -288,7 +222,7 @@ td.read-only {
 
 .btn {
     padding: 0.65rem 1.25rem;
-    border: 1px solid transparent;
+    border: none;
     border-radius: 8px;
     font-size: 1rem;
     font-weight: 600;
@@ -300,37 +234,36 @@ td.read-only {
 }
 
 .btn:disabled {
+    background-color: #d1d1d6;
     cursor: not-allowed;
-    opacity: 0.5;
+    opacity: 0.7;
 }
 
 .btn-primary {
     background-color: var(--primary-color);
     color: white;
 }
-.btn-primary:hover:not(:disabled) { background-color: #4a48d4; }
+.btn-primary:hover:not(:disabled) { background-color: #0056b3; }
 
 .btn-secondary {
-    background-color: var(--surface-alpha);
+    background-color: #e5e5ea;
     color: var(--text-color);
-    border-color: var(--border-alpha);
 }
-.btn-secondary:hover:not(:disabled) { background-color: rgba(255,255,255,0.2); }
+.btn-secondary:hover:not(:disabled) { background-color: #d1d1d6; }
 
 .btn-danger {
     background-color: var(--danger-color);
     color: white;
 }
-.btn-danger:hover:not(:disabled) { background-color: #d32f2f; }
+.btn-danger:hover:not(:disabled) { background-color: #c51a0d; }
 
 .totals-summary {
+    background: #f9f9fb;
+    padding: 1.5rem;
+    border-radius: 8px;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem;
-}
-
-.total-item {
-    padding: 1.5rem;
 }
 
 .total-item h3 {
@@ -353,14 +286,14 @@ td.read-only {
     padding: 0;
 }
 #recentTransactionsList li {
-    background: var(--surface-alpha);
-    border: 1px solid var(--border-alpha);
+    background: #f9f9fb;
     padding: 1rem 1.5rem;
     border-radius: 8px;
     margin-bottom: 1rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border: 1px solid var(--border-color);
     gap: 1rem;
 }
 #recentTransactionsList li span { font-weight: 600; flex-grow: 1; }
@@ -368,9 +301,9 @@ td.read-only {
 
 
 @media print {
-    body { padding: 0; background: white; color: black; }
-    .container, .glass-effect { box-shadow: none; border-radius: 0; border: none; background: white; backdrop-filter: none; }
-    header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child, .background-shapes { display: none; }
+    body { padding: 0; background-color: white; }
+    .container { box-shadow: none; border-radius: 0; border: none; }
+    header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child { display: none; }
     .main-content { padding: 0; }
     .input-group { display: none !important; }
     
@@ -382,9 +315,8 @@ td.read-only {
     .print-header h1 { margin: 0; font-size: 1.5rem; color: black; }
     .print-header p { margin: 0.25rem 0 0 0; font-size: 1rem; color: #555; }
     
-    #loanTable input { border: none; background: transparent; padding: 0; width: 100%; color: black; }
+    #loanTable input { border: none; background: transparent; padding: 0; width: 100%; }
     tr { page-break-inside: avoid; }
-    th, td { border-bottom: 1px solid #ccc; }
 }
 
 .print-header { display: none; }
