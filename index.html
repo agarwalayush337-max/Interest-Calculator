@@ -1,6 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interest Calculator</title>
@@ -10,9 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+    <link rel="stylesheet" href="style.css"></head><body>
     <div id="loginOverlay">
         <div class="login-box">
             <h1>Interest Calculator</h1>
@@ -102,7 +98,19 @@
         <div id="recentTransactionsTab" class="tab-content">
             <div class="main-content">
                 <h2>Recent Transactions</h2>
+                 <div id="recentTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
                 <ul id="recentTransactionsList"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h2 id="confirmTitle">Confirmation</h2>
+            <p id="confirmMessage">Are you sure?</p>
+            <div class="modal-actions">
+                <button id="confirmCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmOkBtn" class="btn btn-primary">Confirm</button>
             </div>
         </div>
     </div>
@@ -111,6 +119,4 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     
-    <script src="script.js"></script>
-</body>
-</html>
+    <script src="script.js"></script></body></html>
