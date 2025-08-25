@@ -3,7 +3,6 @@ const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
-  // 1. Get credentials and processor details from environment variables
   const { 
     GOOGLE_CREDENTIALS, 
     GCP_PROJECT_ID, 
@@ -15,7 +14,6 @@ exports.handler = async function(event) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server is not configured for Document AI." }) };
   }
 
-  // 2. Authenticate with Google Cloud
   const auth = new GoogleAuth({
     credentials: JSON.parse(GOOGLE_CREDENTIALS),
     scopes: 'https://www.googleapis.com/auth/cloud-platform',
@@ -23,21 +21,20 @@ exports.handler = async function(event) {
   const client = await auth.getClient();
   const accessToken = (await client.getAccessToken()).token;
 
-  // 3. Construct the API endpoint URL
   const apiUrl = `https://documentai.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}/processors/${GCP_PROCESSOR_ID}:process`;
+  
+  // MODIFICATION: Get both image and mimeType from the request
+  const { image, mimeType } = JSON.parse(event.body);
 
-  const { image } = JSON.parse(event.body);
-
-  // 4. Create the request body for Document AI
   const requestBody = {
     rawDocument: {
       content: image,
-      mimeType: 'image/jpeg', // Assuming jpeg, change if needed
+      // MODIFICATION: Use the dynamic mimeType, with a fallback
+      mimeType: mimeType || 'image/jpeg',
     },
   };
 
   try {
-    // 5. Call the Document AI API
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -54,13 +51,9 @@ exports.handler = async function(event) {
     }
 
     const data = await response.json();
-
-    // 6. Simplify the complex response into clean key-value pairs
     const extractedData = {};
     const entities = data.document?.entities || [];
     for (const entity of entities) {
-        // entity.type is the schema label (e.g., "LoanNo")
-        // entity.mentionText is the extracted value (e.g., "D.484")
         extractedData[entity.type] = entity.mentionText;
     }
 
