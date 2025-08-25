@@ -1,6 +1,6 @@
 // --- Firebase Configuration ---
 const firebaseConfig = {
-    apiKey: import.meta.env.GOOGLE_VISION_API_KEY,
+    apiKey: "ss",
     authDomain: "interest-calculator-8d997.firebaseapp.com",
     projectId: "interest-calculator-8d997",
     storageBucket: "interest-calculator-8d997.appspot.com",
