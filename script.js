@@ -212,46 +212,40 @@ const cleanAndSortTable = () => {
 const parseAndFillData = (text) => {
     console.log("Extracted Text from Vision API:", text);
 
-    // Using a more focused approach to find key data points
     let loanNo = null;
     let principal = null;
     let date = null;
 
-    // Split the text into individual lines to analyze each one
     const lines = text.split('\n');
 
     for (const line of lines) {
-        // Regex to find the Loan No (e.g., "D.450") - looks for a "D" followed by a number
-        const noMatch = line.match(/D\.?\s*(\d+)/i);
+        // More flexible regex for Loan No: looks for numbers that might be preceded by 'D' or '10' and a dot
+        const noMatch = line.match(/(?:D|10)\.?\s*(\d+)/i);
         if (noMatch) {
             loanNo = `D.${noMatch[1]}`;
         }
 
-        // Regex to find the Principal (e.g., "10000/-") - looks for "₹", "रुपये", or "Rs."
-        const amountMatch = line.match(/(?:₹|रुपये|Rs\.?)\s*([\d,]+(?:\.\d{2})?)/i);
+        // More flexible regex for Principal: looks for numbers near common currency symbols or words, including `रुरु:-`
+        const amountMatch = line.match(/(?:₹|रुपये|रुरु|Rs\.?)\s*([\d,]+(?:\.\d{2})?)/i);
         if (amountMatch) {
             principal = amountMatch[1].replace(/,/g, '');
         }
 
-        // Regex to find the Date - looks for "तारीख" (Date in Hindi)
-        const dateMatch = line.match(/तारीख:?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/);
+        // More flexible regex for Date: looks for a date format preceded by common date-related words or their OCR misinterpretations
+        const dateMatch = line.match(/(?:तारीख|d10|d|i)?:\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i);
         if (dateMatch) {
             date = dateMatch[1];
         }
     }
 
-    // Now, check if all three necessary data points were found
     if (loanNo && principal && date) {
-        // Find the first empty row in the table
         let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
             !r.querySelector('.principal').value && !r.querySelector('.no').value
         );
 
-        // If no empty row exists, create a new one
         if (!targetRow) {
             addRow({ no: loanNo, principal, date });
         } else {
-            // Otherwise, fill the found empty row
             targetRow.querySelector('.no').value = loanNo;
             targetRow.querySelector('.principal').value = principal;
             targetRow.querySelector('.date').value = date;
@@ -260,7 +254,6 @@ const parseAndFillData = (text) => {
         updateAllCalculations();
         showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
     } else {
-        // If any data point is missing, show a message with the full text for manual entry
         showConfirm('Scan Results', 'Could not find all required data (Loan No, Amount, Date). Please check the browser console for the full scanned text.', false);
         console.log("Full text to copy:", text);
     }
