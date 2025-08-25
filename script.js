@@ -250,35 +250,17 @@ const parseAndFillData = (data) => {
         return;
     }
 
-    // --- Helper functions for word positions ---
-    const getWordBounds = (word) => {
-        const xCoords = word.bounds.map(v => v.x || 0);
-        const yCoords = word.bounds.map(v => v.y || 0);
-        const minY = Math.min(...yCoords);
-        const maxY = Math.max(...yCoords);
-        return {
-            minX: Math.min(...xCoords),
-            minY: minY,
-            maxY: maxY,
-            centerX: (Math.min(...xCoords) + Math.max(...xCoords)) / 2,
-            centerY: (minY + maxY) / 2,
-            height: maxY - minY,
-        };
-    };
-
     let loanNo = null;
     let principal = null;
     let date = null;
 
-    // --- 1) Find Loan No (IMPROVED: Now finds patterns split across multiple words) ---
+    // --- 1) Find Loan No (This logic is robust and remains) ---
     for (let i = 0; i < words.length; i++) {
         const word1 = words[i];
-        // Pattern 1: A single word like "D.530"
         if (/^[A-Z]\.\d{3,}$/i.test(word1.text)) {
             loanNo = word1.text.toUpperCase();
             break;
         }
-        // Pattern 2: Split words like "D", ".", "530"
         if (/^[A-Z]$/i.test(word1.text) && i + 2 < words.length) {
             const word2 = words[i + 1];
             const word3 = words[i + 2];
@@ -289,51 +271,42 @@ const parseAndFillData = (data) => {
         }
     }
 
-    // --- 2) Find Date and Amount (IMPROVED: Uses dynamic tolerance for slanted text) ---
-    const findValueNearLabel = (labels, isNumeric = true) => {
-        let labelWord = null;
-        for (const word of words) {
-            const cleanText = word.text.replace(':', '').trim();
-            if (labels.includes(cleanText)) {
-                labelWord = word;
-                break;
-            }
+    // --- 2) Find Date by its unique pattern (e.g., DD/MM/YYYY) ---
+    const dateRegex = /\d{1,2}\/\d{1,2}\/\d{2,4}/;
+    for (const word of words) {
+        if (dateRegex.test(word.text)) {
+            const rawDate = word.text.match(dateRegex)[0];
+            const parsed = parseDate(rawDate);
+            date = parsed ? formatDateToDDMMYYYY(parsed) : rawDate;
+            break;
         }
-
-        if (!labelWord) return null;
-
-        const labelBounds = getWordBounds(labelWord);
-
-        // Find all words generally to the right and vertically aligned
-        const wordsOnSameLine = words.filter(word => {
-            if (word === labelWord) return false;
-            const wordBounds = getWordBounds(word);
-            // Check: word is to the right & vertical centers are within one line height
-            return wordBounds.minX > labelBounds.minX &&
-                   Math.abs(wordBounds.centerY - labelBounds.centerY) < labelBounds.height;
-        });
-
-        if (wordsOnSameLine.length > 0) {
-            // Sort by horizontal position and join
-            wordsOnSameLine.sort((a, b) => getWordBounds(a).minX - getWordBounds(b).minX);
-            let combinedText = wordsOnSameLine.map(w => w.text).join('');
-            // If numeric, strip any accidental non-numeric characters
-            return isNumeric ? combinedText.replace(/[^\d/]/g, '') : combinedText;
-        }
-        return null;
-    };
-
-    // --- Execute finders ---
-    const rawDate = findValueNearLabel(['ता', 'तारीख', 'Date', 'Dt'], false);
-    if (rawDate) {
-        const parsed = parseDate(rawDate);
-        date = parsed ? formatDateToDDMMYYYY(parsed) : rawDate;
     }
 
-    const rawAmount = findValueNearLabel(['रु', 'रू', 'Rs'], true);
-    if (rawAmount) {
-        principal = rawAmount;
+    // --- 3) Find Amount by finding the largest number ---
+    // This heuristic works because the principal is always the largest number.
+    let potentialAmounts = [];
+    for (const word of words) {
+        // Find words that are purely numbers (and not part of a date string)
+        if (/^\d+$/.test(word.text) && !word.text.includes('/')) {
+            potentialAmounts.push(parseInt(word.text, 10));
+        }
     }
+    
+    if (potentialAmounts.length > 0) {
+        // Exclude numbers that are part of the loan number or date
+        const loanNoDigits = loanNo ? parseInt(loanNo.replace(/[^\d]/g, ''), 10) : null;
+        const dateDigits = date ? date.split('/').map(d => parseInt(d, 10)) : [];
+        
+        const filteredAmounts = potentialAmounts.filter(amount => 
+            amount !== loanNoDigits && !dateDigits.includes(amount)
+        );
+
+        // The principal is the largest remaining number
+        if (filteredAmounts.length > 0) {
+            principal = String(Math.max(...filteredAmounts));
+        }
+    }
+
 
     // --- Fill into Table ---
     if (loanNo && principal && date) {
