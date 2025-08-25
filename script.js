@@ -1,6 +1,6 @@
 // --- Firebase Configuration ---
 const firebaseConfig = {
-    apiKey: "AIzaSyA5qPw1IotpVI-GUbw3kXHJvJ_1XX3BdtE",
+    apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
     authDomain: "interest-calculator-8d997.firebaseapp.com",
     projectId: "interest-calculator-8d997",
     storageBucket: "interest-calculator-8d997.appspot.com",
