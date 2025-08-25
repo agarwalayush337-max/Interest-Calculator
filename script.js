@@ -251,7 +251,7 @@ const handleImageScan = async (event) => {
         console.log("No file selected. Exiting.");
         return;
     }
-    console.log("2. File selected:", file.name, "Size:", file.size, "bytes");
+    console.log("2. File selected:", file.name, "Type:", file.type, "Size:", file.size, "bytes");
 
     showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
 
@@ -259,7 +259,6 @@ const handleImageScan = async (event) => {
         const reader = new FileReader();
         console.log("3. FileReader created. Reading the file...");
 
-        // This part runs ONLY if the file is read successfully
         reader.onload = async () => {
             try {
                 console.log("4. File read successfully (onload event triggered). Preparing to fetch...");
@@ -267,7 +266,8 @@ const handleImageScan = async (event) => {
                 const response = await fetch('/.netlify/functions/scanImage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image })
+                    // MODIFICATION: We now also send the file's mimeType
+                    body: JSON.stringify({ image: base64Image, mimeType: file.type })
                 });
                 console.log("5. Fetch request sent. Waiting for response...");
                 closeConfirm();
@@ -291,7 +291,6 @@ const handleImageScan = async (event) => {
             }
         };
 
-        // This part runs ONLY if there is an error reading the file
         reader.onerror = (error) => {
             console.error("CRITICAL: FileReader failed with an error.", error);
             closeConfirm();
