@@ -365,8 +365,12 @@ const handleImageScan = async (event) => {
             }
 
             const result = await response.json();
-            if (result.text) {
-                parseAndFillData(result.text);
+            
+            // --- CORRECTION IS HERE ---
+            // We now check for 'result.words' instead of the old 'result.text'
+            if (result && result.words) {
+                // We pass the entire 'result' object to our new parser
+                parseAndFillData(result);
             } else {
                 await showConfirm('Scan Failed', 'No text could be found in the image.', false);
             }
@@ -384,7 +388,6 @@ const handleImageScan = async (event) => {
 
     imageUploadInput.value = '';
 };
-
 // --- END: NEW Cloud Vision Integration ---
 
 
