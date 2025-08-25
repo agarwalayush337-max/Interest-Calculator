@@ -241,91 +241,79 @@ const scoreAmountCandidate = (value, context) => {
     return score;
 };
 
-const parseAndFillData = (rawText) => {
-    const text = normalizeOcrText(rawText || "");
-    console.log("Extracted Text from Vision API (normalized):", text);
+const parseAndFillData = (data) => {
+    // The data is now an object { words: [...] } from our Netlify function
+    const words = data.words || [];
+    console.log("Received structured word data:", words);
+
+    if (words.length === 0) {
+        showConfirm('Scan Failed', 'No text could be found in the image.', false);
+        return;
+    }
+
+    // --- Helper function to find the Y-center of a word's bounding box ---
+    const getWordCenterY = (word) => {
+        const yCoords = word.bounds.map(v => v.y || 0);
+        return (Math.min(...yCoords) + Math.max(...yCoords)) / 2;
+    };
+    
+    // --- Helper function to find the X-start of a word's bounding box ---
+    const getWordStartX = (word) => {
+        return Math.min(...word.bounds.map(v => v.x || 0));
+    };
 
     let loanNo = null;
     let principal = null;
     let date = null;
 
-    // Split into clean lines
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-
-    // --- 1) Loan No (IMPROVED: Now accepts any letter like B. or D.) ---
-    for (const line of lines) {
-        // This new pattern looks for ANY single letter (A-Z) followed by a dot and numbers.
-        const m1 = line.match(/\b([A-Z])[.\s]*?(\d{1,6})\b/i);
-        if (m1) {
-            // It combines the captured letter (m1[1]) and number (m1[2])
-            loanNo = `${m1[1].toUpperCase()}.${m1[2]}`;
-            break;
+    // --- 1) Find Loan No (by looking for the unique pattern like D.123) ---
+    const loanNoCandidates = words.filter(w => /^[A-Z]\.\d{3}$/i.test(w.text));
+    if (loanNoCandidates.length > 0) {
+        loanNo = loanNoCandidates[0].text.toUpperCase();
+    }
+    
+    // --- 2) Find Date and Amount using their labels and positions ---
+    const findValueNearLabel = (labels) => {
+        let labelWord = null;
+        for (const word of words) {
+            if (labels.includes(word.text.replace(':', '').trim())) {
+                labelWord = word;
+                break;
+            }
         }
-        // Fallback for the "NO:" pattern remains.
-        const m2 = line.match(/\bN[O0][.\s:-]*(\d{1,6})\b/i);
-        if (m2) {
-            loanNo = `D.${m2[1]}`; // You can decide how to format this.
-            break;
+
+        if (!labelWord) return null;
+
+        const labelCenterY = getWordCenterY(labelWord);
+        const labelStartX = getWordStartX(labelWord);
+
+        // Find all words on the same horizontal line, to the right of the label
+        const wordsOnSameLine = words.filter(word => {
+            const wordCenterY = getWordCenterY(word);
+            const wordStartX = getWordStartX(word);
+            // Check if Y centers are close and if word is to the right
+            return Math.abs(wordCenterY - labelCenterY) < 20 && wordStartX > labelStartX;
+        });
+
+        // Sort them by their horizontal position and join them
+        if (wordsOnSameLine.length > 0) {
+            wordsOnSameLine.sort((a, b) => getWordStartX(a) - getWordStartX(b));
+            return wordsOnSameLine.map(w => w.text).join('');
         }
-    }
+        return null;
+    };
 
-    // --- 2) Date (This logic is already good) ---
-    let dateCandidate = null;
-    for (const line of lines) {
-        const labeled = line.match(/(?:तारीख|ता[:.\-]?|date[:.\-]?|dt[:.\-]?|d[.:]?)\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i);
-        if (labeled) { dateCandidate = labeled[1]; break; }
+    // --- Execute finders ---
+    const rawDate = findValueNearLabel(['ता', 'तारीख', 'Date', 'Dt']);
+    if(rawDate) {
+        const parsed = parseDate(rawDate);
+        date = parsed ? formatDateToDDMMYYYY(parsed) : rawDate;
     }
-    if (!dateCandidate) {
-        for (const line of lines) {
-            const generic = line.match(/\b(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b/);
-            if (generic) { dateCandidate = generic[1]; break; }
-        }
-    }
-    if (dateCandidate) {
-        const parsed = parseDate(dateCandidate);
-        date = parsed ? formatDateToDDMMYYYY(parsed) : dateCandidate;
-    }
-
-    // --- 3) Amount (IMPROVED: Added a fallback) ---
-    const fullText = lines.join("\n");
-    const dateRanges = [];
-    const dateRegexGlobal = /(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/g;
-    let dm;
-    while ((dm = dateRegexGlobal.exec(fullText)) !== null) {
-        dateRanges.push({ start: dm.index, end: dm.index + dm[0].length });
-    }
-    const isInsideAnyRange = (idx) => dateRanges.some(r => idx >= r.start && idx <= r.end);
-    const numberRegex = /(?<!\d)(\d{1,3}(?:,\d{2,3})+|\d{4,7})(?!\d)/g;
-
-    const candidates = [];
-    let m;
-    while ((m = numberRegex.exec(fullText)) !== null) {
-        const rawNum = m[1];
-        const start = m.index;
-        if (isInsideAnyRange(start)) continue;
-        const normalized = parseInt(rawNum.replace(/,/g, ''), 10);
-        if (!Number.isFinite(normalized)) continue;
-        const ctxStart = Math.max(0, start - 18);
-        const ctxEnd = Math.min(fullText.length, start + rawNum.length + 18);
-        const context = fullText.slice(ctxStart, ctxEnd);
-        const score = scoreAmountCandidate(normalized, context);
-        candidates.push({ value: normalized, score, context });
-    }
-
-    if (candidates.length) {
-        candidates.sort((a, b) => (b.score - a.score) || (b.value - a.value));
-        principal = String(candidates[0].value);
-    } else {
-        // FALLBACK: If scoring finds nothing, find all numbers again
-        // and pick the largest one that isn't the loan number's digits.
-        const loanNoDigits = loanNo ? loanNo.match(/\d+/)?.[0] : null;
-        const allNumbers = (fullText.match(/\d+/g) || [])
-            .map(n => parseInt(n, 10))
-            .filter(n => n > 100 && n != loanNoDigits && !dateCandidate?.includes(String(n))); // Avoid small numbers and loan/date numbers
-
-        if (allNumbers.length > 0) {
-            principal = String(Math.max(...allNumbers));
-        }
+    
+    const rawAmount = findValueNearLabel(['रु', 'रू', 'Rs']);
+    if(rawAmount) {
+        // Remove any non-digit characters and parse
+        principal = rawAmount.replace(/[^\d]/g, '');
     }
 
     // --- Fill into Table ---
@@ -345,8 +333,10 @@ const parseAndFillData = (rawText) => {
         updateAllCalculations();
         showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
     } else {
-        showConfirm('Scan Results', 'Could not find all required data (Loan No, Amount, Date). Please check the console.', false);
-        console.log("Full text to copy:", text);
+        showConfirm('Scan Results', 'Could not find all required data. Check the console for details.', false);
+        // Provide the original raw text for debugging if needed
+        const rawTextForDebug = words.map(w => w.text).join(' ');
+        console.log("Full text to copy:", rawTextForDebug);
         console.log("Data found:", { loanNo, principal, date });
     }
 };
