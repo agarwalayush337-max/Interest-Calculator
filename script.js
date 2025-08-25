@@ -242,7 +242,6 @@ const scoreAmountCandidate = (value, context) => {
 };
 
 const parseAndFillData = (data) => {
-    // The data is now an object { words: [...] } from our Netlify function
     const words = data.words || [];
     console.log("Received structured word data:", words);
 
@@ -251,32 +250,51 @@ const parseAndFillData = (data) => {
         return;
     }
 
-    // --- Helper function to find the Y-center of a word's bounding box ---
-    const getWordCenterY = (word) => {
+    // --- Helper functions for word positions ---
+    const getWordBounds = (word) => {
+        const xCoords = word.bounds.map(v => v.x || 0);
         const yCoords = word.bounds.map(v => v.y || 0);
-        return (Math.min(...yCoords) + Math.max(...yCoords)) / 2;
-    };
-    
-    // --- Helper function to find the X-start of a word's bounding box ---
-    const getWordStartX = (word) => {
-        return Math.min(...word.bounds.map(v => v.x || 0));
+        const minY = Math.min(...yCoords);
+        const maxY = Math.max(...yCoords);
+        return {
+            minX: Math.min(...xCoords),
+            minY: minY,
+            maxY: maxY,
+            centerX: (Math.min(...xCoords) + Math.max(...xCoords)) / 2,
+            centerY: (minY + maxY) / 2,
+            height: maxY - minY,
+        };
     };
 
     let loanNo = null;
     let principal = null;
     let date = null;
 
-    // --- 1) Find Loan No (by looking for the unique pattern like D.123) ---
-    const loanNoCandidates = words.filter(w => /^[A-Z]\.\d{3}$/i.test(w.text));
-    if (loanNoCandidates.length > 0) {
-        loanNo = loanNoCandidates[0].text.toUpperCase();
+    // --- 1) Find Loan No (IMPROVED: Now finds patterns split across multiple words) ---
+    for (let i = 0; i < words.length; i++) {
+        const word1 = words[i];
+        // Pattern 1: A single word like "D.530"
+        if (/^[A-Z]\.\d{3,}$/i.test(word1.text)) {
+            loanNo = word1.text.toUpperCase();
+            break;
+        }
+        // Pattern 2: Split words like "D", ".", "530"
+        if (/^[A-Z]$/i.test(word1.text) && i + 2 < words.length) {
+            const word2 = words[i + 1];
+            const word3 = words[i + 2];
+            if (word2.text === '.' && /^\d{3,}$/.test(word3.text)) {
+                loanNo = `${word1.text.toUpperCase()}${word2.text}${word3.text}`;
+                break;
+            }
+        }
     }
-    
-    // --- 2) Find Date and Amount using their labels and positions ---
-    const findValueNearLabel = (labels) => {
+
+    // --- 2) Find Date and Amount (IMPROVED: Uses dynamic tolerance for slanted text) ---
+    const findValueNearLabel = (labels, isNumeric = true) => {
         let labelWord = null;
         for (const word of words) {
-            if (labels.includes(word.text.replace(':', '').trim())) {
+            const cleanText = word.text.replace(':', '').trim();
+            if (labels.includes(cleanText)) {
                 labelWord = word;
                 break;
             }
@@ -284,36 +302,37 @@ const parseAndFillData = (data) => {
 
         if (!labelWord) return null;
 
-        const labelCenterY = getWordCenterY(labelWord);
-        const labelStartX = getWordStartX(labelWord);
+        const labelBounds = getWordBounds(labelWord);
 
-        // Find all words on the same horizontal line, to the right of the label
+        // Find all words generally to the right and vertically aligned
         const wordsOnSameLine = words.filter(word => {
-            const wordCenterY = getWordCenterY(word);
-            const wordStartX = getWordStartX(word);
-            // Check if Y centers are close and if word is to the right
-            return Math.abs(wordCenterY - labelCenterY) < 20 && wordStartX > labelStartX;
+            if (word === labelWord) return false;
+            const wordBounds = getWordBounds(word);
+            // Check: word is to the right & vertical centers are within one line height
+            return wordBounds.minX > labelBounds.minX &&
+                   Math.abs(wordBounds.centerY - labelBounds.centerY) < labelBounds.height;
         });
 
-        // Sort them by their horizontal position and join them
         if (wordsOnSameLine.length > 0) {
-            wordsOnSameLine.sort((a, b) => getWordStartX(a) - getWordStartX(b));
-            return wordsOnSameLine.map(w => w.text).join('');
+            // Sort by horizontal position and join
+            wordsOnSameLine.sort((a, b) => getWordBounds(a).minX - getWordBounds(b).minX);
+            let combinedText = wordsOnSameLine.map(w => w.text).join('');
+            // If numeric, strip any accidental non-numeric characters
+            return isNumeric ? combinedText.replace(/[^\d/]/g, '') : combinedText;
         }
         return null;
     };
 
     // --- Execute finders ---
-    const rawDate = findValueNearLabel(['ता', 'तारीख', 'Date', 'Dt']);
-    if(rawDate) {
+    const rawDate = findValueNearLabel(['ता', 'तारीख', 'Date', 'Dt'], false);
+    if (rawDate) {
         const parsed = parseDate(rawDate);
         date = parsed ? formatDateToDDMMYYYY(parsed) : rawDate;
     }
-    
-    const rawAmount = findValueNearLabel(['रु', 'रू', 'Rs']);
-    if(rawAmount) {
-        // Remove any non-digit characters and parse
-        principal = rawAmount.replace(/[^\d]/g, '');
+
+    const rawAmount = findValueNearLabel(['रु', 'रू', 'Rs'], true);
+    if (rawAmount) {
+        principal = rawAmount;
     }
 
     // --- Fill into Table ---
@@ -334,13 +353,11 @@ const parseAndFillData = (data) => {
         showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
     } else {
         showConfirm('Scan Results', 'Could not find all required data. Check the console for details.', false);
-        // Provide the original raw text for debugging if needed
         const rawTextForDebug = words.map(w => w.text).join(' ');
         console.log("Full text to copy:", rawTextForDebug);
         console.log("Data found:", { loanNo, principal, date });
     }
 };
-
 const handleImageScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
