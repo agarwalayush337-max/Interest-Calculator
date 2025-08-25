@@ -1,11 +1,11 @@
 // --- Firebase Configuration ---
 const firebaseConfig = {
-  apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
-  authDomain: "interest-calculator-8d997.firebaseapp.com",
-  projectId: "interest-calculator-8d997",
-  storageBucket: "interest-calculator-8d997.appspot.com",
-  messagingSenderId: "187925519090",
-  appId: "1:187925519090:web:c875d2fb788d02b5bf4e6b"
+    apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
+    authDomain: "interest-calculator-8d997.firebaseapp.com",
+    projectId: "interest-calculator-8d997",
+    storageBucket: "interest-calculator-8d997.appspot.com",
+    messagingSenderId: "187925519090",
+    appId: "1:187925519090:web:c875d2fb788d02b5bf4e6b"
 };
 
 // Initialize Firebase
@@ -52,7 +52,6 @@ const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
 const scanImageBtn = document.getElementById('scanImageBtn');
 const imageUploadInput = document.getElementById('imageUploadInput');
-// The duplicate declarations of scanImageBtn and imageUploadInput have been removed.
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -208,38 +207,56 @@ const cleanAndSortTable = () => {
     sortedRows.forEach(row => loanTableBody.appendChild(row));
     renumberRows();
 };
-// --- START: NEW Cloud Vision Integration ---
 
-// This function attempts to find and parse data from the scanned text.
-// You will likely need to customize the regular expressions for your specific documents.
+// --- START: NEW Cloud Vision Integration ---
 const parseAndFillData = (text) => {
-    console.log("Extracted Text from Vision API:", text); // Log for debugging
+    console.log("Extracted Text from Vision API:", text);
 
     const lines = text.split('\n');
     let dataFound = false;
+    let loanNo, principal, date;
 
+    // Use a loop to find all three pieces of data from the text
     lines.forEach(line => {
-        // Regex to find dates in various common formats
-        const dateMatch = line.match(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/);
+        // Pattern 1: Find the loan number (e.g., D.450)
+        const noMatch = line.match(/D\.?\s*(\d+)/i);
+        if (noMatch) {
+            loanNo = `D.${noMatch[1]}`;
+        }
 
-        // Regex to find numbers that look like currency amounts
-        const amountMatch = line.match(/(?:₹|Rs\.?|Amount:?)\s*([\d,]+(?:\.\d{2})?)/i) || line.match(/\b(\d[\d,]*\d)\b/);
+        // Pattern 2: Find the amount (e.g., 10000)
+        const amountMatch = line.match(/(?:₹|रुपये|Rs\.?)\s*([\d,]+(?:\.\d{2})?)/i) || line.match(/(\d{1,2})?,\s*([\d,]+)/i);
+        if (amountMatch) {
+            principal = amountMatch[1].replace(/,/g, '');
+        }
 
-        if (dateMatch && amountMatch) {
-            const date = dateMatch[0];
-            // Get the matched amount and remove any commas
-            const principal = amountMatch[1] ? amountMatch[1].replace(/,/g, '') : amountMatch[0].replace(/,/g, '');
-
-            addRow({ no: 'Scanned', principal, date });
-            dataFound = true;
+        // Pattern 3: Find the date (e.g., 22/09/2024)
+        const dateMatch = line.match(/तारीख:?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/);
+        if (dateMatch) {
+            date = dateMatch[1];
         }
     });
 
+    // If all three pieces of data are found, fill them in
+    if (loanNo && principal && date) {
+        let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
+            !r.querySelector('.principal').value && !r.querySelector('.no').value
+        );
+
+        if (!targetRow) {
+            addRow({ no: loanNo, principal, date });
+        } else {
+            targetRow.querySelector('.no').value = loanNo;
+            targetRow.querySelector('.principal').value = principal;
+            targetRow.querySelector('.date').value = date;
+        }
+        dataFound = true;
+    }
+
     if (dataFound) {
-        updateAllCalculations(); // Recalculate totals
+        updateAllCalculations();
         showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
     } else {
-        // If nothing was parsed, show the full text so the user can see it
         showConfirm('Scan Results', 'Could not automatically parse data. The scanned text is shown below. Please check the browser console for a copyable version.', false);
         console.log("Full text to copy:", text);
     }
@@ -249,24 +266,19 @@ const handleImageScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Use your existing modal to show a loading state
     showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
 
     try {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = async () => {
-            // Remove the data URI prefix (e.g., "data:image/jpeg;base64,")
             const base64Image = reader.result.split(',')[1];
-
-            // Call your secure Netlify Function
             const response = await fetch('/.netlify/functions/scanImage', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image: base64Image })
             });
-
-            closeConfirm(); // Close the "Scanning..." modal
+            closeConfirm();
 
             if (!response.ok) {
                 const errorInfo = await response.json();
@@ -274,7 +286,6 @@ const handleImageScan = async (event) => {
             }
 
             const result = await response.json();
-
             if (result.text) {
                 parseAndFillData(result.text);
             } else {
@@ -288,11 +299,10 @@ const handleImageScan = async (event) => {
         };
     } catch (error) {
         console.error('Scan process failed:', error);
-        closeConfirm(); // Make sure the modal closes even on error
+        closeConfirm();
         await showConfirm('Error', error.message, false);
     }
 
-    // Reset the input so the 'change' event fires if the same file is selected again
     imageUploadInput.value = '';
 };
 
