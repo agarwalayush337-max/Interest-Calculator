@@ -153,7 +153,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
                calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
 }
-.btn svg { vertical-align: middle; } /* Align icon */
+.btn svg { vertical-align: middle; }
 .btn:active {
     box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
                inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
