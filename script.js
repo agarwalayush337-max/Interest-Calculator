@@ -241,74 +241,14 @@ const scoreAmountCandidate = (value, context) => {
     return score;
 };
 
-const parseAndFillData = (data) => {
-    const words = data.words || [];
-    console.log("Received structured word data:", words);
+const parseAndFillData = (extractedData) => {
+    // No more complex parsing! The AI did all the work.
+    const loanNo = extractedData.LoanNo;
+    const principal = extractedData.Principal;
+    const date = extractedData.Date;
 
-    if (words.length === 0) {
-        showConfirm('Scan Failed', 'No text could be found in the image.', false);
-        return;
-    }
+    console.log("Data from Custom Model:", { loanNo, principal, date });
 
-    let loanNo = null;
-    let principal = null;
-    let date = null;
-
-    // --- 1) Find Loan No (This logic is robust and remains) ---
-    for (let i = 0; i < words.length; i++) {
-        const word1 = words[i];
-        if (/^[A-Z]\.\d{3,}$/i.test(word1.text)) {
-            loanNo = word1.text.toUpperCase();
-            break;
-        }
-        if (/^[A-Z]$/i.test(word1.text) && i + 2 < words.length) {
-            const word2 = words[i + 1];
-            const word3 = words[i + 2];
-            if (word2.text === '.' && /^\d{3,}$/.test(word3.text)) {
-                loanNo = `${word1.text.toUpperCase()}${word2.text}${word3.text}`;
-                break;
-            }
-        }
-    }
-
-    // --- 2) Find Date by its unique pattern (e.g., DD/MM/YYYY) ---
-    const dateRegex = /\d{1,2}\/\d{1,2}\/\d{2,4}/;
-    for (const word of words) {
-        if (dateRegex.test(word.text)) {
-            const rawDate = word.text.match(dateRegex)[0];
-            const parsed = parseDate(rawDate);
-            date = parsed ? formatDateToDDMMYYYY(parsed) : rawDate;
-            break;
-        }
-    }
-
-    // --- 3) Find Amount by finding the largest number ---
-    // This heuristic works because the principal is always the largest number.
-    let potentialAmounts = [];
-    for (const word of words) {
-        // Find words that are purely numbers (and not part of a date string)
-        if (/^\d+$/.test(word.text) && !word.text.includes('/')) {
-            potentialAmounts.push(parseInt(word.text, 10));
-        }
-    }
-    
-    if (potentialAmounts.length > 0) {
-        // Exclude numbers that are part of the loan number or date
-        const loanNoDigits = loanNo ? parseInt(loanNo.replace(/[^\d]/g, ''), 10) : null;
-        const dateDigits = date ? date.split('/').map(d => parseInt(d, 10)) : [];
-        
-        const filteredAmounts = potentialAmounts.filter(amount => 
-            amount !== loanNoDigits && !dateDigits.includes(amount)
-        );
-
-        // The principal is the largest remaining number
-        if (filteredAmounts.length > 0) {
-            principal = String(Math.max(...filteredAmounts));
-        }
-    }
-
-
-    // --- Fill into Table ---
     if (loanNo && principal && date) {
         let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
             !r.querySelector('.principal').value && !r.querySelector('.no').value
@@ -319,64 +259,17 @@ const parseAndFillData = (data) => {
         } else {
             targetRow.querySelector('.no').value = loanNo;
             targetRow.querySelector('.principal').value = principal;
-            targetRow.querySelector('.date').value = date;
+            // The AI might return dates in different formats, so we still parse it
+            const parsedDate = parseDate(date);
+            targetRow.querySelector('.date').value = parsedDate ? formatDateToDDMMYYYY(parsedDate) : date;
         }
 
         updateAllCalculations();
-        showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
+        showConfirm('Scan Complete', 'Data extracted using custom AI.', false);
     } else {
-        showConfirm('Scan Results', 'Could not find all required data. Check the console for details.', false);
-        const rawTextForDebug = words.map(w => w.text).join(' ');
-        console.log("Full text to copy:", rawTextForDebug);
-        console.log("Data found:", { loanNo, principal, date });
+        showConfirm('Scan Results', 'The custom model could not find all required data.', false);
+        console.log("Incomplete data received:", extractedData);
     }
-};
-const handleImageScan = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
-
-    try {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = async () => {
-            const base64Image = reader.result.split(',')[1];
-            const response = await fetch('/.netlify/functions/scanImage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: base64Image })
-            });
-            closeConfirm();
-
-            if (!response.ok) {
-                const errorInfo = await response.json();
-                throw new Error(errorInfo.error || 'The scan failed. The server responded with an error.');
-            }
-
-            const result = await response.json();
-            
-            // --- CORRECTION IS HERE ---
-            // We now check for 'result.words' instead of the old 'result.text'
-            if (result && result.words) {
-                // We pass the entire 'result' object to our new parser
-                parseAndFillData(result);
-            } else {
-                await showConfirm('Scan Failed', 'No text could be found in the image.', false);
-            }
-        };
-        reader.onerror = (error) => {
-            closeConfirm();
-            console.error("FileReader Error:", error);
-            throw new Error('There was an error reading the image file.');
-        };
-    } catch (error) {
-        console.error('Scan process failed:', error);
-        closeConfirm();
-        await showConfirm('Error', error.message, false);
-    }
-
-    imageUploadInput.value = '';
 };
 // --- END: NEW Cloud Vision Integration ---
 
