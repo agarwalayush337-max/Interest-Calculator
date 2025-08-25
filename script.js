@@ -50,10 +50,8 @@ const reportSearchInput = document.getElementById('reportSearchInput');
 const syncStatusEl = document.getElementById('syncStatus');
 const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
-// New Scan Feature Elements
 const scanImageBtn = document.getElementById('scanImageBtn');
 const imageUploadInput = document.getElementById('imageUploadInput');
-
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -83,9 +81,7 @@ const updateSyncStatus = () => {
 
 const syncData = async () => {
     if (!navigator.onLine || !localDb || !reportsCollection) return;
-
     syncStatusEl.textContent = 'Syncing...';
-    // Sync new reports
     const unsynced = await localDb.getAll('unsyncedReports');
     for (const report of unsynced) {
         try {
@@ -95,8 +91,6 @@ const syncData = async () => {
             await localDb.delete('unsyncedReports', report.localId);
         } catch (error) { console.error('Failed to sync new report:', error); }
     }
-
-    // Sync deletions
     const deletions = await localDb.getAll('deletionsQueue');
     for (const item of deletions) {
         try {
@@ -104,13 +98,11 @@ const syncData = async () => {
             await localDb.delete('deletionsQueue', item.docId);
         } catch (error) { console.error('Failed to sync deletion:', error); }
     }
-    
     updateSyncStatus();
     if(document.querySelector('.tab-button[data-tab="recentTransactionsTab"].active')) {
         loadRecentTransactions();
     }
 };
-
 
 // --- Custom Modal Logic ---
 let resolveConfirm;
@@ -128,7 +120,7 @@ const closeConfirm = (value) => {
     if (resolveConfirm) resolveConfirm(value);
 };
 
-// --- Date & Calculation Logic (Unchanged) ---
+// --- Date & Calculation Logic ---
 const parseDate = (dateString) => {
     if (!dateString) return null;
     const parts = dateString.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
@@ -195,9 +187,6 @@ const addRow = (loan = { no: '', principal: '', date: '' }) => {
         <td class="read-only duration"></td>
         <td class="read-only interest"></td>
         <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeRow(this)">X</button></td>`;
-    
-    // Automatically add a new row if the user types in the last row (handled by delegation)
-    // Re-number rows after adding
     renumberRows();
     updateAllCalculations();
 };
@@ -219,7 +208,7 @@ const cleanAndSortTable = () => {
     renumberRows();
 };
 
-// --- State Management (Unchanged) ---
+// --- State Management ---
 const saveCurrentState = () => {
     if (!user) return;
     const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
@@ -237,7 +226,7 @@ const loadCurrentState = () => {
         interestRateEl.value = savedState.interestRate || '1.75';
         if (savedState.loans && savedState.loans.length > 0) savedState.loans.forEach(loan => addRow(loan));
     } else { todayDateEl.value = formatDateToDDMMYYYY(new Date()); }
-    while (loanTableBody.rows.length < 5) addRow({no:'', principal:'', date:''}); // Pass empty object
+    while (loanTableBody.rows.length < 5) addRow({no:'', principal:'', date:''});
     if (!loanTableBody.lastChild.querySelector('.principal').value) {} else { addRow({no:'', principal:'', date:''}); }
     updateAllCalculations();
 };
@@ -381,9 +370,7 @@ const renderRecentTransactions = (filter = '') => {
 
 const loadRecentTransactions = async () => {
     if (!user) return;
-    
     let onlineReports = [], localReports = [];
-    
     if (navigator.onLine && reportsCollection) {
         try {
             const snapshot = await reportsCollection.orderBy("createdAt", "desc").get();
@@ -393,9 +380,7 @@ const loadRecentTransactions = async () => {
     if (localDb) {
         localReports = (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true }));
     }
-    
     cachedReports = [...localReports, ...onlineReports].sort((a, b) => (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt));
-    
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
 };
@@ -430,10 +415,8 @@ const viewReport = (reportId, isEditable) => {
 const deleteReport = async (docId) => {
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
-    
     const reportToDelete = cachedReports.find(r => r.id === docId);
     if (!reportToDelete) return;
-
     if (reportToDelete.isLocal) {
         await localDb.delete('unsyncedReports', docId);
     } else {
@@ -450,28 +433,23 @@ const deleteReport = async (docId) => {
 const renderDashboard = async () => {
     if (cachedReports.length === 0) await loadRecentTransactions();
     dashboardLoader.style.display = 'none';
-
     if (cachedReports.length === 0) {
         dashboardMessage.textContent = "No data available. Save some reports to see the dashboard.";
         dashboardMessage.style.display = 'block';
         return;
     }
     dashboardMessage.style.display = 'none';
-
-    let totalPrincipalAll = 0;
-    let totalInterestAll = 0;
+    let totalPrincipalAll = 0, totalInterestAll = 0;
     cachedReports.forEach(report => {
         totalPrincipalAll += parseFloat(report.totals.principal);
         totalInterestAll += parseFloat(report.totals.interest);
     });
-
     const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
     if(pieChartInstance) pieChartInstance.destroy();
     pieChartInstance = new Chart(pieCtx, {
         type: 'pie',
         data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] },
     });
-
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
     const recentReports = cachedReports.slice(0, 7).reverse();
     if(barChartInstance) barChartInstance.destroy();
@@ -482,7 +460,7 @@ const renderDashboard = async () => {
     });
 };
 
-// --- NEW: Image Scan Feature ---
+// --- Image Scan Feature ---
 const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -491,17 +469,16 @@ const handleImageUpload = async (event) => {
     try {
         const extractedData = await extractDataFromImage(file);
         if (extractedData) {
-            // Find the first empty row or add a new one
             let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r => !r.querySelector('.principal').value && !r.querySelector('.no').value);
             if (!targetRow) {
                 addRow({no:'', principal:'', date:''});
                 targetRow = loanTableBody.lastChild;
             }
-            targetRow.querySelector('.no').value = extractedData.no;
-            targetRow.querySelector('.principal').value = extractedData.principal;
-            targetRow.querySelector('.date').value = extractedData.date;
+            targetRow.querySelector('.no').value = extractedData.no || '';
+            targetRow.querySelector('.principal').value = extractedData.principal || '';
+            targetRow.querySelector('.date').value = extractedData.date || '';
             updateAllCalculations();
-            closeConfirm(true); // Close the "Processing" modal
+            closeConfirm(true);
             await showConfirm("Success", "Data has been filled from the image.", false);
         } else {
             await showConfirm("Failed", "Could not extract data from the image. Please ensure it's clear.", false);
@@ -510,28 +487,29 @@ const handleImageUpload = async (event) => {
         console.error("Image processing error:", error);
         await showConfirm("Error", "An error occurred during image processing.", false);
     }
-    imageUploadInput.value = ''; // Reset file input
+    imageUploadInput.value = '';
 };
 
 const extractDataFromImage = async (file) => {
-    // --- DEMONSTRATION / MOCK FUNCTION ---
-    // In a real application, you would replace this with a call to a server-side
-    // function (e.g., a Firebase Cloud Function) that uses an OCR service
-    // like Google Cloud Vision API to analyze the image.
-    // This prevents exposing your API key on the client-side.
+    // **IMPORTANT**: Since your function is in 'europe-west1', you must specify the region.
+    const functions = firebase.app().functions('europe-west1');
 
-    console.log("Simulating AI analysis for file:", file.name);
-
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Return the hardcoded data from the user's sample image.
-    // A real API would return structured JSON based on the image text.
-    return {
-        no: 'D.450',
-        principal: '10000',
-        date: '22/09/2024'
-    };
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+        reader.onloadend = async () => {
+            const base64EncodedImage = reader.result.split(',')[1];
+            try {
+                const extractData = functions.httpsCallable('extractDataFromImage');
+                const result = await extractData({ image: base64EncodedImage });
+                resolve(result.data); 
+            } catch (error) {
+                console.error("Cloud function call failed:", error);
+                reject(error);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
 };
 
 // --- Authentication ---
@@ -568,7 +546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // --- Action Listeners ---
+    // Action Listeners
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({no:'', principal:'', date:''}));
@@ -577,8 +555,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     exitViewModeBtn.addEventListener('click', exitViewMode);
     exportPdfBtn.addEventListener('click', exportToPDF);
     exportViewPdfBtn.addEventListener('click', exportToPDF);
-    scanImageBtn.addEventListener('click', () => imageUploadInput.click()); // New
-    imageUploadInput.addEventListener('change', handleImageUpload); // New
+    scanImageBtn.addEventListener('click', () => imageUploadInput.click());
+    imageUploadInput.addEventListener('change', handleImageUpload);
     
     // Modal Listeners
     confirmOkBtn.addEventListener('click', () => closeConfirm(true));
