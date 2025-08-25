@@ -1,6 +1,6 @@
 // --- Firebase Configuration ---
 const firebaseConfig = {
-    apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
+    apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMzTKIKVW_K_JQ",
     authDomain: "interest-calculator-8d997.firebaseapp.com",
     projectId: "interest-calculator-8d997",
     storageBucket: "interest-calculator-8d997.appspot.com",
@@ -52,6 +52,38 @@ const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
 const scanImageBtn = document.getElementById('scanImageBtn');
 const imageUploadInput = document.getElementById('imageUploadInput');
+
+// --- New Modal Elements ---
+const scanConfirmModal = document.getElementById('scanConfirmModal');
+const modalNo = document.getElementById('modalNo');
+const modalPrincipal = document.getElementById('modalPrincipal');
+const modalDate = document.getElementById('modalDate');
+
+// --- New Modal Functions ---
+const showScanConfirmModal = (data) => {
+    modalNo.value = data.no || '';
+    modalPrincipal.value = data.principal || '';
+    modalDate.value = data.date || '';
+    scanConfirmModal.style.display = 'flex';
+};
+
+const closeScanConfirm = () => {
+    scanConfirmModal.style.display = 'none';
+};
+
+const confirmScanData = () => {
+    const confirmedData = {
+        no: modalNo.value,
+        principal: modalPrincipal.value,
+        date: modalDate.value
+    };
+    if (confirmedData.principal && confirmedData.date) {
+        addRow(confirmedData);
+    } else {
+        showConfirm('Missing Data', 'Please enter a principal and date to add the loan.', false);
+    }
+    closeScanConfirm();
+};
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -219,44 +251,24 @@ const parseAndFillData = (text) => {
     const lines = text.split('\n');
 
     for (const line of lines) {
-        // More flexible regex for Loan No: looks for numbers that might be preceded by 'D' or '10' and a dot
         const noMatch = line.match(/(?:D|10)\.?\s*(\d+)/i);
         if (noMatch) {
             loanNo = `D.${noMatch[1]}`;
         }
 
-        // More flexible regex for Principal: looks for numbers near common currency symbols or words, including `रुरु:-`
         const amountMatch = line.match(/(?:₹|रुपये|रुरु|Rs\.?)\s*([\d,]+(?:\.\d{2})?)/i);
         if (amountMatch) {
             principal = amountMatch[1].replace(/,/g, '');
         }
 
-        // More flexible regex for Date: looks for a date format preceded by common date-related words or their OCR misinterpretations
         const dateMatch = line.match(/(?:तारीख|d10|d|i)?:\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i);
         if (dateMatch) {
             date = dateMatch[1];
         }
     }
 
-    if (loanNo && principal && date) {
-        let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
-            !r.querySelector('.principal').value && !r.querySelector('.no').value
-        );
-
-        if (!targetRow) {
-            addRow({ no: loanNo, principal, date });
-        } else {
-            targetRow.querySelector('.no').value = loanNo;
-            targetRow.querySelector('.principal').value = principal;
-            targetRow.querySelector('.date').value = date;
-        }
-
-        updateAllCalculations();
-        showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
-    } else {
-        showConfirm('Scan Results', 'Could not find all required data (Loan No, Amount, Date). Please check the browser console for the full scanned text.', false);
-        console.log("Full text to copy:", text);
-    }
+    // Instead of directly filling the table, show the confirmation modal
+    showScanConfirmModal({ no: loanNo, principal, date });
 };
 
 const handleImageScan = async (event) => {
