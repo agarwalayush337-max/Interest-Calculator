@@ -121,7 +121,7 @@ const closeConfirm = (value) => {
 // --- Date & Calculation Logic ---
 const parseDate = (dateString) => {
     if (!dateString) return null;
-    const parts = dateString.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+    const parts = String(dateString).match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
     if (!parts) return null;
     let day = parseInt(parts[1], 10), month = parseInt(parts[2], 10), year = parseInt(parts[3], 10);
     if (year < 100) {
@@ -208,39 +208,9 @@ const cleanAndSortTable = () => {
     renumberRows();
 };
 
-// --- START: NEW Cloud Vision Integration ---
+// --- START: Document AI Integration ---
 
-// Helpers to normalize OCR text (Hindi digits -> ASCII, etc.)
-const _devToAscii = (s) => {
-    const map = { '०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9' };
-    return s.replace(/[०-९]/g, ch => map[ch] || ch);
-};
-const normalizeOcrText = (t) => {
-    return _devToAscii(t)
-        .replace(/[„”“]/g, '"')
-        .replace(/[’‘´`]/g, "'")
-        .replace(/[–—]/g, "-")
-        .replace(/[|]/g, "1");
-};
-
-// Rank a numeric candidate as "amount" using nearby context
-const scoreAmountCandidate = (value, context) => {
-    let score = Math.log10(Math.max(1, value)); // bigger numbers get a natural lift
-
-    // Positive signals
-    if (/(₹|rs\.?|रु|रूपये|रुपये|amount|amt|total|कुल)/i.test(context)) score += 6;
-    if (/\/-|\-\/|:|-:$/.test(context)) score += 2; // common bill suffix
-    if (/(cash|receive|paid|देय|राशि)/i.test(context)) score += 3;
-
-    // Negative signals (quantities, units, counts)
-    if (/\b(pcs?|pieces?|nos?|qty|kg|gm|g|ml|ltr|cm|mm|मीटर|ग्राम|किलो|पीस|संख्या|वज़न|वजन)\b/i.test(context)) score -= 6;
-
-    // Very small numbers are unlikely to be amounts
-    if (value < 1000) score -= 4;
-
-    return score;
-};
-
+// This function now receives clean data from the custom AI model
 const parseAndFillData = (extractedData) => {
     // No more complex parsing! The AI did all the work.
     const loanNo = extractedData.LoanNo;
@@ -271,8 +241,75 @@ const parseAndFillData = (extractedData) => {
         console.log("Incomplete data received:", extractedData);
     }
 };
-// --- END: NEW Cloud Vision Integration ---
 
+// This function handles the file upload and includes debugging logs
+const handleImageScan = async (event) => {
+    console.log("1. 'Scan Image' process started.");
+    const file = event.target.files[0];
+    
+    if (!file) {
+        console.log("No file selected. Exiting.");
+        return;
+    }
+    console.log("2. File selected:", file.name, "Size:", file.size, "bytes");
+
+    showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
+
+    try {
+        const reader = new FileReader();
+        console.log("3. FileReader created. Reading the file...");
+
+        // This part runs ONLY if the file is read successfully
+        reader.onload = async () => {
+            try {
+                console.log("4. File read successfully (onload event triggered). Preparing to fetch...");
+                const base64Image = reader.result.split(',')[1];
+                const response = await fetch('/.netlify/functions/scanImage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64Image })
+                });
+                console.log("5. Fetch request sent. Waiting for response...");
+                closeConfirm();
+
+                if (!response.ok) {
+                    const errorInfo = await response.json();
+                    throw new Error(errorInfo.error || 'The scan failed. The server responded with an error.');
+                }
+
+                const result = await response.json();
+                
+                if (result) {
+                    parseAndFillData(result);
+                } else {
+                    await showConfirm('Scan Failed', 'No text could be found in the image.', false);
+                }
+            } catch (fetchError) {
+                console.error("ERROR inside onload:", fetchError);
+                closeConfirm();
+                await showConfirm('Error', fetchError.message, false);
+            }
+        };
+
+        // This part runs ONLY if there is an error reading the file
+        reader.onerror = (error) => {
+            console.error("CRITICAL: FileReader failed with an error.", error);
+            closeConfirm();
+            showConfirm('Error', 'Could not read the selected image file.', false);
+        };
+        
+        reader.readAsDataURL(file);
+
+    } catch (error) {
+        console.error("CRITICAL: An error was caught in the outer try/catch block.", error);
+        closeConfirm();
+        await showConfirm('Error', error.message, false);
+    }
+
+    imageUploadInput.value = '';
+};
+
+// --- END: Document AI Integration ---
 
 // --- State Management ---
 const saveCurrentState = () => {
