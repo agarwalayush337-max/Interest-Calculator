@@ -212,52 +212,56 @@ const cleanAndSortTable = () => {
 const parseAndFillData = (text) => {
     console.log("Extracted Text from Vision API:", text);
 
-    const lines = text.split('\n');
-    let dataFound = false;
-    let loanNo, principal, date;
+    // Using a more focused approach to find key data points
+    let loanNo = null;
+    let principal = null;
+    let date = null;
 
-    // Use a loop to find all three pieces of data from the text
-    lines.forEach(line => {
-        // Pattern 1: Find the loan number (e.g., D.450)
+    // Split the text into individual lines to analyze each one
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+        // Regex to find the Loan No (e.g., "D.450") - looks for a "D" followed by a number
         const noMatch = line.match(/D\.?\s*(\d+)/i);
         if (noMatch) {
             loanNo = `D.${noMatch[1]}`;
         }
 
-        // Pattern 2: Find the amount (e.g., 10000)
-        const amountMatch = line.match(/(?:₹|रुपये|Rs\.?)\s*([\d,]+(?:\.\d{2})?)/i) || line.match(/(\d{1,2})?,\s*([\d,]+)/i);
+        // Regex to find the Principal (e.g., "10000/-") - looks for "₹", "रुपये", or "Rs."
+        const amountMatch = line.match(/(?:₹|रुपये|Rs\.?)\s*([\d,]+(?:\.\d{2})?)/i);
         if (amountMatch) {
             principal = amountMatch[1].replace(/,/g, '');
         }
 
-        // Pattern 3: Find the date (e.g., 22/09/2024)
+        // Regex to find the Date - looks for "तारीख" (Date in Hindi)
         const dateMatch = line.match(/तारीख:?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/);
         if (dateMatch) {
             date = dateMatch[1];
         }
-    });
+    }
 
-    // If all three pieces of data are found, fill them in
+    // Now, check if all three necessary data points were found
     if (loanNo && principal && date) {
+        // Find the first empty row in the table
         let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
             !r.querySelector('.principal').value && !r.querySelector('.no').value
         );
 
+        // If no empty row exists, create a new one
         if (!targetRow) {
             addRow({ no: loanNo, principal, date });
         } else {
+            // Otherwise, fill the found empty row
             targetRow.querySelector('.no').value = loanNo;
             targetRow.querySelector('.principal').value = principal;
             targetRow.querySelector('.date').value = date;
         }
-        dataFound = true;
-    }
 
-    if (dataFound) {
         updateAllCalculations();
         showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
     } else {
-        showConfirm('Scan Results', 'Could not automatically parse data. The scanned text is shown below. Please check the browser console for a copyable version.', false);
+        // If any data point is missing, show a message with the full text for manual entry
+        showConfirm('Scan Results', 'Could not find all required data (Loan No, Amount, Date). Please check the browser console for the full scanned text.', false);
         console.log("Full text to copy:", text);
     }
 };
