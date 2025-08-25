@@ -52,6 +52,8 @@ const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
 const scanImageBtn = document.getElementById('scanImageBtn');
 const imageUploadInput = document.getElementById('imageUploadInput');
+const scanImageBtn = document.getElementById('scanImageBtn');
+const imageUploadInput = document.getElementById('imageUploadInput');
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -207,6 +209,96 @@ const cleanAndSortTable = () => {
     sortedRows.forEach(row => loanTableBody.appendChild(row));
     renumberRows();
 };
+// --- START: NEW Cloud Vision Integration ---
+
+// This function attempts to find and parse data from the scanned text.
+// You will likely need to customize the regular expressions for your specific documents.
+const parseAndFillData = (text) => {
+    console.log("Extracted Text from Vision API:", text); // Log for debugging
+
+    const lines = text.split('\n');
+    let dataFound = false;
+
+    lines.forEach(line => {
+        // Regex to find dates in various common formats
+        const dateMatch = line.match(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/);
+        
+        // Regex to find numbers that look like currency amounts
+        const amountMatch = line.match(/(?:₹|Rs\.?|Amount:?)\s*([\d,]+(?:\.\d{2})?)/i) || line.match(/\b(\d[\d,]*\d)\b/);
+
+        if (dateMatch && amountMatch) {
+            const date = dateMatch[0];
+            // Get the matched amount and remove any commas
+            const principal = amountMatch[1] ? amountMatch[1].replace(/,/g, '') : amountMatch[0].replace(/,/g, '');
+            
+            addRow({ no: 'Scanned', principal, date });
+            dataFound = true;
+        }
+    });
+
+    if (dataFound) {
+        updateAllCalculations(); // Recalculate totals
+        showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
+    } else {
+        // If nothing was parsed, show the full text so the user can see it
+        showConfirm('Scan Results', 'Could not automatically parse data. The scanned text is shown below. Please check the browser console for a copyable version.', false);
+        console.log("Full text to copy:", text);
+    }
+};
+
+const handleImageScan = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Use your existing modal to show a loading state
+    showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
+
+    try {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = async () => {
+            // Remove the data URI prefix (e.g., "data:image/jpeg;base64,")
+            const base64Image = reader.result.split(',')[1];
+
+            // Call your secure Netlify Function
+            const response = await fetch('/.netlify/functions/scanImage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: base64Image })
+            });
+
+            closeConfirm(); // Close the "Scanning..." modal
+
+            if (!response.ok) {
+                const errorInfo = await response.json();
+                throw new Error(errorInfo.error || 'The scan failed. The server responded with an error.');
+            }
+
+            const result = await response.json();
+            
+            if (result.text) {
+                parseAndFillData(result.text);
+            } else {
+                await showConfirm('Scan Failed', 'No text could be found in the image.', false);
+            }
+        };
+        reader.onerror = (error) => {
+            closeConfirm();
+            console.error("FileReader Error:", error);
+            throw new Error('There was an error reading the image file.');
+        };
+    } catch (error) {
+        console.error('Scan process failed:', error);
+        closeConfirm(); // Make sure the modal closes even on error
+        await showConfirm('Error', error.message, false);
+    }
+
+    // Reset the input so the 'change' event fires if the same file is selected again
+    imageUploadInput.value = '';
+};
+
+// --- END: NEW Cloud Vision Integration ---
+
 
 // --- State Management ---
 const saveCurrentState = () => {
@@ -601,4 +693,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateAllCalculations();
         }
     }, true);
+  scanImageBtn.addEventListener('click', () => imageUploadInput.click());
+imageUploadInput.addEventListener('change', handleImageScan);
 });
