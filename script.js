@@ -111,9 +111,7 @@ const showConfirm = (title, message, showCancel = true) => {
     confirmMessageEl.textContent = message;
     confirmCancelBtn.style.display = showCancel ? 'inline-flex' : 'none';
     confirmModal.style.display = 'flex';
-    return new Promise(resolve => {
-        resolveConfirm = resolve;
-    });
+    return new Promise(resolve => { resolveConfirm = resolve; });
 };
 const closeConfirm = (value) => {
     confirmModal.style.display = 'none';
@@ -126,7 +124,9 @@ const parseDate = (dateString) => {
     const parts = dateString.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
     if (!parts) return null;
     let day = parseInt(parts[1], 10), month = parseInt(parts[2], 10), year = parseInt(parts[3], 10);
-    if (year < 100) { year += (new Date().getFullYear() - (new Date().getFullYear() % 100)) - (year > (new Date().getFullYear() % 100) ? 100 : 0); }
+    if (year < 100) {
+        year += (new Date().getFullYear() - (new Date().getFullYear() % 100)) - (year > (new Date().getFullYear() % 100) ? 100 : 0);
+    }
     if (day > 0 && day <= 31 && month > 0 && month <= 12) { return new Date(year, month - 1, day); }
     return null;
 };
@@ -209,35 +209,120 @@ const cleanAndSortTable = () => {
 };
 
 // --- START: NEW Cloud Vision Integration ---
-const parseAndFillData = (text) => {
-    console.log("Extracted Text from Vision API:", text);
+
+// Helpers to normalize OCR text (Hindi digits -> ASCII, etc.)
+const _devToAscii = (s) => {
+    const map = { '०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9' };
+    return s.replace(/[०-९]/g, ch => map[ch] || ch);
+};
+const normalizeOcrText = (t) => {
+    return _devToAscii(t)
+        .replace(/[„”“]/g, '"')
+        .replace(/[’‘´`]/g, "'")
+        .replace(/[–—]/g, "-")
+        .replace(/[|]/g, "1");
+};
+
+// Rank a numeric candidate as "amount" using nearby context
+const scoreAmountCandidate = (value, context) => {
+    let score = Math.log10(Math.max(1, value)); // bigger numbers get a natural lift
+
+    // Positive signals
+    if (/(₹|rs\.?|रु|रूपये|रुपये|amount|amt|total|कुल)/i.test(context)) score += 6;
+    if (/\/-|\-\/|:|-:$/.test(context)) score += 2; // common bill suffix
+    if (/(cash|receive|paid|देय|राशि)/i.test(context)) score += 3;
+
+    // Negative signals (quantities, units, counts)
+    if (/\b(pcs?|pieces?|nos?|qty|kg|gm|g|ml|ltr|cm|mm|मीटर|ग्राम|किलो|पीस|संख्या|वज़न|वजन)\b/i.test(context)) score -= 6;
+
+    // Very small numbers are unlikely to be amounts
+    if (value < 1000) score -= 4;
+
+    return score;
+};
+
+const parseAndFillData = (rawText) => {
+    const text = normalizeOcrText(rawText || "");
+    console.log("Extracted Text from Vision API (normalized):", text);
 
     let loanNo = null;
     let principal = null;
     let date = null;
 
-    const lines = text.split('\n');
+    // Split into clean lines
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
+    // --- 1) Loan No (e.g., D.450 / D 450 / D450 or NO: 450) ---
     for (const line of lines) {
-        // More flexible regex for Loan No: looks for numbers that might be preceded by 'D' or '10' and a dot
-        const noMatch = line.match(/(?:D|10)\.?\s*(\d+)/i);
-        if (noMatch) {
-            loanNo = `D.${noMatch[1]}`;
-        }
-
-        // More flexible regex for Principal: looks for numbers near common currency symbols or words, including `रुरु:-`
-        const amountMatch = line.match(/(?:₹|रुपये|रुरु|Rs\.?)\s*([\d,]+(?:\.\d{2})?)/i);
-        if (amountMatch) {
-            principal = amountMatch[1].replace(/,/g, '');
-        }
-
-        // More flexible regex for Date: looks for a date format preceded by common date-related words or their OCR misinterpretations
-        const dateMatch = line.match(/(?:तारीख|d10|d|i)?:\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i);
-        if (dateMatch) {
-            date = dateMatch[1];
-        }
+        const m1 = line.match(/\bD[.\s]*?(\d{1,6})\b/i);
+        if (m1) { loanNo = `D.${m1[1]}`; break; }
+        const m2 = line.match(/\bN[O0][.\s:-]*(\d{1,6})\b/i); // NO: 450
+        if (m2) { loanNo = `D.${m2[1]}`; break; } // normalize to D.x pattern for consistency
     }
 
+    // --- 2) Date (prefer lines that look like have a label e.g., 'ता:' / 'तारीख' / 'date') ---
+    let dateCandidate = null;
+    for (const line of lines) {
+        const labeled = line.match(/(?:तारीख|ता[:.\-]?|date[:.\-]?|dt[:.\-]?|d[.:]?)\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i);
+        if (labeled) { dateCandidate = labeled[1]; break; }
+    }
+    if (!dateCandidate) {
+        // fallback: any date-like string
+        for (const line of lines) {
+            const generic = line.match(/\b(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b/);
+            if (generic) { dateCandidate = generic[1]; break; }
+        }
+    }
+    if (dateCandidate) {
+        const parsed = parseDate(dateCandidate);
+        date = parsed ? formatDateToDDMMYYYY(parsed) : dateCandidate;
+    }
+
+    // --- 3) Amount (collect numeric candidates and rank them) ---
+    // Build a flat string to find positions & avoid dates being re-counted
+    const fullText = lines.join("\n");
+
+    // Collect ranges that are dates to exclude
+    const dateRanges = [];
+    const dateRegexGlobal = /(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/g;
+    let dm;
+    while ((dm = dateRegexGlobal.exec(fullText)) !== null) {
+        dateRanges.push({ start: dm.index, end: dm.index + dm[0].length });
+    }
+    const isInsideAnyRange = (idx) => dateRanges.some(r => idx >= r.start && idx <= r.end);
+
+    // Match Indian/standard formatted numbers:
+    // - 4–7 digits (1000..9999999)
+    // - or comma variants like 10,000 or 1,00,000
+    const numberRegex = /(?<!\d)(\d{1,3}(?:,\d{2,3})+|\d{4,7})(?!\d)/g;
+
+    const candidates = [];
+    let m;
+    while ((m = numberRegex.exec(fullText)) !== null) {
+        const rawNum = m[1];
+        const start = m.index;
+        if (isInsideAnyRange(start)) continue; // skip dates
+
+        // normalize commas both 10,000 and 1,00,000 styles -> remove commas
+        const normalized = parseInt(rawNum.replace(/,/g, ''), 10);
+        if (!Number.isFinite(normalized)) continue;
+
+        // Pull context around the number for scoring
+        const ctxStart = Math.max(0, start - 18);
+        const ctxEnd = Math.min(fullText.length, start + rawNum.length + 18);
+        const context = fullText.slice(ctxStart, ctxEnd);
+
+        const score = scoreAmountCandidate(normalized, context);
+        candidates.push({ value: normalized, score, context });
+    }
+
+    if (candidates.length) {
+        // sort by score, then by numeric value
+        candidates.sort((a, b) => (b.score - a.score) || (b.value - a.value));
+        principal = String(candidates[0].value);
+    }
+
+    // --- Fill into Table if we have all three ---
     if (loanNo && principal && date) {
         let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
             !r.querySelector('.principal').value && !r.querySelector('.no').value
@@ -254,8 +339,9 @@ const parseAndFillData = (text) => {
         updateAllCalculations();
         showConfirm('Scan Complete', 'Data has been successfully added to the table.', false);
     } else {
-        showConfirm('Scan Results', 'Could not find all required data (Loan No, Amount, Date). Please check the browser console for the full scanned text.', false);
+        showConfirm('Scan Results', 'Could not find all required data (Loan No, Amount, Date). Please check the console.', false);
         console.log("Full text to copy:", text);
+        console.log({ loanNo, principal, date });
     }
 };
 
@@ -310,7 +396,11 @@ const handleImageScan = async (event) => {
 const saveCurrentState = () => {
     if (!user) return;
     const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
-        .map(row => ({ no: row.querySelector('.no').value, principal: row.querySelector('.principal').value, date: row.querySelector('.date').value }))
+        .map(row => ({
+            no: row.querySelector('.no').value,
+            principal: row.querySelector('.principal').value,
+            date: row.querySelector('.date').value
+        }))
         .filter(loan => loan.no || loan.principal);
     const currentState = { todayDate: todayDateEl.value, interestRate: interestRateEl.value, loans: loans };
     localStorage.setItem(`interestLedgerState_${user.uid}`, JSON.stringify(currentState));
@@ -323,7 +413,9 @@ const loadCurrentState = () => {
         todayDateEl.value = savedState.todayDate || formatDateToDDMMYYYY(new Date());
         interestRateEl.value = savedState.interestRate || '1.75';
         if (savedState.loans && savedState.loans.length > 0) savedState.loans.forEach(loan => addRow(loan));
-    } else { todayDateEl.value = formatDateToDDMMYYYY(new Date()); }
+    } else {
+        todayDateEl.value = formatDateToDDMMYYYY(new Date());
+    }
     while (loanTableBody.rows.length < 5) addRow({ no: '', principal: '', date: '' });
     if (!loanTableBody.lastChild.querySelector('.principal').value) { } else { addRow({ no: '', principal: '', date: '' }); }
     updateAllCalculations();
@@ -478,7 +570,9 @@ const loadRecentTransactions = async () => {
     if (localDb) {
         localReports = (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true }));
     }
-    cachedReports = [...localReports, ...onlineReports].sort((a, b) => (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt));
+    cachedReports = [...localReports, ...onlineReports].sort((a, b) =>
+        (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt)
+    );
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
 };
@@ -537,17 +631,20 @@ const renderDashboard = async () => {
         return;
     }
     dashboardMessage.style.display = 'none';
+
     let totalPrincipalAll = 0, totalInterestAll = 0;
     cachedReports.forEach(report => {
         totalPrincipalAll += parseFloat(report.totals.principal);
         totalInterestAll += parseFloat(report.totals.interest);
     });
+
     const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
     if (pieChartInstance) pieChartInstance.destroy();
     pieChartInstance = new Chart(pieCtx, {
         type: 'pie',
         data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] },
     });
+
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
     const recentReports = cachedReports.slice(0, 7).reverse();
     if (barChartInstance) barChartInstance.destroy();
@@ -622,9 +719,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
         updateAllCalculations();
     });
-    reportSearchInput.addEventListener('input', e => {
-        renderRecentTransactions(e.target.value);
-    });
+    reportSearchInput.addEventListener('input', e => { renderRecentTransactions(e.target.value); });
 
     // Offline/Online Listeners
     window.addEventListener('online', updateSyncStatus);
