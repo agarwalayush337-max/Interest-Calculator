@@ -252,22 +252,30 @@ const parseAndFillData = (rawText) => {
     // Split into clean lines
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-    // --- 1) Loan No (e.g., D.450 / D 450 / D450 or NO: 450) ---
+    // --- 1) Loan No (IMPROVED: Now accepts any letter like B. or D.) ---
     for (const line of lines) {
-        const m1 = line.match(/\bD[.\s]*?(\d{1,6})\b/i);
-        if (m1) { loanNo = `D.${m1[1]}`; break; }
-        const m2 = line.match(/\bN[O0][.\s:-]*(\d{1,6})\b/i); // NO: 450
-        if (m2) { loanNo = `D.${m2[1]}`; break; } // normalize to D.x pattern for consistency
+        // This new pattern looks for ANY single letter (A-Z) followed by a dot and numbers.
+        const m1 = line.match(/\b([A-Z])[.\s]*?(\d{1,6})\b/i);
+        if (m1) {
+            // It combines the captured letter (m1[1]) and number (m1[2])
+            loanNo = `${m1[1].toUpperCase()}.${m1[2]}`;
+            break;
+        }
+        // Fallback for the "NO:" pattern remains.
+        const m2 = line.match(/\bN[O0][.\s:-]*(\d{1,6})\b/i);
+        if (m2) {
+            loanNo = `D.${m2[1]}`; // You can decide how to format this.
+            break;
+        }
     }
 
-    // --- 2) Date (prefer lines that look like have a label e.g., 'ता:' / 'तारीख' / 'date') ---
+    // --- 2) Date (This logic is already good) ---
     let dateCandidate = null;
     for (const line of lines) {
         const labeled = line.match(/(?:तारीख|ता[:.\-]?|date[:.\-]?|dt[:.\-]?|d[.:]?)\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i);
         if (labeled) { dateCandidate = labeled[1]; break; }
     }
     if (!dateCandidate) {
-        // fallback: any date-like string
         for (const line of lines) {
             const generic = line.match(/\b(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b/);
             if (generic) { dateCandidate = generic[1]; break; }
@@ -278,11 +286,8 @@ const parseAndFillData = (rawText) => {
         date = parsed ? formatDateToDDMMYYYY(parsed) : dateCandidate;
     }
 
-    // --- 3) Amount (collect numeric candidates and rank them) ---
-    // Build a flat string to find positions & avoid dates being re-counted
+    // --- 3) Amount (IMPROVED: Added a fallback) ---
     const fullText = lines.join("\n");
-
-    // Collect ranges that are dates to exclude
     const dateRanges = [];
     const dateRegexGlobal = /(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/g;
     let dm;
@@ -290,10 +295,6 @@ const parseAndFillData = (rawText) => {
         dateRanges.push({ start: dm.index, end: dm.index + dm[0].length });
     }
     const isInsideAnyRange = (idx) => dateRanges.some(r => idx >= r.start && idx <= r.end);
-
-    // Match Indian/standard formatted numbers:
-    // - 4–7 digits (1000..9999999)
-    // - or comma variants like 10,000 or 1,00,000
     const numberRegex = /(?<!\d)(\d{1,3}(?:,\d{2,3})+|\d{4,7})(?!\d)/g;
 
     const candidates = [];
@@ -301,28 +302,33 @@ const parseAndFillData = (rawText) => {
     while ((m = numberRegex.exec(fullText)) !== null) {
         const rawNum = m[1];
         const start = m.index;
-        if (isInsideAnyRange(start)) continue; // skip dates
-
-        // normalize commas both 10,000 and 1,00,000 styles -> remove commas
+        if (isInsideAnyRange(start)) continue;
         const normalized = parseInt(rawNum.replace(/,/g, ''), 10);
         if (!Number.isFinite(normalized)) continue;
-
-        // Pull context around the number for scoring
         const ctxStart = Math.max(0, start - 18);
         const ctxEnd = Math.min(fullText.length, start + rawNum.length + 18);
         const context = fullText.slice(ctxStart, ctxEnd);
-
         const score = scoreAmountCandidate(normalized, context);
         candidates.push({ value: normalized, score, context });
     }
 
     if (candidates.length) {
-        // sort by score, then by numeric value
         candidates.sort((a, b) => (b.score - a.score) || (b.value - a.value));
         principal = String(candidates[0].value);
+    } else {
+        // FALLBACK: If scoring finds nothing, find all numbers again
+        // and pick the largest one that isn't the loan number's digits.
+        const loanNoDigits = loanNo ? loanNo.match(/\d+/)?.[0] : null;
+        const allNumbers = (fullText.match(/\d+/g) || [])
+            .map(n => parseInt(n, 10))
+            .filter(n => n > 100 && n != loanNoDigits && !dateCandidate?.includes(String(n))); // Avoid small numbers and loan/date numbers
+
+        if (allNumbers.length > 0) {
+            principal = String(Math.max(...allNumbers));
+        }
     }
 
-    // --- Fill into Table if we have all three ---
+    // --- Fill into Table ---
     if (loanNo && principal && date) {
         let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
             !r.querySelector('.principal').value && !r.querySelector('.no').value
@@ -341,7 +347,7 @@ const parseAndFillData = (rawText) => {
     } else {
         showConfirm('Scan Results', 'Could not find all required data (Loan No, Amount, Date). Please check the console.', false);
         console.log("Full text to copy:", text);
-        console.log({ loanNo, principal, date });
+        console.log("Data found:", { loanNo, principal, date });
     }
 };
 
