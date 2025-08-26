@@ -19,7 +19,7 @@ exports.handler = async function(event) {
     const accessToken = (await client.getAccessToken()).token;
 
     // --- UPDATED MODEL NAME ---
-    const MODEL_ID = 'gemini-2.5-flash-lite';
+    const MODEL_ID = 'gemini-2.5-pro';
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
     const { image, mimeType } = JSON.parse(event.body);
