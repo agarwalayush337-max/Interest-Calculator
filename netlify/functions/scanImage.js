@@ -63,7 +63,7 @@ exports.handler = async function(event) {
     console.log("Raw entities detected:", JSON.stringify(entities, null, 2));
 
     const rows = new Map();
-    // Increased threshold to be more forgiving with handwriting
+    // Increased threshold to be more forgiving with handwritten text
     const Y_THRESHOLD = 0.035; 
 
     for (const entity of entities) {
