@@ -208,68 +208,64 @@ const cleanAndSortTable = () => {
     renumberRows();
 };
 
-// --- START: Document AI Integration ---
+// --- START: Document AI Integration (Multi-Row Capable) ---
 
-// This function now receives clean data from the custom AI model
-const parseAndFillData = (extractedData) => {
-    // No more complex parsing! The AI did all the work.
-    const loanNo = extractedData.LoanNo;
-    const principal = extractedData.Principal;
-    const date = extractedData.Date;
-
-    console.log("Data from Custom Model:", { loanNo, principal, date });
-
-    if (loanNo && principal && date) {
-        let targetRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r =>
-            !r.querySelector('.principal').value && !r.querySelector('.no').value
-        );
-
-        if (!targetRow) {
-            addRow({ no: loanNo, principal, date });
-        } else {
-            targetRow.querySelector('.no').value = loanNo;
-            targetRow.querySelector('.principal').value = principal;
-            // The AI might return dates in different formats, so we still parse it
-            const parsedDate = parseDate(date);
-            targetRow.querySelector('.date').value = parsedDate ? formatDateToDDMMYYYY(parsedDate) : date;
-        }
-
-        updateAllCalculations();
-        showConfirm('Scan Complete', 'Data extracted using custom AI.', false);
-    } else {
-        showConfirm('Scan Results', 'The custom model could not find all required data.', false);
-        console.log("Incomplete data received:", extractedData);
-    }
-};
-
-// This function handles the file upload and includes debugging logs
-const handleImageScan = async (event) => {
-    console.log("1. 'Scan Image' process started.");
-    const file = event.target.files[0];
-    
-    if (!file) {
-        console.log("No file selected. Exiting.");
+// This function receives an array of loans and fills the table
+const fillTableFromScan = (loans) => {
+    if (!loans || loans.length === 0) {
+        showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
         return;
     }
-    console.log("2. File selected:", file.name, "Type:", file.type, "Size:", file.size, "bytes");
+
+    // Get a list of all available empty rows
+    const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
+        !r.querySelector('.principal').value && !r.querySelector('.no').value
+    );
+
+    let emptyRowIndex = 0;
+
+    // Loop through each loan from the scan
+    loans.forEach((loan) => {
+        const formattedLoan = {
+            no: loan.no,
+            principal: loan.principal.replace(/,/g, ''),
+            date: formatDateToDDMMYYYY(parseDate(loan.date))
+        };
+
+        // If there is an empty row available, use it
+        if (emptyRowIndex < emptyRows.length) {
+            const targetRow = emptyRows[emptyRowIndex];
+            targetRow.querySelector('.no').value = formattedLoan.no;
+            targetRow.querySelector('.principal').value = formattedLoan.principal;
+            targetRow.querySelector('.date').value = formattedLoan.date;
+            emptyRowIndex++;
+        } else {
+            // If all empty rows are used, add a new row to the end
+            addRow(formattedLoan);
+        }
+    });
+
+    updateAllCalculations();
+    showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
+};
+
+// This function handles the file upload and calls the backend
+const handleImageScan = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
     showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
 
     try {
         const reader = new FileReader();
-        console.log("3. FileReader created. Reading the file...");
-
         reader.onload = async () => {
             try {
-                console.log("4. File read successfully (onload event triggered). Preparing to fetch...");
                 const base64Image = reader.result.split(',')[1];
                 const response = await fetch('/.netlify/functions/scanImage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // MODIFICATION: We now also send the file's mimeType
                     body: JSON.stringify({ image: base64Image, mimeType: file.type })
                 });
-                console.log("5. Fetch request sent. Waiting for response...");
                 closeConfirm();
 
                 if (!response.ok) {
@@ -278,12 +274,8 @@ const handleImageScan = async (event) => {
                 }
 
                 const result = await response.json();
-                
-                if (result) {
-                    parseAndFillData(result);
-                } else {
-                    await showConfirm('Scan Failed', 'No text could be found in the image.', false);
-                }
+                fillTableFromScan(result.loans); // Pass the 'loans' array to the new function
+
             } catch (fetchError) {
                 console.error("ERROR inside onload:", fetchError);
                 closeConfirm();
@@ -308,8 +300,7 @@ const handleImageScan = async (event) => {
     imageUploadInput.value = '';
 };
 
-// --- END: Document AI Integration ---
-
+// --- END: Document AI Integration (Multi-Row Capable) ---
 // --- State Management ---
 const saveCurrentState = () => {
     if (!user) return;
