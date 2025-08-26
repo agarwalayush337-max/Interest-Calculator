@@ -1,10 +1,10 @@
+// File: netlify/functions/scanImage.js
 const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
   const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;
-  const LOCATION = 'us-central1'; 
-  const MODEL_ID = 'gemini-2.0-flash-001'; // Updated model ID
+  const LOCATION = 'us-central1';
 
   if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server authentication is not configured." }) };
@@ -17,8 +17,9 @@ exports.handler = async function(event) {
     });
     const client = await auth.getClient();
     const accessToken = (await client.getAccessToken()).token;
-    
-    const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:streamGenerateContent`;
+
+    const MODEL_ID = 'gemini-2.0-flash-001';
+    const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
     const { image, mimeType } = JSON.parse(event.body);
     
@@ -26,7 +27,7 @@ exports.handler = async function(event) {
       contents: [{
         role: 'user',
         parts: [
-          { inlineData: { mimeType: mimeType, data: image } },
+          { inline_data: { mimeType: mimeType, data: image } },
           { text: `You are an expert at extracting financial data from handwritten notes. From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date'. Return the result as a clean JSON array of objects where each object has the keys "no", "principal", and "date". If you cannot find a value for a field, use null. Do not include any text, explanations, or markdown formatting in your response, only the raw JSON array.` }
         ]
       }]
@@ -44,16 +45,24 @@ exports.handler = async function(event) {
     const data = await response.json();
 
     if (!response.ok) {
-      const errorMessage = data[0]?.error?.message || "Failed to call Vertex AI API.";
+      const errorMessage = data?.error?.message || "Failed to call Gemini API.";
       console.error("Google AI Error Response:", errorMessage);
       return { statusCode: response.status, body: JSON.stringify({ error: errorMessage }) };
     }
     
-    const jsonText = data[0]?.candidates[0]?.content?.parts[0]?.text;
+    let jsonText = data?.candidates[0]?.content?.parts[0]?.text;
     if (!jsonText) {
-      throw new Error("Could not find parsable text in Vertex AI's response.");
+      throw new Error("Could not find parsable text in Gemini's response.");
     }
-    const loans = JSON.parse(jsonText);
+
+    // --- NEW: Clean the response to handle markdown code blocks ---
+    const regex = /```json\s*([\s\S]*?)\s*```/;
+    const match = jsonText.match(regex);
+    if (match) {
+      jsonText = match[1];
+    }
+    
+    const loans = JSON.parse(jsonText); // Parse the cleaned text
 
     return {
       statusCode: 200,
