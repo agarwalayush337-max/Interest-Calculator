@@ -16,11 +16,11 @@ let user = null;
 let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
-let cachedFinalizedReports = []; // New cache for finalized reports
+let cachedFinalizedReports = [];
 let pieChartInstance, barChartInstance;
 
 // --- Security Code ---
-const SECURITY_CODE = '1234'; // Simple code for demonstration
+const SECURITY_CODE = '1234';
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
@@ -56,6 +56,9 @@ const securityCodeOkBtn = document.getElementById('securityCodeOkBtn');
 const securityCodeCancelBtn = document.getElementById('securityCodeCancelBtn');
 const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
+// --- THIS LINE WAS MISSING ---
+const syncStatusEl = document.getElementById('syncStatus');
+
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -103,7 +106,7 @@ const syncData = async () => {
         } catch (error) { console.error('Failed to sync deletion:', error); }
     }
     updateSyncStatus();
-    if (document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
+    if (document.querySelector('.tab-button[data-tab="recentTransactionsTab"].active')) {
         loadRecentTransactions();
     }
 };
@@ -261,16 +264,7 @@ const showTab = (tabId) => {
     }
 };
 
-// --- Actions: Save, Print, Clear, PDF ---
-const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable tbody tr'))
-    .map(row => ({
-        no: row.querySelector('.no').value,
-        principal: row.querySelector('.principal').value,
-        date: row.querySelector('.date').value,
-        duration: row.querySelector('.duration').textContent,
-        interest: row.querySelector('.interest').textContent
-    })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
-
+// --- Actions: Save, Print, Clear ---
 const printAndSave = async () => {
     cleanAndSortTable();
     updateAllCalculations();
@@ -283,7 +277,7 @@ const printAndSave = async () => {
         interestRate: interestRateEl.value,
         loans,
         createdAt: new Date(),
-        isFinalized: false, // Mark new reports as not finalized
+        isFinalized: false,
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
@@ -436,7 +430,6 @@ const viewReport = (reportId, isEditable) => {
     loanTableBody.innerHTML = '';
     if (report.loans) report.loans.forEach(loan => addRow(loan));
     
-    // Finalized reports cannot be edited
     if (report.isFinalized) {
         isEditable = false;
     }
