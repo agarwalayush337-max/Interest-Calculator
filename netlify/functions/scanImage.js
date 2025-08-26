@@ -3,14 +3,14 @@ const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
-  const { GCP_PROJECT_ID, GCP_LOCATION, GOOGLE_CREDENTIALS } = process.env;
+  const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;
+  const LOCATION = 'europe-west1'; // Hardcoding the correct region
 
-  if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID || !GCP_LOCATION) {
+  if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server authentication is not configured." }) };
   }
 
   try {
-    // 1. Manually authenticate using the service account credentials
     const auth = new GoogleAuth({
       credentials: JSON.parse(GOOGLE_CREDENTIALS),
       scopes: 'https://www.googleapis.com/auth/cloud-platform',
@@ -18,10 +18,12 @@ exports.handler = async function(event) {
     const client = await auth.getClient();
     const accessToken = (await client.getAccessToken()).token;
 
-    // 2. Define the API endpoint and the request body
-    const apiUrl = `https://${GCP_LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}/publishers/google/models/gemini-1.0-pro-vision:streamGenerateContent`;
+    // --- FINAL CHANGE IS HERE ---
+    // We construct the correct regional endpoint URL.
+    const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-1.0-pro-vision:streamGenerateContent`;
+
     const { image, mimeType } = JSON.parse(event.body);
-    
+
     const requestBody = {
       contents: [{
         role: 'user',
@@ -32,7 +34,6 @@ exports.handler = async function(event) {
       }]
     };
 
-    // 3. Make the direct API call with the access token
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -47,10 +48,9 @@ exports.handler = async function(event) {
       console.error("Google AI Error Response:", errorData);
       return { statusCode: response.status, body: JSON.stringify({ error: errorData.error.message || "Failed to call Gemini API." }) };
     }
-    
+
     const data = await response.json();
-    
-    // 4. Extract and parse the JSON response from Gemini
+
     const jsonText = data[0]?.candidates[0]?.content?.parts[0]?.text;
     if (!jsonText) {
       throw new Error("Could not find parsable text in Gemini's response.");
