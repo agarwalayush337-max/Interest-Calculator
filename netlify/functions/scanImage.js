@@ -2,6 +2,7 @@
 const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
+// Helper function to find the vertical center of a detected entity
 const getCenterY = (entity) => {
   const vertices = entity?.pageAnchor?.pageRefs?.[0]?.boundingPoly?.normalizedVertices;
   if (!vertices || vertices.length < 2) return 0;
@@ -20,6 +21,7 @@ exports.handler = async function(event) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server is not configured for Document AI." }) };
   }
 
+  // --- Authentication and API Call ---
   const auth = new GoogleAuth({
     credentials: JSON.parse(GOOGLE_CREDENTIALS),
     scopes: 'https://www.googleapis.com/auth/cloud-platform',
@@ -58,46 +60,66 @@ exports.handler = async function(event) {
 
     const data = await response.json();
     const entities = data.document?.entities || [];
+    
+    // --- FINAL, MOST ROBUST LOGIC: Anchor and Match ---
+    
+    // 1. Separate all entities by type
+    const loanNoEntities = entities.filter(e => e.type === 'LoanNo');
+    const principalEntities = entities.filter(e => e.type === 'Principal');
+    const dateEntities = entities.filter(e => e.type === 'Date');
 
-    // --- LOGIC UPDATED HERE ---
-    console.log("Raw entities detected:", JSON.stringify(entities, null, 2));
+    const loans = [];
+    const Y_THRESHOLD = 0.035; // A forgiving threshold for being "on the same line"
 
-    const rows = new Map();
-    // Increased threshold to be more forgiving with handwritten text
-    const Y_THRESHOLD = 0.035; 
+    // 2. Use the most reliable entity (e.g., Date) as the "anchor" to build each row
+    for (const dateEntity of dateEntities) {
+      const dateCenterY = getCenterY(dateEntity);
+      let closestLoanNo = null;
+      let closestPrincipal = null;
+      let minLoanNoDist = Infinity;
+      let minPrincipalDist = Infinity;
 
-    for (const entity of entities) {
-        const y = getCenterY(entity);
-        let foundRow = false;
-
-        for (const [rowY, rowData] of rows.entries()) {
-            if (Math.abs(y - rowY) < Y_THRESHOLD) {
-                rowData[entity.type] = entity.mentionText;
-                foundRow = true;
-                break;
-            }
+      // Find the closest LoanNo to this Date
+      for (const loanNoEntity of loanNoEntities) {
+        const dist = Math.abs(getCenterY(loanNoEntity) - dateCenterY);
+        if (dist < minLoanNoDist) {
+          minLoanNoDist = dist;
+          closestLoanNo = loanNoEntity;
         }
+      }
 
-        if (!foundRow) {
-            rows.set(y, { [entity.type]: entity.mentionText });
+      // Find the closest Principal to this Date
+      for (const principalEntity of principalEntities) {
+        const dist = Math.abs(getCenterY(principalEntity) - dateCenterY);
+        if (dist < minPrincipalDist) {
+          minPrincipalDist = dist;
+          closestPrincipal = principalEntity;
         }
+      }
+
+      // 3. If a full row is found within the threshold, create the loan object
+      if (closestLoanNo && minLoanNoDist < Y_THRESHOLD &&
+          closestPrincipal && minPrincipalDist < Y_THRESHOLD) {
+        
+        loans.push({
+          no: closestLoanNo.mentionText,
+          principal: closestPrincipal.mentionText,
+          date: dateEntity.mentionText
+        });
+      }
     }
-
-    console.log("Grouped rows:", JSON.stringify(Array.from(rows.values()), null, 2));
-
-    const loans = Array.from(rows.values())
-      .filter(row => row.LoanNo && row.Principal && row.Date)
-      .map(row => ({
-        no: row.LoanNo,
-        principal: row.Principal,
-        date: row.Date,
-      }));
-
-    console.log("Final complete loans:", JSON.stringify(loans, null, 2));
+    
+    // 4. Sort the final loans array from top to bottom before returning
+    const sortedLoans = loans.sort((a, b) => {
+        // Find original entities to sort by Y-coordinate
+        const entityA = dateEntities.find(e => e.mentionText === a.date);
+        const entityB = dateEntities.find(e => e.mentionText === b.date);
+        return getCenterY(entityA) - getCenterY(entityB);
+    });
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ loans: loans }),
+      body: JSON.stringify({ loans: sortedLoans }),
     };
   } catch (error) {
     console.error('FATAL: Internal function error during fetch.', error);
