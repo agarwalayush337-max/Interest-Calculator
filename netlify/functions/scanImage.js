@@ -2,6 +2,14 @@
 const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
+// Helper function to find the vertical center of a detected entity
+const getCenterY = (entity) => {
+  const vertices = entity.pageAnchor.pageRefs[0].boundingPoly.normalizedVertices;
+  if (!vertices || vertices.length < 4) return 0;
+  const yCoords = vertices.map(v => v.y || 0);
+  return (Math.min(...yCoords) + Math.max(...yCoords)) / 2;
+};
+
 exports.handler = async function(event) {
   const { 
     GOOGLE_CREDENTIALS, 
@@ -55,30 +63,53 @@ exports.handler = async function(event) {
     const data = await response.json();
     const entities = data.document?.entities || [];
 
-    // --- NEW LOGIC: Group entities into a list of loans ---
+    // --- NEW, SMARTER LOGIC: Group entities by vertical proximity ---
     const loans = [];
     const loanNoEntities = entities.filter(e => e.type === 'LoanNo');
     const principalEntities = entities.filter(e => e.type === 'Principal');
     const dateEntities = entities.filter(e => e.type === 'Date');
 
-    // Assume the entities are detected in order for each row
-    for (let i = 0; i < loanNoEntities.length; i++) {
-        const loanNo = loanNoEntities[i]?.mentionText;
-        const principal = principalEntities[i]?.mentionText;
-        const date = dateEntities[i]?.mentionText;
+    for (const loanNoEntity of loanNoEntities) {
+      const loanNoCenterY = getCenterY(loanNoEntity);
+      let closestPrincipal = null;
+      let closestDate = null;
+      let minPrincipalDist = Infinity;
+      let minDateDist = Infinity;
 
-        if (loanNo && principal && date) {
-            loans.push({
-                no: loanNo,
-                principal: principal,
-                date: date
-            });
+      // Find the principal on the same line
+      for (const principalEntity of principalEntities) {
+        const dist = Math.abs(getCenterY(principalEntity) - loanNoCenterY);
+        if (dist < minPrincipalDist) {
+          minPrincipalDist = dist;
+          closestPrincipal = principalEntity;
         }
+      }
+
+      // Find the date on the same line
+      for (const dateEntity of dateEntities) {
+        const dist = Math.abs(getCenterY(dateEntity) - loanNoCenterY);
+        if (dist < minDateDist) {
+          minDateDist = dist;
+          closestDate = dateEntity;
+        }
+      }
+
+      // We consider it a match if the items are vertically very close
+      // and we haven't used them before. This threshold may need adjustment.
+      const Y_THRESHOLD = 0.05; // 5% of the page height
+      if (closestPrincipal && minPrincipalDist < Y_THRESHOLD && 
+          closestDate && minDateDist < Y_THRESHOLD) {
+        loans.push({
+          no: loanNoEntity.mentionText,
+          principal: closestPrincipal.mentionText,
+          date: closestDate.mentionText
+        });
+      }
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ loans: loans }), // Return an object with a "loans" array
+      body: JSON.stringify({ loans: loans }),
     };
   } catch (error) {
     console.error('FATAL: Internal function error during fetch.', error);
