@@ -210,32 +210,37 @@ const cleanAndSortTable = () => {
 
 // --- START: NEW Document AI Integration (Multi-Row) ---
 
-// This function now receives an array of loans and fills the table
+// This new version correctly fills all available empty rows first.
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
         return;
     }
 
-    // Find the first empty row to start adding new loans
-    let firstEmptyRow = Array.from(loanTableBody.querySelectorAll('tr')).find(r => 
+    // 1. Get a list of all available empty rows
+    const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
         !r.querySelector('.principal').value && !r.querySelector('.no').value
     );
 
-    loans.forEach((loan, index) => {
+    let emptyRowIndex = 0;
+
+    // 2. Loop through each loan from the scan
+    loans.forEach((loan) => {
         const formattedLoan = {
             no: loan.no,
-            principal: loan.principal.replace(/,/g, ''), // Remove commas
-            date: formatDateToDDMMYYYY(parseDate(loan.date)) // Format the date
+            principal: loan.principal.replace(/,/g, ''),
+            date: formatDateToDDMMYYYY(parseDate(loan.date))
         };
 
-        if (index === 0 && firstEmptyRow) {
-            // Fill the first available empty row
-            firstEmptyRow.querySelector('.no').value = formattedLoan.no;
-            firstEmptyRow.querySelector('.principal').value = formattedLoan.principal;
-            firstEmptyRow.querySelector('.date').value = formattedLoan.date;
+        // 3. If there is an empty row available, use it
+        if (emptyRowIndex < emptyRows.length) {
+            const targetRow = emptyRows[emptyRowIndex];
+            targetRow.querySelector('.no').value = formattedLoan.no;
+            targetRow.querySelector('.principal').value = formattedLoan.principal;
+            targetRow.querySelector('.date').value = formattedLoan.date;
+            emptyRowIndex++;
         } else {
-            // Add new rows for all subsequent loans
+            // 4. If all empty rows are used, add a new row to the end
             addRow(formattedLoan);
         }
     });
@@ -243,7 +248,6 @@ const fillTableFromScan = (loans) => {
     updateAllCalculations();
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
-
 // This function handles the file upload and calls the backend
 const handleImageScan = async (event) => {
     const file = event.target.files[0];
