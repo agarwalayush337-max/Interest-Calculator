@@ -210,7 +210,7 @@ const cleanAndSortTable = () => {
 
 // --- START: Document AI Integration (Multi-Row Capable) ---
 
-// This function receives an array of loans and fills the table
+// This corrected version converts the principal to a string before using .replace()
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
@@ -228,7 +228,8 @@ const fillTableFromScan = (loans) => {
     loans.forEach((loan) => {
         const formattedLoan = {
             no: loan.no,
-            principal: loan.principal.replace(/,/g, ''),
+            // --- FIX IS HERE ---
+            principal: String(loan.principal).replace(/,/g, ''),
             date: formatDateToDDMMYYYY(parseDate(loan.date))
         };
 
