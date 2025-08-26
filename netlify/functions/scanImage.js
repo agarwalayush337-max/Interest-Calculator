@@ -21,8 +21,6 @@ exports.handler = async function(event) {
   const client = await auth.getClient();
   const accessToken = (await client.getAccessToken()).token;
 
-  // --- FINAL CHANGE IS HERE ---
-  // We construct a regional endpoint URL using the GCP_LOCATION variable.
   const apiUrl = `https://${GCP_LOCATION}-documentai.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}/processors/${GCP_PROCESSOR_ID}:process`;
 
   const { image, mimeType } = JSON.parse(event.body);
@@ -55,16 +53,32 @@ exports.handler = async function(event) {
     }
 
     const data = await response.json();
-
-    const extractedData = {};
     const entities = data.document?.entities || [];
-    for (const entity of entities) {
-        extractedData[entity.type] = entity.mentionText;
+
+    // --- NEW LOGIC: Group entities into a list of loans ---
+    const loans = [];
+    const loanNoEntities = entities.filter(e => e.type === 'LoanNo');
+    const principalEntities = entities.filter(e => e.type === 'Principal');
+    const dateEntities = entities.filter(e => e.type === 'Date');
+
+    // Assume the entities are detected in order for each row
+    for (let i = 0; i < loanNoEntities.length; i++) {
+        const loanNo = loanNoEntities[i]?.mentionText;
+        const principal = principalEntities[i]?.mentionText;
+        const date = dateEntities[i]?.mentionText;
+
+        if (loanNo && principal && date) {
+            loans.push({
+                no: loanNo,
+                principal: principal,
+                date: date
+            });
+        }
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify(extractedData),
+      body: JSON.stringify({ loans: loans }), // Return an object with a "loans" array
     };
   } catch (error) {
     console.error('FATAL: Internal function error during fetch.', error);
