@@ -4,10 +4,8 @@ const fetch = require('node-fetch');
 
 // Helper function to find the vertical center of a detected entity
 const getCenterY = (entity) => {
-  // Ensure we have the necessary data to avoid errors
   const vertices = entity?.pageAnchor?.pageRefs?.[0]?.boundingPoly?.normalizedVertices;
   if (!vertices || vertices.length < 2) return 0;
-  // Use the first two vertices to get a stable Y-coordinate
   return (vertices[0].y + vertices[1].y) / 2;
 };
 
@@ -64,34 +62,63 @@ exports.handler = async function(event) {
     const data = await response.json();
     const entities = data.document?.entities || [];
 
-    // --- NEW, MOST ROBUST LOGIC: Sort all entities first ---
+    // --- NEW, MOST ROBUST LOGIC: Proximity matching with removal ---
     
-    // 1. Filter and sort each type of entity by its vertical position (top to bottom)
-    const sortedLoanNos = entities
-      .filter(e => e.type === 'LoanNo')
-      .sort((a, b) => getCenterY(a) - getCenterY(b));
+    // 1. Filter entities into separate lists
+    const loanNoEntities = entities.filter(e => e.type === 'LoanNo');
+    let principalEntities = entities.filter(e => e.type === 'Principal');
+    let dateEntities = entities.filter(e => e.type === 'Date');
 
-    const sortedPrincipals = entities
-      .filter(e => e.type === 'Principal')
-      .sort((a, b) => getCenterY(a) - getCenterY(b));
-
-    const sortedDates = entities
-      .filter(e => e.type === 'Date')
-      .sort((a, b) => getCenterY(a) - getCenterY(b));
-
-    // 2. Now, build the loans list by taking the items in their sorted order
+    // 2. Sort the primary "anchor" entity (LoanNo) from top to bottom
+    const sortedLoanNos = loanNoEntities.sort((a, b) => getCenterY(a) - getCenterY(b));
+    
     const loans = [];
-    const numLoans = sortedLoanNos.length; // Assume LoanNo is the primary key
+    
+    // 3. For each LoanNo, find the closest Principal and Date
+    for (const loanNoEntity of sortedLoanNos) {
+      const loanNoCenterY = getCenterY(loanNoEntity);
+      let closestPrincipal = null;
+      let closestDate = null;
+      let principalIndex = -1;
+      let dateIndex = -1;
+      let minPrincipalDist = Infinity;
+      let minDateDist = Infinity;
 
-    for (let i = 0; i < numLoans; i++) {
-        // Check if data exists for each corresponding index
-        if (sortedLoanNos[i] && sortedPrincipals[i] && sortedDates[i]) {
-            loans.push({
-                no: sortedLoanNos[i].mentionText,
-                principal: sortedPrincipals[i].mentionText,
-                date: sortedDates[i].mentionText
-            });
+      // Find the closest available principal
+      principalEntities.forEach((p, index) => {
+        const dist = Math.abs(getCenterY(p) - loanNoCenterY);
+        if (dist < minPrincipalDist) {
+          minPrincipalDist = dist;
+          closestPrincipal = p;
+          principalIndex = index;
         }
+      });
+
+      // Find the closest available date
+      dateEntities.forEach((d, index) => {
+        const dist = Math.abs(getCenterY(d) - loanNoCenterY);
+        if (dist < minDateDist) {
+          minDateDist = dist;
+          closestDate = d;
+          dateIndex = index;
+        }
+      });
+
+      // 4. If a close match is found, create the loan and REMOVE the matched items
+      const Y_THRESHOLD = 0.05; // A threshold of 5% of the page height
+      if (closestPrincipal && minPrincipalDist < Y_THRESHOLD && 
+          closestDate && minDateDist < Y_THRESHOLD) {
+        
+        loans.push({
+          no: loanNoEntity.mentionText,
+          principal: closestPrincipal.mentionText,
+          date: closestDate.mentionText
+        });
+
+        // Remove the used entities so they can't be matched again
+        principalEntities.splice(principalIndex, 1);
+        dateEntities.splice(dateIndex, 1);
+      }
     }
 
     return {
