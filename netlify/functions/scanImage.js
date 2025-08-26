@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 exports.handler = async function(event) {
   const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;
   const LOCATION = 'us-central1'; 
-  const MODEL_ID = 'gemini-1.5-pro'; // Updated model ID
+  const MODEL_ID = 'gemini-2.0-flash-001'; // Updated model ID
 
   if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server authentication is not configured." }) };
