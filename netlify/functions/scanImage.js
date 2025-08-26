@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
   const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;
-  const LOCATION = 'europe-west1'; // Hardcoding the correct region
+  const LOCATION = 'europe-west1'; // Your correct region
 
   if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server authentication is not configured." }) };
@@ -18,9 +18,9 @@ exports.handler = async function(event) {
     const client = await auth.getClient();
     const accessToken = (await client.getAccessToken()).token;
 
-    // --- FINAL CHANGE IS HERE ---
-    // We construct the correct regional endpoint URL.
-    const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-1.0-pro-vision:streamGenerateContent`;
+    // --- FINAL CHANGE IS HERE: Using the correct model name ---
+    const MODEL_ID = 'gemini-pro-vision';
+    const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:streamGenerateContent`;
 
     const { image, mimeType } = JSON.parse(event.body);
 
@@ -43,13 +43,14 @@ exports.handler = async function(event) {
       body: JSON.stringify(requestBody),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Google AI Error Response:", errorData);
-      return { statusCode: response.status, body: JSON.stringify({ error: errorData.error.message || "Failed to call Gemini API." }) };
-    }
-
     const data = await response.json();
+
+    if (!response.ok) {
+      // Improved error logging
+      const errorMessage = data[0]?.error?.message || "Failed to call Gemini API.";
+      console.error("Google AI Error Response:", errorMessage);
+      return { statusCode: response.status, body: JSON.stringify({ error: errorMessage }) };
+    }
 
     const jsonText = data[0]?.candidates[0]?.content?.parts[0]?.text;
     if (!jsonText) {
