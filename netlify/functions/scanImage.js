@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
   const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;
-  const LOCATION = 'us-central1';
+  const LOCATION = 'us-central1'; // A supported region for Gemini 1.5 Flash
 
   if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server authentication is not configured." }) };
@@ -18,6 +18,7 @@ exports.handler = async function(event) {
     const client = await auth.getClient();
     const accessToken = (await client.getAccessToken()).token;
 
+    // --- UPDATED MODEL NAME ---
     const MODEL_ID = 'gemini-2.0-flash-001';
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
@@ -28,7 +29,7 @@ exports.handler = async function(event) {
         role: 'user',
         parts: [
           { inline_data: { mimeType: mimeType, data: image } },
-          { text: `You are an expert at extracting financial data from handwritten notes. From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date'. Return the result as a clean JSON array of objects where each object has the keys "no", "principal", and "date". If you cannot find a value for a field, use null. Do not include any text, explanations, or markdown formatting in your response, only the raw JSON array.` }
+          { text: `From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date'. Return the result as a clean JSON array of objects where each object has the keys "no", "principal", and "date". Format the 'no' field by replacing any '.' with a '/'. Do not include any text, explanations, or markdown formatting in your response, only the raw JSON array.` }
         ]
       }]
     };
@@ -54,15 +55,15 @@ exports.handler = async function(event) {
     if (!jsonText) {
       throw new Error("Could not find parsable text in Gemini's response.");
     }
-
-    // --- NEW: Clean the response to handle markdown code blocks ---
+    
+    // Clean the response to handle markdown code blocks
     const regex = /```json\s*([\s\S]*?)\s*```/;
     const match = jsonText.match(regex);
     if (match) {
       jsonText = match[1];
     }
-    
-    const loans = JSON.parse(jsonText); // Parse the cleaned text
+
+    const loans = JSON.parse(jsonText);
 
     return {
       statusCode: 200,
