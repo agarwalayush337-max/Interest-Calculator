@@ -61,65 +61,47 @@ exports.handler = async function(event) {
     const data = await response.json();
     const entities = data.document?.entities || [];
     
-    // --- FINAL, MOST ROBUST LOGIC: Anchor and Match ---
-    
-    // 1. Separate all entities by type
-    const loanNoEntities = entities.filter(e => e.type === 'LoanNo');
-    const principalEntities = entities.filter(e => e.type === 'Principal');
-    const dateEntities = entities.filter(e => e.type === 'Date');
+    // --- NEW DETAILED LOGS ARE HERE ---
+    console.log("--- STEP 1: Raw entities detected by Document AI ---");
+    console.log(JSON.stringify(entities, null, 2));
 
-    const loans = [];
+    const rows = new Map();
     const Y_THRESHOLD = 0.035; // A forgiving threshold for being "on the same line"
 
-    // 2. Use the most reliable entity (e.g., Date) as the "anchor" to build each row
-    for (const dateEntity of dateEntities) {
-      const dateCenterY = getCenterY(dateEntity);
-      let closestLoanNo = null;
-      let closestPrincipal = null;
-      let minLoanNoDist = Infinity;
-      let minPrincipalDist = Infinity;
+    for (const entity of entities) {
+        const y = getCenterY(entity);
+        let foundRow = false;
 
-      // Find the closest LoanNo to this Date
-      for (const loanNoEntity of loanNoEntities) {
-        const dist = Math.abs(getCenterY(loanNoEntity) - dateCenterY);
-        if (dist < minLoanNoDist) {
-          minLoanNoDist = dist;
-          closestLoanNo = loanNoEntity;
+        for (const [rowY, rowData] of rows.entries()) {
+            if (Math.abs(y - rowY) < Y_THRESHOLD) {
+                rowData[entity.type] = entity.mentionText;
+                foundRow = true;
+                break;
+            }
         }
-      }
-
-      // Find the closest Principal to this Date
-      for (const principalEntity of principalEntities) {
-        const dist = Math.abs(getCenterY(principalEntity) - dateCenterY);
-        if (dist < minPrincipalDist) {
-          minPrincipalDist = dist;
-          closestPrincipal = principalEntity;
-        }
-      }
-
-      // 3. If a full row is found within the threshold, create the loan object
-      if (closestLoanNo && minLoanNoDist < Y_THRESHOLD &&
-          closestPrincipal && minPrincipalDist < Y_THRESHOLD) {
         
-        loans.push({
-          no: closestLoanNo.mentionText,
-          principal: closestPrincipal.mentionText,
-          date: dateEntity.mentionText
-        });
-      }
+        if (!foundRow) {
+            rows.set(y, { [entity.type]: entity.mentionText });
+        }
     }
-    
-    // 4. Sort the final loans array from top to bottom before returning
-    const sortedLoans = loans.sort((a, b) => {
-        // Find original entities to sort by Y-coordinate
-        const entityA = dateEntities.find(e => e.mentionText === a.date);
-        const entityB = dateEntities.find(e => e.mentionText === b.date);
-        return getCenterY(entityA) - getCenterY(entityB);
-    });
+
+    console.log("\n--- STEP 2: Rows after grouping by vertical position ---");
+    console.log(JSON.stringify(Array.from(rows.values()), null, 2));
+
+    const loans = Array.from(rows.values())
+      .filter(row => row.LoanNo && row.Principal && row.Date)
+      .map(row => ({
+        no: row.LoanNo,
+        principal: row.Principal,
+        date: row.Date,
+      }));
+
+    console.log("\n--- STEP 3: Final complete loans after filtering ---");
+    console.log(JSON.stringify(loans, null, 2));
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ loans: sortedLoans }),
+      body: JSON.stringify({ loans: loans }),
     };
   } catch (error) {
     console.error('FATAL: Internal function error during fetch.', error);
