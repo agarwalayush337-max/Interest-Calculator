@@ -16,7 +16,11 @@ let user = null;
 let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
+let cachedFinalizedReports = []; // New cache for finalized reports
 let pieChartInstance, barChartInstance;
+
+// --- Security Code ---
+const SECURITY_CODE = '1234'; // Simple code for demonstration
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
@@ -30,6 +34,8 @@ const totalInterestEl = document.getElementById('totalInterest');
 const finalTotalEl = document.getElementById('finalTotal');
 const recentTransactionsListEl = document.getElementById('recentTransactionsList');
 const recentTransactionsLoader = document.getElementById('recentTransactionsLoader');
+const finalizedTransactionsListEl = document.getElementById('finalizedTransactionsList');
+const finalizedTransactionsLoader = document.getElementById('finalizedTransactionsLoader');
 const mainActionBar = document.getElementById('mainActionBar');
 const viewModeActionBar = document.getElementById('viewModeActionBar');
 const googleSignInBtn = document.getElementById('googleSignInBtn');
@@ -44,14 +50,12 @@ const confirmTitleEl = document.getElementById('confirmTitle');
 const confirmMessageEl = document.getElementById('confirmMessage');
 const confirmOkBtn = document.getElementById('confirmOkBtn');
 const confirmCancelBtn = document.getElementById('confirmCancelBtn');
-const exportPdfBtn = document.getElementById('exportPdfBtn');
-const exportViewPdfBtn = document.getElementById('exportViewPdfBtn');
-const reportSearchInput = document.getElementById('reportSearchInput');
-const syncStatusEl = document.getElementById('syncStatus');
+const securityCodeModal = document.getElementById('securityCodeModal');
+const securityCodeInput = document.getElementById('securityCodeInput');
+const securityCodeOkBtn = document.getElementById('securityCodeOkBtn');
+const securityCodeCancelBtn = document.getElementById('securityCodeCancelBtn');
 const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
-const scanImageBtn = document.getElementById('scanImageBtn');
-const imageUploadInput = document.getElementById('imageUploadInput');
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -99,7 +103,7 @@ const syncData = async () => {
         } catch (error) { console.error('Failed to sync deletion:', error); }
     }
     updateSyncStatus();
-    if (document.querySelector('.tab-button[data-tab="recentTransactionsTab"].active')) {
+    if (document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
         loadRecentTransactions();
     }
 };
@@ -208,100 +212,6 @@ const cleanAndSortTable = () => {
     renumberRows();
 };
 
-// --- START: Document AI Integration (Multi-Row Capable) ---
-
-// This corrected version converts the principal to a string before using .replace()
-const fillTableFromScan = (loans) => {
-    if (!loans || loans.length === 0) {
-        showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
-        return;
-    }
-
-    // Get a list of all available empty rows
-    const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
-        !r.querySelector('.principal').value && !r.querySelector('.no').value
-    );
-
-    let emptyRowIndex = 0;
-
-    // Loop through each loan from the scan
-    loans.forEach((loan) => {
-        const formattedLoan = {
-            no: loan.no,
-            // --- FIX IS HERE ---
-            principal: String(loan.principal).replace(/,/g, ''),
-            date: formatDateToDDMMYYYY(parseDate(loan.date))
-        };
-
-        // If there is an empty row available, use it
-        if (emptyRowIndex < emptyRows.length) {
-            const targetRow = emptyRows[emptyRowIndex];
-            targetRow.querySelector('.no').value = formattedLoan.no;
-            targetRow.querySelector('.principal').value = formattedLoan.principal;
-            targetRow.querySelector('.date').value = formattedLoan.date;
-            emptyRowIndex++;
-        } else {
-            // If all empty rows are used, add a new row to the end
-            addRow(formattedLoan);
-        }
-    });
-
-    updateAllCalculations();
-    showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
-};
-
-// This function handles the file upload and calls the backend
-const handleImageScan = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
-
-    try {
-        const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                const base64Image = reader.result.split(',')[1];
-                const response = await fetch('/.netlify/functions/scanImage', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image, mimeType: file.type })
-                });
-                closeConfirm();
-
-                if (!response.ok) {
-                    const errorInfo = await response.json();
-                    throw new Error(errorInfo.error || 'The scan failed. The server responded with an error.');
-                }
-
-                const result = await response.json();
-                fillTableFromScan(result.loans); // Pass the 'loans' array to the new function
-
-            } catch (fetchError) {
-                console.error("ERROR inside onload:", fetchError);
-                closeConfirm();
-                await showConfirm('Error', fetchError.message, false);
-            }
-        };
-
-        reader.onerror = (error) => {
-            console.error("CRITICAL: FileReader failed with an error.", error);
-            closeConfirm();
-            showConfirm('Error', 'Could not read the selected image file.', false);
-        };
-        
-        reader.readAsDataURL(file);
-
-    } catch (error) {
-        console.error("CRITICAL: An error was caught in the outer try/catch block.", error);
-        closeConfirm();
-        await showConfirm('Error', error.message, false);
-    }
-
-    imageUploadInput.value = '';
-};
-
-// --- END: Document AI Integration (Multi-Row Capable) ---
 // --- State Management ---
 const saveCurrentState = () => {
     if (!user) return;
@@ -338,9 +248,12 @@ const showTab = (tabId) => {
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
     if (user) {
         if (tabId === 'recentTransactionsTab') {
-            recentTransactionsListEl.innerHTML = '';
             recentTransactionsLoader.style.display = 'flex';
             loadRecentTransactions();
+        }
+        if (tabId === 'finalizedTransactionsTab') {
+            finalizedTransactionsLoader.style.display = 'flex';
+            loadFinalizedTransactions();
         }
         if (tabId === 'dashboardTab') {
             renderDashboard();
@@ -362,7 +275,7 @@ const printAndSave = async () => {
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
-    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
+    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan to save a report.", false);
 
     const reportDate = todayDateEl.value;
     const report = {
@@ -370,6 +283,7 @@ const printAndSave = async () => {
         interestRate: interestRateEl.value,
         loans,
         createdAt: new Date(),
+        isFinalized: false, // Mark new reports as not finalized
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
@@ -394,37 +308,6 @@ const printAndSave = async () => {
     loadRecentTransactions();
 };
 
-const exportToPDF = async () => {
-    cleanAndSortTable();
-    updateAllCalculations();
-    const loans = getCurrentLoans();
-    if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    doc.setFontSize(18);
-    doc.text("Interest Report", 14, 22);
-    doc.setFontSize(11);
-    doc.text(`As of Date: ${todayDateEl.value}`, 14, 29);
-    doc.text(`Interest Rate: ${interestRateEl.value}% (Monthly)`, 120, 29);
-
-    doc.autoTable({
-        startY: 35,
-        head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest']],
-        body: loans.map((loan, i) => [i + 1, loan.no, loan.principal, loan.date, loan.duration, loan.interest]),
-    });
-
-    const finalY = doc.autoTable.previous.finalY;
-    doc.setFontSize(12);
-    doc.text(`Total Principal: ${totalPrincipalEl.textContent}`, 14, finalY + 10);
-    doc.text(`Total Interest: ${totalInterestEl.textContent}`, 14, finalY + 17);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Final Total Amount: ${finalTotalEl.textContent}`, 14, finalY + 24);
-
-    doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
-};
-
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
@@ -434,26 +317,84 @@ const clearSheet = async () => {
     }
 };
 
-// --- Recent Transactions ---
-const renderRecentTransactions = (filter = '') => {
-    recentTransactionsListEl.innerHTML = '';
-    const searchTerm = filter.toLowerCase();
+// --- Finalized Transactions ---
+const finalizeTransaction = async (docId) => {
+    const confirmed = await showConfirm("Finalize Transaction", "Are you sure you want to finalize this transaction? You will not be able to edit it afterwards.");
+    if (!confirmed) return;
 
-    const filteredReports = cachedReports.filter(report => {
-        if (!searchTerm) return true;
-        if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
-        return report.loans?.some(loan =>
-            loan.no?.toLowerCase().includes(searchTerm) ||
-            loan.principal?.toLowerCase().includes(searchTerm)
-        );
-    });
+    try {
+        await reportsCollection.doc(docId).update({ isFinalized: true });
+        await showConfirm("Success", "Transaction has been finalized.", false);
+        loadRecentTransactions();
+        loadFinalizedTransactions();
+    } catch (error) {
+        console.error("Error finalizing transaction:", error);
+        await showConfirm("Error", "Could not finalize the transaction.", false);
+    }
+};
 
-    if (filteredReports.length === 0) {
-        recentTransactionsListEl.innerHTML = '<li>No matching transactions found.</li>';
+const loadFinalizedTransactions = async () => {
+    if (!user) return;
+    finalizedTransactionsListEl.innerHTML = '';
+    finalizedTransactionsLoader.style.display = 'flex';
+    try {
+        const snapshot = await reportsCollection.where("isFinalized", "==", true).orderBy("createdAt", "desc").get();
+        cachedFinalizedReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        renderFinalizedTransactions();
+    } catch (error) {
+        console.error("Error loading finalized reports:", error);
+        finalizedTransactionsListEl.innerHTML = '<li>Could not load reports.</li>';
+    } finally {
+        finalizedTransactionsLoader.style.display = 'none';
+    }
+};
+
+const renderFinalizedTransactions = () => {
+    finalizedTransactionsListEl.innerHTML = '';
+    if (cachedFinalizedReports.length === 0) {
+        finalizedTransactionsListEl.innerHTML = '<li>No finalized transactions yet.</li>';
         return;
     }
+    cachedFinalizedReports.forEach(report => {
+        const li = document.createElement('li');
+        li.dataset.reportId = report.id;
+        li.innerHTML = `
+            <span>${report.reportName || `Report from ${report.reportDate}`}</span>
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
+                <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
+            </div>`;
+        finalizedTransactionsListEl.appendChild(li);
+    });
+};
 
-    filteredReports.forEach(report => {
+// --- Recent Transactions ---
+const loadRecentTransactions = async () => {
+    if (!user) return;
+    recentTransactionsListEl.innerHTML = '';
+    recentTransactionsLoader.style.display = 'flex';
+    let onlineReports = [], localReports = [];
+    if (navigator.onLine && reportsCollection) {
+        try {
+            const snapshot = await reportsCollection.where("isFinalized", "==", false).orderBy("createdAt", "desc").get();
+            onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
+        } catch (error) { console.error("Error loading online reports:", error); }
+    }
+    if (localDb) {
+        localReports = (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true }));
+    }
+    cachedReports = [...localReports, ...onlineReports].sort((a, b) => (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt));
+    recentTransactionsLoader.style.display = 'none';
+    renderRecentTransactions();
+};
+
+const renderRecentTransactions = () => {
+    recentTransactionsListEl.innerHTML = '';
+    if (cachedReports.length === 0) {
+        recentTransactionsListEl.innerHTML = '<li>No recent transactions to finalize.</li>';
+        return;
+    }
+    cachedReports.forEach(report => {
         const li = document.createElement('li');
         if (report.isLocal) li.classList.add('unsynced');
         li.dataset.reportId = report.id;
@@ -462,29 +403,11 @@ const renderRecentTransactions = (filter = '') => {
             <div class="button-group">
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
                 <button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button>
+                <button class="btn btn-success" onclick="finalizeTransaction('${report.id}')">Finalize</button>
                 <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
             </div>`;
         recentTransactionsListEl.appendChild(li);
     });
-};
-
-const loadRecentTransactions = async () => {
-    if (!user) return;
-    let onlineReports = [], localReports = [];
-    if (navigator.onLine && reportsCollection) {
-        try {
-            const snapshot = await reportsCollection.orderBy("createdAt", "desc").get();
-            onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
-        } catch (error) { console.error("Error loading online reports:", error); }
-    }
-    if (localDb) {
-        localReports = (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true }));
-    }
-    cachedReports = [...localReports, ...onlineReports].sort((a, b) =>
-        (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt)
-    );
-    recentTransactionsLoader.style.display = 'none';
-    renderRecentTransactions(reportSearchInput.value);
 };
 
 const setViewMode = (isViewOnly) => {
@@ -503,47 +426,97 @@ const setViewMode = (isViewOnly) => {
 const exitViewMode = () => { setViewMode(false); loadCurrentState(); };
 
 const viewReport = (reportId, isEditable) => {
-    const report = cachedReports.find(r => r.id === reportId);
+    const allReports = [...cachedReports, ...cachedFinalizedReports];
+    const report = allReports.find(r => r.id === reportId);
     if (!report) return showConfirm("Error", "Report not found!", false);
+    
     showTab('calculatorTab');
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
     if (report.loans) report.loans.forEach(loan => addRow(loan));
+    
+    // Finalized reports cannot be edited
+    if (report.isFinalized) {
+        isEditable = false;
+    }
+
     if (isEditable) { addRow({ no: '', principal: '', date: '' }); setViewMode(false); } else { setViewMode(true); }
     updateAllCalculations();
 };
 
 const deleteReport = async (docId) => {
-    const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
-    if (!confirmed) return;
-    const reportToDelete = cachedReports.find(r => r.id === docId);
-    if (!reportToDelete) return;
-    if (reportToDelete.isLocal) {
-        await localDb.delete('unsyncedReports', docId);
+    const allReports = [...cachedReports, ...cachedFinalizedReports];
+    const report = allReports.find(r => r.id === docId);
+    if (!report) return;
+
+    if (report.isFinalized) {
+        securityCodeModal.style.display = 'flex';
+        securityCodeInput.value = '';
+        securityCodeInput.focus();
+
+        const onOkClick = async () => {
+            if (securityCodeInput.value === SECURITY_CODE) {
+                closeSecurityCodeModal();
+                try {
+                    await reportsCollection.doc(docId).delete();
+                    loadFinalizedTransactions();
+                } catch (error) {
+                    console.error("Error deleting finalized report:", error);
+                    await showConfirm("Error", "Could not delete report.", false);
+                }
+            } else {
+                await showConfirm("Incorrect Code", "The security code you entered is incorrect.", false);
+                securityCodeInput.focus();
+            }
+        };
+        
+        const onCancelClick = () => closeSecurityCodeModal();
+
+        const closeSecurityCodeModal = () => {
+            securityCodeModal.style.display = 'none';
+            securityCodeOkBtn.removeEventListener('click', onOkClick);
+            securityCodeCancelBtn.removeEventListener('click', onCancelClick);
+        };
+
+        securityCodeOkBtn.addEventListener('click', onOkClick);
+        securityCodeCancelBtn.addEventListener('click', onCancelClick);
+
     } else {
-        if (navigator.onLine && reportsCollection) {
-            try { await reportsCollection.doc(docId).delete(); } catch (e) { console.error(e); }
+        const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
+        if (!confirmed) return;
+        
+        if (report.isLocal) {
+            await localDb.delete('unsyncedReports', docId);
         } else {
-            await localDb.put('deletionsQueue', { docId });
+            if (navigator.onLine && reportsCollection) {
+                try { await reportsCollection.doc(docId).delete(); } catch(e){ console.error(e); }
+            } else {
+                await localDb.put('deletionsQueue', { docId });
+            }
         }
+        loadRecentTransactions();
     }
-    loadRecentTransactions();
 };
 
 // --- Dashboard ---
 const renderDashboard = async () => {
-    if (cachedReports.length === 0) await loadRecentTransactions();
+    if (cachedFinalizedReports.length === 0 && user) {
+        finalizedTransactionsLoader.style.display = 'flex';
+        await loadFinalizedTransactions();
+    }
     dashboardLoader.style.display = 'none';
-    if (cachedReports.length === 0) {
-        dashboardMessage.textContent = "No data available. Save some reports to see the dashboard.";
+    if (cachedFinalizedReports.length === 0) {
+        dashboardMessage.textContent = "No finalized data available. Finalize some reports to see the dashboard.";
         dashboardMessage.style.display = 'block';
+        document.getElementById('dashboardContent').style.display = 'none';
         return;
     }
     dashboardMessage.style.display = 'none';
+    document.getElementById('dashboardContent').style.display = 'grid';
 
     let totalPrincipalAll = 0, totalInterestAll = 0;
-    cachedReports.forEach(report => {
+    cachedFinalizedReports.forEach(report => {
         totalPrincipalAll += parseFloat(report.totals.principal);
         totalInterestAll += parseFloat(report.totals.interest);
     });
@@ -556,7 +529,7 @@ const renderDashboard = async () => {
     });
 
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recentReports = cachedReports.slice(0, 7).reverse();
+    const recentReports = cachedFinalizedReports.slice(0, 7).reverse();
     if (barChartInstance) barChartInstance.destroy();
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
@@ -593,7 +566,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 loadRecentTransactions();
             }
         } else {
-            user = null; reportsCollection = null; cachedReports = [];
+            user = null; reportsCollection = null; cachedReports = []; cachedFinalizedReports = [];
             loginOverlay.style.display = 'flex';
             appContainer.style.display = 'none';
         }
@@ -606,11 +579,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     printAndSaveBtn.addEventListener('click', printAndSave);
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
-    exportPdfBtn.addEventListener('click', exportToPDF);
-    exportViewPdfBtn.addEventListener('click', exportToPDF);
-    scanImageBtn.addEventListener('click', () => imageUploadInput.click());
-    imageUploadInput.addEventListener('change', handleImageScan);
-
+    
     // Modal Listeners
     confirmOkBtn.addEventListener('click', () => closeConfirm(true));
     confirmCancelBtn.addEventListener('click', () => closeConfirm(false));
@@ -621,7 +590,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         button.addEventListener('click', (e) => showTab(e.target.dataset.tab));
     });
 
-    // Input & Search Listeners
+    // Input Listeners
     todayDateEl.addEventListener('input', updateAllCalculations);
     interestRateEl.addEventListener('input', updateAllCalculations);
     todayDateEl.addEventListener('blur', (e) => {
@@ -629,7 +598,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
         updateAllCalculations();
     });
-    reportSearchInput.addEventListener('input', e => { renderRecentTransactions(e.target.value); });
 
     // Offline/Online Listeners
     window.addEventListener('online', updateSyncStatus);
