@@ -1,54 +1,42 @@
 // File: netlify/functions/scanImage.js
-const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
-// Helper function to find the vertical center of a detected entity
-const getCenterY = (entity) => {
-  const vertices = entity?.pageAnchor?.pageRefs?.[0]?.boundingPoly?.normalizedVertices;
-  if (!vertices || vertices.length < 2) return 0;
-  return (vertices[0].y + vertices[1].y) / 2;
+// This function finds all matches for a pattern (regex) in a block of text
+const findAllMatches = (text, regex) => {
+  const matches = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    matches.push({
+      text: match[0].trim(),
+      index: match.index
+    });
+  }
+  return matches;
 };
 
 exports.handler = async function(event) {
-  const { 
-    GOOGLE_CREDENTIALS, 
-    GCP_PROJECT_ID, 
-    GCP_LOCATION, 
-    GCP_PROCESSOR_ID 
-  } = process.env;
+  const { GOOGLE_VISION_API_KEY } = process.env;
 
-  if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID || !GCP_LOCATION || !GCP_PROCESSOR_ID) {
-    return { statusCode: 500, body: JSON.stringify({ error: "Server is not configured for Document AI." }) };
+  if (!GOOGLE_VISION_API_KEY) {
+    return { statusCode: 500, body: JSON.stringify({ error: "Google Vision API key is not configured." }) };
   }
 
-  // --- Authentication and API Call ---
-  const auth = new GoogleAuth({
-    credentials: JSON.parse(GOOGLE_CREDENTIALS),
-    scopes: 'https://www.googleapis.com/auth/cloud-platform',
-  });
-  const client = await auth.getClient();
-  const accessToken = (await client.getAccessToken()).token;
-  const apiUrl = `https://${GCP_LOCATION}-documentai.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}/processors/${GCP_PROCESSOR_ID}:process`;
-  const { image, mimeType } = JSON.parse(event.body);
-
-  if (!mimeType) {
-      return { statusCode: 400, body: JSON.stringify({ error: "mimeType is missing from request." }) };
-  }
+  const apiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_VISION_API_KEY}`;
+  const { image } = JSON.parse(event.body);
 
   const requestBody = {
-    rawDocument: {
-      content: image,
-      mimeType: mimeType, 
-    },
+    requests: [
+      {
+        image: { content: image },
+        features: [{ type: 'TEXT_DETECTION' }],
+      },
+    ],
   };
 
   try {
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
 
@@ -59,73 +47,62 @@ exports.handler = async function(event) {
     }
 
     const data = await response.json();
-    const entities = data.document?.entities || [];
-    
-    // --- DETAILED LOGGING STARTS HERE ---
-    console.log("--- STEP 1: Raw entities detected by Document AI ---");
-    console.log(JSON.stringify(entities, null, 2));
-    
-    // --- FINAL, MOST ROBUST LOGIC: Anchor and Match ---
-    
-    // 1. Separate all entities by type
-    const loanNoEntities = entities.filter(e => e.type === 'LoanNo');
-    const principalEntities = entities.filter(e => e.type === 'Principal');
-    const dateEntities = entities.filter(e => e.type === 'Date');
+    const fullText = data.responses[0]?.fullTextAnnotation?.text;
 
+    if (!fullText) {
+      return { statusCode: 200, body: JSON.stringify({ loans: [] }) };
+    }
+    
+    // --- NEW PARSING LOGIC TO FIND MULTIPLE ENTRIES ---
+    // Define the patterns (Regular Expressions) to find our data
+    const loanNoRegex = /[A-Z]\.\d{3,}/g;
+    const principalRegex = /\b\d{4,}\b/g; // A number with 4 or more digits
+    const dateRegex = /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g;
+
+    // Find all potential candidates for each type
+    const loanNoCandidates = findAllMatches(fullText, loanNoRegex);
+    const principalCandidates = findAllMatches(fullText, principalRegex);
+    const dateCandidates = findAllMatches(fullText, dateRegex);
+    
     const loans = [];
-    const Y_THRESHOLD = 0.035; // A forgiving threshold for being "on the same line"
 
-    // 2. Use the most reliable entity (e.g., Date) as the "anchor" to build each row
-    for (const dateEntity of dateEntities) {
-      const dateCenterY = getCenterY(dateEntity);
-      let closestLoanNo = null;
+    // For each LoanNo found, find the closest Principal and Date
+    for (const loanNo of loanNoCandidates) {
       let closestPrincipal = null;
-      let minLoanNoDist = Infinity;
+      let closestDate = null;
       let minPrincipalDist = Infinity;
+      let minDateDist = Infinity;
 
-      // Find the closest LoanNo to this Date
-      for (const loanNoEntity of loanNoEntities) {
-        const dist = Math.abs(getCenterY(loanNoEntity) - dateCenterY);
-        if (dist < minLoanNoDist) {
-          minLoanNoDist = dist;
-          closestLoanNo = loanNoEntity;
-        }
-      }
-
-      // Find the closest Principal to this Date
-      for (const principalEntity of principalEntities) {
-        const dist = Math.abs(getCenterY(principalEntity) - dateCenterY);
+      // Find the closest principal based on text position
+      for (const principal of principalCandidates) {
+        const dist = Math.abs(principal.index - loanNo.index);
         if (dist < minPrincipalDist) {
           minPrincipalDist = dist;
-          closestPrincipal = principalEntity;
+          closestPrincipal = principal;
         }
       }
 
-      // 3. If a full row is found within the threshold, create the loan object
-      if (closestLoanNo && minLoanNoDist < Y_THRESHOLD &&
-          closestPrincipal && minPrincipalDist < Y_THRESHOLD) {
-        
-        loans.push({
-          no: closestLoanNo.mentionText,
-          principal: closestPrincipal.mentionText,
-          date: dateEntity.mentionText
-        });
+      // Find the closest date based on text position
+      for (const date of dateCandidates) {
+        const dist = Math.abs(date.index - loanNo.index);
+        if (dist < minDateDist) {
+          minDateDist = dist;
+          closestDate = date;
+        }
+      }
+      
+      if (closestPrincipal && closestDate) {
+          loans.push({
+              no: loanNo.text,
+              principal: closestPrincipal.text,
+              date: closestDate.text,
+          });
       }
     }
     
-    // 4. Sort the final loans array from top to bottom before returning
-    const sortedLoans = loans.sort((a, b) => {
-        const entityA = dateEntities.find(e => e.mentionText === a.date);
-        const entityB = dateEntities.find(e => e.mentionText === b.date);
-        return getCenterY(entityA) - getCenterY(entityB);
-    });
-
-    console.log("\n--- STEP 2: Final complete loans after resilient grouping ---");
-    console.log(JSON.stringify(sortedLoans, null, 2));
-
     return {
       statusCode: 200,
-      body: JSON.stringify({ loans: sortedLoans }),
+      body: JSON.stringify({ loans: loans }),
     };
   } catch (error) {
     console.error('FATAL: Internal function error during fetch.', error);
