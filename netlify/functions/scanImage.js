@@ -2,7 +2,6 @@
 const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
-// Helper function to find the vertical center of a detected entity
 const getCenterY = (entity) => {
   const vertices = entity?.pageAnchor?.pageRefs?.[0]?.boundingPoly?.normalizedVertices;
   if (!vertices || vertices.length < 2) return 0;
@@ -21,7 +20,6 @@ exports.handler = async function(event) {
     return { statusCode: 500, body: JSON.stringify({ error: "Server is not configured for Document AI." }) };
   }
 
-  // --- Authentication and API Call (same as your working version) ---
   const auth = new GoogleAuth({
     credentials: JSON.parse(GOOGLE_CREDENTIALS),
     scopes: 'https://www.googleapis.com/auth/cloud-platform',
@@ -61,15 +59,17 @@ exports.handler = async function(event) {
     const data = await response.json();
     const entities = data.document?.entities || [];
 
-    // --- NEW LOGIC: Group entities into rows based on Y-coordinate ---
+    // --- LOGIC UPDATED HERE ---
+    console.log("Raw entities detected:", JSON.stringify(entities, null, 2));
+
     const rows = new Map();
-    const Y_THRESHOLD = 0.02; // A threshold to be considered "on the same line"
+    // Increased threshold to be more forgiving with handwriting
+    const Y_THRESHOLD = 0.035; 
 
     for (const entity of entities) {
         const y = getCenterY(entity);
         let foundRow = false;
 
-        // Check if this entity belongs to an existing row
         for (const [rowY, rowData] of rows.entries()) {
             if (Math.abs(y - rowY) < Y_THRESHOLD) {
                 rowData[entity.type] = entity.mentionText;
@@ -77,25 +77,27 @@ exports.handler = async function(event) {
                 break;
             }
         }
-        
-        // If it doesn't belong to any existing row, create a new one
+
         if (!foundRow) {
             rows.set(y, { [entity.type]: entity.mentionText });
         }
     }
 
-    // Convert the map of rows into a sorted array of loan objects
+    console.log("Grouped rows:", JSON.stringify(Array.from(rows.values()), null, 2));
+
     const loans = Array.from(rows.values())
-      .filter(row => row.LoanNo && row.Principal && row.Date) // Only include complete rows
+      .filter(row => row.LoanNo && row.Principal && row.Date)
       .map(row => ({
         no: row.LoanNo,
         principal: row.Principal,
         date: row.Date,
       }));
 
+    console.log("Final complete loans:", JSON.stringify(loans, null, 2));
+
     return {
       statusCode: 200,
-      body: JSON.stringify({ loans: loans }), // Return an object with a "loans" array
+      body: JSON.stringify({ loans: loans }),
     };
   } catch (error) {
     console.error('FATAL: Internal function error during fetch.', error);
