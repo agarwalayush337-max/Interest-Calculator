@@ -322,10 +322,10 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 
 /* --- Width Adjustments --- */
 #interestRateContainer {
-    width: 150px;
+    width: 100px;
 }
 #todayDateContainer {
-    max-width: 200px;
+    max-width: 100px;
 }
 #recentSearchContainer,
 #finalisedSearchContainer {
