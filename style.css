@@ -30,12 +30,6 @@ body {
                calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
     overflow: hidden;
 }
-p.description {
-    color: var(--subtle-text-color);
-    margin-top: -1rem;
-    margin-bottom: 2rem;
-    font-size: 0.9rem;
-}
 /* Login Overlay */
 #loginOverlay {
     position: fixed;
@@ -171,8 +165,6 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 .btn-secondary:hover:not(:disabled) { background-color: #d1d9e6; }
 .btn-danger { background-color: var(--danger-color); color: white; }
 .btn-danger:hover:not(:disabled) { background-color: #f83c4f; }
-.btn-success { background-color: var(--success-color); color: white; }
-.btn-success:hover:not(:disabled) { background-color: #34a99d; }
 .totals-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -187,8 +179,15 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 }
 .total-item h3 { margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase; }
 .total-item p { margin: 0; font-size: 1.75rem; font-weight: 700; color: var(--text-color); }
-#recentTransactionsList, #finalizedTransactionsList { list-style: none; padding: 0; }
-#recentTransactionsList li, #finalizedTransactionsList li {
+
+/* --- Consolidated List Styles --- */
+#recentTransactionsList, 
+#finalisedTransactionsList {
+    list-style: none;
+    padding: 0;
+}
+#recentTransactionsList li,
+#finalisedTransactionsList li {
     padding: 1rem 1.5rem;
     border-radius: 8px;
     margin-bottom: 1rem;
@@ -199,8 +198,22 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
                calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
 }
-#recentTransactionsList li span, #finalizedTransactionsList li span { font-weight: 600; flex-grow: 1; }
-#recentTransactionsList .button-group, #finalizedTransactionsList .button-group { display: flex; gap: 0.5rem; }
+#recentTransactionsList li span,
+#finalisedTransactionsList li span {
+    font-weight: 600;
+    flex-grow: 1;
+}
+#recentTransactionsList .button-group,
+#finalisedTransactionsList .button-group {
+    display: flex;
+    gap: 0.5rem;
+}
+#recentTransactionsList li.unsynced span::after {
+    content: ' (unsynced)';
+    font-style: italic;
+    font-weight: 400;
+    color: var(--warning-color);
+}
 
 /* Dashboard Styles */
 .dashboard-grid {
@@ -250,12 +263,6 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     box-shadow: inset 3px 3px 5px var(--shadow-dark), inset -3px -3px 5px var(--shadow-light);
 }
 #syncStatus.offline::before { background-color: var(--warning-color); }
-#recentTransactionsList li.unsynced span::after {
-    content: ' (unsynced)';
-    font-style: italic;
-    font-weight: 400;
-    color: var(--warning-color);
-}
 
 /* Modal Styles */
 .modal-overlay {
@@ -301,7 +308,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 @media print {
     body { padding: 0; background: white; color: black; }
     .container, .login-box, .total-item, #recentTransactionsList li, .table-container { box-shadow: none; border-radius: 0; border: none; background: white; }
-    header, .tabs, .action-bar, #recentTransactionsTab, #finalizedTransactionsTab, .btn-danger, #loanTable th:last-child, td:last-child, .dashboard-grid, .search-bar { display: none; }
+    header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child, td:last-child, .dashboard-grid, .search-bar { display: none; }
     .main-content { padding: 0; }
     .input-group { display: none !important; }
     .print-header { display: block !important; text-align: center; margin-bottom: 2rem; }
