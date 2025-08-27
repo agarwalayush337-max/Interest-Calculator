@@ -95,7 +95,7 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
     margin-bottom: 1rem;
     align-items: start;
 }
-.input-field label { font-weight: 600; margin-bottom: 0.5rem; display: block; font-size: 0.9rem; }
+.input-field label { font-weight: 600; margin-bottom: 0.5rem; display: block; font-size: 0.9rem; white-space: nowrap; }
 .input-field.search-bar { margin-bottom: 1.5rem; }
 .input-field input {
     width: 100%;
