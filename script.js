@@ -16,7 +16,9 @@ let user = null;
 let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
+let cachedFinalisedReports = []; // <-- NEW
 let pieChartInstance, barChartInstance;
+const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025'; // <-- NEW
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
@@ -338,9 +340,14 @@ const showTab = (tabId) => {
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
     if (user) {
         if (tabId === 'recentTransactionsTab') {
-            recentTransactionsListEl.innerHTML = '';
+            recentTransactionsList.innerHTML = '';
             recentTransactionsLoader.style.display = 'flex';
             loadRecentTransactions();
+        }
+        if (tabId === 'finalisedTransactionsTab') {
+            document.getElementById('finalisedTransactionsList').innerHTML = '';
+            document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
+            loadFinalisedTransactions();
         }
         if (tabId === 'dashboardTab') {
             renderDashboard();
@@ -462,6 +469,7 @@ const renderRecentTransactions = (filter = '') => {
             <div class="button-group">
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
                 <button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button>
+                <button class="btn btn-success" onclick="finaliseReport('${report.id}')">Finalise</button>
                 <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
             </div>`;
         recentTransactionsListEl.appendChild(li);
@@ -473,7 +481,7 @@ const loadRecentTransactions = async () => {
     let onlineReports = [], localReports = [];
     if (navigator.onLine && reportsCollection) {
         try {
-            const snapshot = await reportsCollection.orderBy("createdAt", "desc").get();
+            const snapshot = await reportsCollection.where("status", "!=", "finalised").orderBy("status").orderBy("createdAt", "desc").get();
             onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         } catch (error) { console.error("Error loading online reports:", error); }
     }
@@ -485,6 +493,50 @@ const loadRecentTransactions = async () => {
     );
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
+};
+
+const renderFinalisedTransactions = (filter = '') => {
+    const listEl = document.getElementById('finalisedTransactionsList');
+    listEl.innerHTML = '';
+    const searchTerm = filter.toLowerCase();
+
+    const filteredReports = cachedFinalisedReports.filter(report => {
+        if (!searchTerm) return true;
+        if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
+        return report.loans?.some(loan =>
+            loan.no?.toLowerCase().includes(searchTerm) ||
+            loan.principal?.toLowerCase().includes(searchTerm)
+        );
+    });
+
+    if (filteredReports.length === 0) {
+        listEl.innerHTML = '<li>No finalised transactions found.</li>';
+        return;
+    }
+
+    filteredReports.forEach(report => {
+        const li = document.createElement('li');
+        li.dataset.reportId = report.id;
+        li.innerHTML = `
+            <span>${report.reportName || `Report from ${report.reportDate}`}</span>
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true)">View</button>
+                <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Delete</button>
+            </div>`;
+        listEl.appendChild(li);
+    });
+};
+
+const loadFinalisedTransactions = async () => {
+    if (!user || !navigator.onLine) return;
+    try {
+        const snapshot = await reportsCollection.where("status", "==", "finalised").orderBy("createdAt", "desc").get();
+        cachedFinalisedReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
+    } catch (error) {
+        console.error("Error loading finalised reports:", error);
+    }
+    document.getElementById('finalisedTransactionsLoader').style.display = 'none';
+    renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
 };
 
 const setViewMode = (isViewOnly) => {
@@ -502,8 +554,8 @@ const setViewMode = (isViewOnly) => {
 
 const exitViewMode = () => { setViewMode(false); loadCurrentState(); };
 
-const viewReport = (reportId, isEditable) => {
-    const report = cachedReports.find(r => r.id === reportId);
+const viewReport = (reportId, isEditable, isFinalised = false) => {
+    const report = (isFinalised ? cachedFinalisedReports : cachedReports).find(r => r.id === reportId);
     if (!report) return showConfirm("Error", "Report not found!", false);
     showTab('calculatorTab');
     todayDateEl.value = report.reportDate;
@@ -514,36 +566,93 @@ const viewReport = (reportId, isEditable) => {
     updateAllCalculations();
 };
 
-const deleteReport = async (docId) => {
+const finaliseReport = async (docId) => {
+    const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
+    if (!confirmed) return;
+
+    if (navigator.onLine && reportsCollection) {
+        try {
+            await reportsCollection.doc(docId).update({ status: 'finalised' });
+            await showConfirm("Success", "The report has been finalised.", false);
+            // Refresh both lists
+            loadRecentTransactions();
+            loadFinalisedTransactions();
+        } catch (error) {
+            console.error("Error finalising report:", error);
+            await showConfirm("Error", "Could not finalise the report.", false);
+        }
+    } else {
+        await showConfirm("Offline", "You must be online to finalise a report.", false);
+    }
+};
+
+const deleteReport = async (docId, isFinalised = false) => {
+    if (isFinalised) {
+        const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
+        if (key !== FINALISED_DELETE_KEY) {
+            if (key !== null) { // Only show message if user didn't hit cancel
+                await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
+            }
+            return;
+        }
+    }
+
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
-    const reportToDelete = cachedReports.find(r => r.id === docId);
+
+    const reportToDelete = cachedReports.find(r => r.id === docId) || cachedFinalisedReports.find(r => r.id === docId);
     if (!reportToDelete) return;
+
     if (reportToDelete.isLocal) {
         await localDb.delete('unsyncedReports', docId);
     } else {
         if (navigator.onLine && reportsCollection) {
-            try { await reportsCollection.doc(docId).delete(); } catch (e) { console.error(e); }
+            try {
+                await reportsCollection.doc(docId).delete();
+            } catch (e) { console.error(e); }
         } else {
+            // Note: Deleting finalised reports while offline is not supported in this design
             await localDb.put('deletionsQueue', { docId });
         }
     }
-    loadRecentTransactions();
+    
+    // Refresh the relevant list
+    if (isFinalised) {
+        loadFinalisedTransactions();
+    } else {
+        loadRecentTransactions();
+    }
 };
+
 
 // --- Dashboard ---
 const renderDashboard = async () => {
-    if (cachedReports.length === 0) await loadRecentTransactions();
+    dashboardLoader.style.display = 'block'; // Show loader initially
+    dashboardMessage.style.display = 'none';
+
+    // Ensure finalised reports are loaded
+    if (!user || !navigator.onLine) {
+         dashboardMessage.textContent = "Dashboard requires an internet connection to view finalised reports.";
+         dashboardMessage.style.display = 'block';
+         dashboardLoader.style.display = 'none';
+         return;
+    }
+    
+    await loadFinalisedTransactions(); // Load the correct data
     dashboardLoader.style.display = 'none';
-    if (cachedReports.length === 0) {
-        dashboardMessage.textContent = "No data available. Save some reports to see the dashboard.";
+
+    if (cachedFinalisedReports.length === 0) {
+        dashboardMessage.textContent = "No finalised data available. Finalise some reports to see the dashboard.";
         dashboardMessage.style.display = 'block';
+        // Clear old charts if they exist
+        if (pieChartInstance) pieChartInstance.destroy();
+        if (barChartInstance) barChartInstance.destroy();
         return;
     }
     dashboardMessage.style.display = 'none';
 
     let totalPrincipalAll = 0, totalInterestAll = 0;
-    cachedReports.forEach(report => {
+    cachedFinalisedReports.forEach(report => {
         totalPrincipalAll += parseFloat(report.totals.principal);
         totalInterestAll += parseFloat(report.totals.interest);
     });
@@ -556,7 +665,7 @@ const renderDashboard = async () => {
     });
 
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recentReports = cachedReports.slice(0, 7).reverse();
+    const recentReports = cachedFinalisedReports.slice(0, 7).reverse();
     if (barChartInstance) barChartInstance.destroy();
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
@@ -630,6 +739,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateAllCalculations();
     });
     reportSearchInput.addEventListener('input', e => { renderRecentTransactions(e.target.value); });
+    document.getElementById('finalisedReportSearchInput').addEventListener('input', e => { 
+        renderFinalisedTransactions(e.target.value); 
+    });
 
     // Offline/Online Listeners
     window.addEventListener('online', updateSyncStatus);
