@@ -366,7 +366,6 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
     })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
 
 const printAndSave = async () => {
-    console.log("Save button clicked, printAndSave function started!"); // <-- ADD THIS LINE
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
@@ -378,9 +377,9 @@ const printAndSave = async () => {
         interestRate: interestRateEl.value,
         loans,
         createdAt: new Date(),
+        status: 'pending', // <--- This new line fixes future reports
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
-    console.log('Step 2: Report object created. About to start saving process...');
 
     if (navigator.onLine && reportsCollection) {
         const baseName = `Summary of ${reportDate}`;
@@ -397,8 +396,7 @@ const printAndSave = async () => {
         await localDb.put('unsyncedReports', report);
         await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
-    console.log('Step 3: Saving process finished. About to print...');
-    
+
     document.getElementById('printTitle').textContent = `Interest Report`;
     document.getElementById('printDate').textContent = `As of ${reportDate}`;
     window.print();
