@@ -142,40 +142,61 @@ const formatDateToDDMMYYYY = (date) => {
     return `${day}/${month}/${year}`;
 };
 const roundToNearest = (num, nearest) => Math.round(num / nearest) * nearest;
-const days360 = (startDate, endDate) => {
-    if (!startDate || !endDate || startDate > endDate) return 0;
-    let d1 = startDate.getDate(), m1 = startDate.getMonth() + 1, y1 = startDate.getFullYear();
-    let d2 = endDate.getDate(), m2 = endDate.getMonth() + 1, y2 = endDate.getFullYear();
-    if (d1 === 31) d1 = 30;
-    if (d2 === 31 && d1 === 30) d2 = 30;
-    return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
-};
-const calculateInterest = (principal, rate, durationInDays) => {
-    const effectiveDuration = (durationInDays > 0 && durationInDays < 30) ? 30 : durationInDays;
-    return principal * (rate / 100 / 30) * effectiveDuration;
-};
-const updateAllCalculations = () => {
+
+// --- Serverless Calculation ---
+const updateAllCalculations = async () => {
     const todayDate = parseDate(todayDateEl.value);
     const interestRate = parseFloat(interestRateEl.value) || 0;
-    let totalPrincipal = 0, totalInterestRaw = 0;
-    document.querySelectorAll('#loanTable tbody tr').forEach(row => {
-        const principal = parseFloat(row.querySelector('.principal').value) || 0;
-        const loanDate = parseDate(row.querySelector('.date').value);
-        const durationEl = row.querySelector('.duration');
-        const interestEl = row.querySelector('.interest');
-        const duration = days360(loanDate, todayDate);
-        const interest = calculateInterest(principal, interestRate, duration);
-        const roundedInterest = roundToNearest(interest, 5);
-        const displayDuration = (duration > 0 && duration < 30) ? 30 : duration;
-        durationEl.textContent = displayDuration > 0 ? displayDuration : '';
-        interestEl.textContent = roundedInterest > 0 ? Math.round(roundedInterest) : '';
-        totalPrincipal += principal;
-        totalInterestRaw += interest;
+
+    const rows = Array.from(document.querySelectorAll('#loanTable tbody tr'));
+    const loansToCalculate = rows.map(row => {
+        return {
+            principal: row.querySelector('.principal').value || '0',
+            date: parseDate(row.querySelector('.date').value)
+        };
     });
-    const roundedTotalInterest = roundToNearest(totalInterestRaw, 10);
-    totalPrincipalEl.textContent = Math.round(totalPrincipal);
-    totalInterestEl.textContent = Math.round(roundedTotalInterest);
-    finalTotalEl.textContent = Math.round(totalPrincipal + roundedTotalInterest);
+
+    try {
+        const response = await fetch('/.netlify/functions/calculateInterest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                loans: loansToCalculate,
+                interestRate: interestRate,
+                todayDate: todayDate
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Calculation request failed');
+        }
+
+        const { results } = await response.json();
+        let totalPrincipal = 0;
+        let totalInterestRaw = 0;
+
+        rows.forEach((row, index) => {
+            const principal = parseFloat(row.querySelector('.principal').value) || 0;
+            const result = results[index];
+
+            const roundedInterest = roundToNearest(result.interest, 5);
+
+            row.querySelector('.duration').textContent = result.duration;
+            row.querySelector('.interest').textContent = roundedInterest > 0 ? Math.round(roundedInterest) : '';
+            
+            totalPrincipal += principal;
+            totalInterestRaw += result.interest;
+        });
+
+        const roundedTotalInterest = roundToNearest(totalInterestRaw, 10);
+        totalPrincipalEl.textContent = Math.round(totalPrincipal);
+        totalInterestEl.textContent = Math.round(roundedTotalInterest);
+        finalTotalEl.textContent = Math.round(totalPrincipal + roundedTotalInterest);
+
+    } catch (error) {
+        console.error("Error calling calculation function:", error);
+    }
+
     saveCurrentState();
 };
 
@@ -212,7 +233,7 @@ const cleanAndSortTable = () => {
     renumberRows();
 };
 
-// --- START: Document AI Integration (Multi-Row Capable) ---
+// --- Image Scanning ---
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
@@ -282,7 +303,6 @@ const handleImageScan = async (event) => {
     }
     imageUploadInput.value = '';
 };
-// --- END: Document AI Integration ---
 
 // --- State Management ---
 const saveCurrentState = () => {
@@ -321,12 +341,10 @@ const showTab = (tabId) => {
     if (user) {
         if (tabId === 'recentTransactionsTab') {
             recentTransactionsListEl.innerHTML = '';
-            recentTransactionsLoader.style.display = 'flex';
             loadRecentTransactions();
         }
         if (tabId === 'finalisedTransactionsTab') {
             document.getElementById('finalisedTransactionsList').innerHTML = '';
-            document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
             loadFinalisedTransactions();
         }
         if (tabId === 'dashboardTab') {
@@ -462,10 +480,8 @@ const loadRecentTransactions = async () => {
         recentTransactionsLoader.style.display = 'none';
         return;
     }
-
     recentTransactionsLoader.style.display = 'flex';
     let onlineReports = [], localReports = [];
-
     if (navigator.onLine) {
         try {
             const snapshot = await reportsCollection.where("status", "!=", "finalised").orderBy("status").orderBy("createdAt", "desc").get();
@@ -474,22 +490,14 @@ const loadRecentTransactions = async () => {
             console.error("Error loading online reports:", error);
         }
     }
-
     const local = (localDb) ? (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true })) : [];
-
     cachedReports = [...local, ...onlineReports].sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || 0;
         const dateB = b.createdAt?.toDate?.() || 0;
         return dateB - dateA;
     });
-
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
-};
-
-    recentTransactionsLoader.style.display = 'none';
-    renderRecentTransactions(reportSearchInput.value);
-    console.log("--- Finished loadRecentTransactions with SIMPLEST query ---");
 };
 
 const renderFinalisedTransactions = (filter = '') => {
@@ -580,21 +588,19 @@ const finaliseReport = async (docId) => {
 };
 
 const deleteReport = async (docId, isFinalised = false) => {
-    // This part is for finalised reports only
     if (isFinalised) {
         const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
         if (key !== FINALISED_DELETE_KEY) {
-            if (key !== null) { // Don't show alert if user just cancelled
+            if (key !== null) { 
                 await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
             }
-            return; // Stop the function
+            return;
         }
     }
 
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
 
-    // We assume the user is online to delete from the shared collection
     if (navigator.onLine && reportsCollection) {
         try {
             await reportsCollection.doc(docId).delete();
@@ -608,13 +614,13 @@ const deleteReport = async (docId, isFinalised = false) => {
         return;
     }
     
-    // Refresh the relevant list after deletion
     if (isFinalised) {
         loadFinalisedTransactions();
     } else {
         loadRecentTransactions();
     }
 };
+
 // --- Dashboard ---
 const renderDashboard = async () => {
     dashboardLoader.style.display = 'block';
@@ -670,48 +676,44 @@ const signOut = () => auth.signOut();
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
- auth.onAuthStateChanged(async (firebaseUser) => {
-    if (firebaseUser) {
-        const userEmail = firebaseUser.email;
-        const userRef = db.collection('allowedUsers').doc(userEmail);
+    auth.onAuthStateChanged(async (firebaseUser) => {
+        if (firebaseUser) {
+            const userEmail = firebaseUser.email;
+            const userRef = db.collection('allowedUsers').doc(userEmail);
 
-        try {
-            const doc = await userRef.get();
-            if (doc.exists) {
-                // --- USER IS AUTHORIZED ---
-                console.log("User is authorized. Access granted.");
-                user = firebaseUser;
-                // This line is CHANGED to point to the new shared collection
-                reportsCollection = db.collection('sharedReports'); 
-
-                authStatusEl.textContent = user.displayName || user.email;
-                loginOverlay.style.display = 'none';
-                appContainer.style.display = 'block';
-                loadCurrentState();
-                syncData();
-                if (document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
-                    loadRecentTransactions();
+            try {
+                const doc = await userRef.get();
+                if (doc.exists) {
+                    console.log("User is authorized. Access granted.");
+                    user = firebaseUser;
+                    reportsCollection = db.collection('sharedReports');
+                    authStatusEl.textContent = user.displayName || user.email;
+                    loginOverlay.style.display = 'none';
+                    appContainer.style.display = 'block';
+                    loadCurrentState();
+                    syncData();
+                    if (document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
+                        loadRecentTransactions();
+                    }
+                } else {
+                    console.warn("Unauthorized user attempted to sign in:", userEmail);
+                    await showConfirm("Access Denied", "You are not authorized to use this application.", false);
+                    auth.signOut();
                 }
-            } else {
-                // --- USER IS NOT AUTHORIZED ---
-                console.warn("Unauthorized user attempted to sign in:", userEmail);
-                await showConfirm("Access Denied", "You are not authorized to use this application.", false);
+            } catch (error) {
+                console.error("Authorization check failed:", error);
+                await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
                 auth.signOut();
             }
-        } catch (error) {
-            console.error("Authorization check failed:", error);
-            await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
-            auth.signOut();
+
+        } else {
+            user = null;
+            reportsCollection = null;
+            cachedReports = [];
+            loginOverlay.style.display = 'flex';
+            appContainer.style.display = 'none';
         }
-    } else {
-        // User is signed out
-        user = null;
-        reportsCollection = null;
-        cachedReports = [];
-        loginOverlay.style.display = 'flex';
-        appContainer.style.display = 'none';
-    }
-});
+    });
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
