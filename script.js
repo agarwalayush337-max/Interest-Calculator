@@ -481,24 +481,53 @@ const renderRecentTransactions = (filter = '') => {
 };
 
 const loadRecentTransactions = async () => {
-    if (!user) return;
-    let onlineReports = [], localReports = [];
-    if (navigator.onLine && reportsCollection) {
-        try {
-            const snapshot = await reportsCollection.where("status", "!=", "finalised").orderBy("status").orderBy("createdAt", "desc").get();
-            onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
-        } catch (error) { console.error("Error loading online reports:", error); }
+    console.log("--- Starting loadRecentTransactions ---");
+    if (!user) {
+        console.log("Cannot load reports: User is not signed in.");
+        return;
     }
+    if (!reportsCollection) {
+        console.log("Cannot load reports: Database connection (reportsCollection) is not ready.");
+        return;
+    }
+
+    recentTransactionsLoader.style.display = 'flex';
+    let onlineReports = [], localReports = [];
+
+    if (navigator.onLine) {
+        try {
+            console.log("Querying Firestore with:", `reports/${user.uid}/userReports`);
+            const snapshot = await reportsCollection.where("status", "!=", "finalised").orderBy("status").orderBy("createdAt", "desc").get();
+
+            console.log(`Query successful! Firebase returned ${snapshot.size} documents.`);
+
+            if (snapshot.size > 0) {
+                snapshot.forEach(doc => {
+                    console.log("  -> Document ID:", doc.id, "Data:", doc.data());
+                });
+            }
+
+            onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
+        } catch (error) {
+            console.error("--- A CRITICAL ERROR occurred during the Firestore query ---", error);
+        }
+    } else {
+        console.log("Offline mode: Skipping Firestore query.");
+    }
+
     if (localDb) {
         localReports = (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true }));
+         console.log(`Found ${localReports.length} unsynced local reports.`);
     }
+
     cachedReports = [...localReports, ...onlineReports].sort((a, b) =>
         (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt)
     );
+
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
+    console.log("--- Finished loadRecentTransactions ---");
 };
-
 const renderFinalisedTransactions = (filter = '') => {
     const listEl = document.getElementById('finalisedTransactionsList');
     listEl.innerHTML = '';
