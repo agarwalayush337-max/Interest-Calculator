@@ -167,7 +167,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 .btn-danger { background-color: var(--danger-color); color: white; }
 .btn-danger:hover:not(:disabled) { background-color: #f83c4f; }
 .btn-success {
-    background-color: var(--success-colour);
+    background-color: var(--success-color);
     color: white;
 }
 
@@ -215,7 +215,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 #recentTransactionsList .button-group,
 #finalisedTransactionsList .button-group {
     display: flex;
-    gap: 0.5rem;
+    gap: 1rem;
 }
 #recentTransactionsList li.unsynced span::after {
     content: ' (unsynced)';
