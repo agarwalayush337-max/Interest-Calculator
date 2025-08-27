@@ -100,7 +100,7 @@ const syncData = async () => {
             await localDb.delete('deletionsQueue', item.docId);
         } catch (error) { console.error('Failed to sync deletion:', error); }
     }
-    updateSyncStatus();
+    syncStatusEl.textContent = 'Online'; // This is the corrected line
     if (document.querySelector('.tab-button[data-tab="recentTransactionsTab"].active')) {
         loadRecentTransactions();
     }
