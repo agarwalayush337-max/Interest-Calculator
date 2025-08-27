@@ -215,7 +215,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 #recentTransactionsList .button-group,
 #finalisedTransactionsList .button-group {
     display: flex;
-    gap: 1rem;
+    gap: 0.7rem;
 }
 #recentTransactionsList li.unsynced span::after {
     content: ' (unsynced)';
