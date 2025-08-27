@@ -565,54 +565,40 @@ const finaliseReport = async (docId) => {
 };
 
 const deleteReport = async (docId, isFinalised = false) => {
+    // This part is for finalised reports only
     if (isFinalised) {
         const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
-        if (!key) return; 
-
-        try {
-            const response = await fetch('/.netlify/functions/deleteFinalisedReport', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    reportId: docId,
-                    securityKey: key
-                    // We no longer need to send the userId
-                })
-            });
-
-            if (!response.ok) {
-                const errorInfo = await response.json();
-                throw new Error(errorInfo.error || "Failed to delete report.");
+        if (key !== FINALISED_DELETE_KEY) {
+            if (key !== null) { // Don't show alert if user just cancelled
+                await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
             }
-
-            await showConfirm("Success", "The finalised report has been deleted.", false);
-            loadFinalisedTransactions(); 
-
-        } catch (error) {
-            console.error("Error deleting finalised report:", error);
-            await showConfirm("Error", error.message, false);
+            return; // Stop the function
         }
-        return; 
     }
 
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
 
-    const reportToDelete = cachedReports.find(r => r.id === docId);
-    if (!reportToDelete) return;
-
-    if (reportToDelete.isLocal) {
-        await localDb.delete('unsyncedReports', docId);
-    } else {
-        if (navigator.onLine && reportsCollection) {
-            try {
-                await reportsCollection.doc(docId).delete();
-            } catch (e) { console.error(e); }
-        } else {
-            await localDb.put('deletionsQueue', { docId });
+    // We assume the user is online to delete from the shared collection
+    if (navigator.onLine && reportsCollection) {
+        try {
+            await reportsCollection.doc(docId).delete();
+            await showConfirm("Success", "The report has been deleted.", false);
+        } catch (error) {
+            console.error("Error deleting report:", error);
+            await showConfirm("Error", "Failed to delete the report.", false);
         }
+    } else {
+        await showConfirm("Offline", "You must be online to delete reports.", false);
+        return;
     }
-    loadRecentTransactions();
+    
+    // Refresh the relevant list after deletion
+    if (isFinalised) {
+        loadFinalisedTransactions();
+    } else {
+        loadRecentTransactions();
+    }
 };
 // --- Dashboard ---
 const renderDashboard = async () => {
