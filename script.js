@@ -18,7 +18,7 @@ let localDb = null;
 let cachedReports = [];
 let cachedFinalisedReports = []; // <-- NEW
 let pieChartInstance, barChartInstance;
-const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025'; // <-- NEW
+const FINALISED_DELETE_KEY = 'Ayush@81'; // <-- NEW
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
