@@ -359,61 +359,17 @@ td.read-only { font-weight: 500; font-size: 1rem; }
         max-width: none;
     }
 
-    /* Make the table scrollable horizontally as a fallback */
+    /* --- New Table Style: Horizontal Scroll --- */
     .table-container {
+        /* This is the key property. It adds a scrollbar if the content is too wide. */
         overflow-x: auto;
+
+        /* This helps scrolling feel smoother on touch devices */
+        -webkit-overflow-scrolling: touch;
     }
 
-    /* --- Advanced: Transform table into a card list on mobile --- */
-    
-    /* Hide the original table headers */
-    table thead {
-        display: none;
-    }
-
-    /* Make each table row a distinct card */
-    table tr {
-        display: block;
-        margin-bottom: 1rem;
-        border-radius: 12px;
-        box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-                   calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
-        border: none;
-    }
-
-    /* Make each cell a full row with a label */
-    table td {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem 1rem;
-        text-align: right;
-    }
-
-    /* Add the label text before each cell's content */
-    table td::before {
-        font-weight: 600;
-        color: var(--subtle-text-color);
-        text-transform: uppercase;
-        font-size: 0.85rem;
-        text-align: left;
-        padding-right: 1rem;
-    }
-
-    /* Manually set the label for each column */
-    table td:nth-of-type(1)::before { content: "SL NO"; }
-    table td:nth-of-type(2)::before { content: "No"; }
-    table td:nth-of-type(3)::before { content: "Principal"; }
-    table td:nth-of-type(4)::before { content: "Date"; }
-    table td:nth-of-type(5)::before { content: "Duration (Days)"; }
-    table td:nth-of-type(6)::before { content: "Interest"; }
-    table td:nth-of-type(7)::before { content: ""; } /* No label for the delete button column */
-    
-    /* Clean up borders */
-    table td {
-        border-bottom: 1px solid rgba(0,0,0,0.05);
-    }
-    table td:last-child {
-        border-bottom: 0;
+    /* Ensure the table itself uses all the space it needs and inputs don't wrap */
+    table {
+        white-space: nowrap;
     }
 }
