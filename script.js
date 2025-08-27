@@ -651,24 +651,48 @@ const signOut = () => auth.signOut();
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
-    auth.onAuthStateChanged(firebaseUser => {
-        if (firebaseUser) {
-            user = firebaseUser;
-            reportsCollection = db.collection('reports').doc(user.uid).collection('userReports');
-            authStatusEl.textContent = user.displayName || user.email;
-            loginOverlay.style.display = 'none';
-            appContainer.style.display = 'block';
-            loadCurrentState();
-            syncData();
-            if (document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
-                loadRecentTransactions();
+  auth.onAuthStateChanged(async (firebaseUser) => {
+    if (firebaseUser) {
+        // A user has signed in. Now, check if they are authorized.
+        const userEmail = firebaseUser.email;
+        const userRef = db.collection('allowedUsers').doc(userEmail);
+
+        try {
+            const doc = await userRef.get();
+            if (doc.exists) {
+                // --- USER IS AUTHORIZED ---
+                console.log("User is authorized. Access granted.");
+                user = firebaseUser;
+                reportsCollection = db.collection('reports').doc(user.uid).collection('userReports');
+                authStatusEl.textContent = user.displayName || user.email;
+                loginOverlay.style.display = 'none';
+                appContainer.style.display = 'block';
+                loadCurrentState();
+                syncData();
+                if (document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
+                    loadRecentTransactions();
+                }
+            } else {
+                // --- USER IS NOT AUTHORIZED ---
+                console.warn("Unauthorized user attempted to sign in:", userEmail);
+                await showConfirm("Access Denied", "You are not authorized to use this application.", false);
+                auth.signOut(); // Force sign-out
             }
-        } else {
-            user = null; reportsCollection = null; cachedReports = [];
-            loginOverlay.style.display = 'flex';
-            appContainer.style.display = 'none';
+        } catch (error) {
+            console.error("Authorization check failed:", error);
+            await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
+            auth.signOut(); // Force sign-out on error
         }
-    });
+
+    } else {
+        // User is signed out
+        user = null;
+        reportsCollection = null;
+        cachedReports = [];
+        loginOverlay.style.display = 'flex';
+        appContainer.style.display = 'none';
+    }
+});
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
