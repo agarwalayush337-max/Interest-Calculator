@@ -166,6 +166,14 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 .btn-secondary:hover:not(:disabled) { background-color: #d1d9e6; }
 .btn-danger { background-color: var(--danger-color); color: white; }
 .btn-danger:hover:not(:disabled) { background-color: #f83c4f; }
+.btn-success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+    background-color: #248a7e; /* A slightly darker green for hover */
+}
 .totals-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
