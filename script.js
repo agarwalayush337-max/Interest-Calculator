@@ -16,9 +16,9 @@ let user = null;
 let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
-let cachedFinalisedReports = []; // <-- NEW
+let cachedFinalisedReports = [];
 let pieChartInstance, barChartInstance;
-const FINALISED_DELETE_KEY = 'Ayush@81'; // <-- NEW
+const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
@@ -100,7 +100,9 @@ const syncData = async () => {
             await localDb.delete('deletionsQueue', item.docId);
         } catch (error) { console.error('Failed to sync deletion:', error); }
     }
-    syncStatusEl.textContent = 'Online'; // This is the corrected line
+    
+    syncStatusEl.textContent = 'Online';
+    
     if (document.querySelector('.tab-button[data-tab="recentTransactionsTab"].active')) {
         loadRecentTransactions();
     }
@@ -211,31 +213,21 @@ const cleanAndSortTable = () => {
 };
 
 // --- START: Document AI Integration (Multi-Row Capable) ---
-
-// This corrected version converts the principal to a string before using .replace()
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
         return;
     }
-
-    // Get a list of all available empty rows
     const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
         !r.querySelector('.principal').value && !r.querySelector('.no').value
     );
-
     let emptyRowIndex = 0;
-
-    // Loop through each loan from the scan
     loans.forEach((loan) => {
         const formattedLoan = {
             no: loan.no,
-            // --- FIX IS HERE ---
             principal: String(loan.principal).replace(/,/g, ''),
             date: formatDateToDDMMYYYY(parseDate(loan.date))
         };
-
-        // If there is an empty row available, use it
         if (emptyRowIndex < emptyRows.length) {
             const targetRow = emptyRows[emptyRowIndex];
             targetRow.querySelector('.no').value = formattedLoan.no;
@@ -243,22 +235,17 @@ const fillTableFromScan = (loans) => {
             targetRow.querySelector('.date').value = formattedLoan.date;
             emptyRowIndex++;
         } else {
-            // If all empty rows are used, add a new row to the end
             addRow(formattedLoan);
         }
     });
-
     updateAllCalculations();
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
 
-// This function handles the file upload and calls the backend
 const handleImageScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
-
     try {
         const reader = new FileReader();
         reader.onload = async () => {
@@ -270,40 +257,33 @@ const handleImageScan = async (event) => {
                     body: JSON.stringify({ image: base64Image, mimeType: file.type })
                 });
                 closeConfirm();
-
                 if (!response.ok) {
                     const errorInfo = await response.json();
                     throw new Error(errorInfo.error || 'The scan failed. The server responded with an error.');
                 }
-
                 const result = await response.json();
-                fillTableFromScan(result.loans); // Pass the 'loans' array to the new function
-
+                fillTableFromScan(result.loans);
             } catch (fetchError) {
                 console.error("ERROR inside onload:", fetchError);
                 closeConfirm();
                 await showConfirm('Error', fetchError.message, false);
             }
         };
-
         reader.onerror = (error) => {
             console.error("CRITICAL: FileReader failed with an error.", error);
             closeConfirm();
             showConfirm('Error', 'Could not read the selected image file.', false);
         };
-        
         reader.readAsDataURL(file);
-
     } catch (error) {
         console.error("CRITICAL: An error was caught in the outer try/catch block.", error);
         closeConfirm();
         await showConfirm('Error', error.message, false);
     }
-
     imageUploadInput.value = '';
 };
+// --- END: Document AI Integration ---
 
-// --- END: Document AI Integration (Multi-Row Capable) ---
 // --- State Management ---
 const saveCurrentState = () => {
     if (!user) return;
@@ -340,7 +320,7 @@ const showTab = (tabId) => {
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
     if (user) {
         if (tabId === 'recentTransactionsTab') {
-            recentTransactionsList.innerHTML = '';
+            recentTransactionsListEl.innerHTML = '';
             recentTransactionsLoader.style.display = 'flex';
             loadRecentTransactions();
         }
@@ -377,7 +357,7 @@ const printAndSave = async () => {
         interestRate: interestRateEl.value,
         loans,
         createdAt: new Date(),
-        status: 'pending', // <--- This new line fixes future reports
+        status: 'pending',
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
@@ -443,11 +423,10 @@ const clearSheet = async () => {
     }
 };
 
-// --- Recent Transactions ---
+// --- Recent & Finalised Transactions ---
 const renderRecentTransactions = (filter = '') => {
     recentTransactionsListEl.innerHTML = '';
     const searchTerm = filter.toLowerCase();
-
     const filteredReports = cachedReports.filter(report => {
         if (!searchTerm) return true;
         if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
@@ -479,58 +458,29 @@ const renderRecentTransactions = (filter = '') => {
 };
 
 const loadRecentTransactions = async () => {
-    console.log("--- Starting loadRecentTransactions ---");
-    if (!user) {
-        console.log("Cannot load reports: User is not signed in.");
-        return;
-    }
-    if (!reportsCollection) {
-        console.log("Cannot load reports: Database connection (reportsCollection) is not ready.");
-        return;
-    }
-
+    if (!user) return;
     recentTransactionsLoader.style.display = 'flex';
     let onlineReports = [], localReports = [];
-
-    if (navigator.onLine) {
+    if (navigator.onLine && reportsCollection) {
         try {
-            console.log("Querying Firestore with:", `reports/${user.uid}/userReports`);
             const snapshot = await reportsCollection.where("status", "!=", "finalised").orderBy("status").orderBy("createdAt", "desc").get();
-
-            console.log(`Query successful! Firebase returned ${snapshot.size} documents.`);
-
-            if (snapshot.size > 0) {
-                snapshot.forEach(doc => {
-                    console.log("  -> Document ID:", doc.id, "Data:", doc.data());
-                });
-            }
-
             onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
-        } catch (error) {
-            console.error("--- A CRITICAL ERROR occurred during the Firestore query ---", error);
-        }
-    } else {
-        console.log("Offline mode: Skipping Firestore query.");
+        } catch (error) { console.error("Error loading online reports:", error); }
     }
-
     if (localDb) {
         localReports = (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true }));
-         console.log(`Found ${localReports.length} unsynced local reports.`);
     }
-
     cachedReports = [...localReports, ...onlineReports].sort((a, b) =>
         (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt)
     );
-
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
-    console.log("--- Finished loadRecentTransactions ---");
 };
+
 const renderFinalisedTransactions = (filter = '') => {
     const listEl = document.getElementById('finalisedTransactionsList');
     listEl.innerHTML = '';
     const searchTerm = filter.toLowerCase();
-
     const filteredReports = cachedFinalisedReports.filter(report => {
         if (!searchTerm) return true;
         if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
@@ -539,12 +489,10 @@ const renderFinalisedTransactions = (filter = '') => {
             loan.principal?.toLowerCase().includes(searchTerm)
         );
     });
-
     if (filteredReports.length === 0) {
         listEl.innerHTML = '<li>No finalised transactions found.</li>';
         return;
     }
-
     filteredReports.forEach(report => {
         const li = document.createElement('li');
         li.dataset.reportId = report.id;
@@ -560,6 +508,7 @@ const renderFinalisedTransactions = (filter = '') => {
 
 const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
+    document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
         const snapshot = await reportsCollection.where("status", "==", "finalised").orderBy("createdAt", "desc").get();
         cachedFinalisedReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
@@ -600,12 +549,10 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
 const finaliseReport = async (docId) => {
     const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
     if (!confirmed) return;
-
     if (navigator.onLine && reportsCollection) {
         try {
             await reportsCollection.doc(docId).update({ status: 'finalised' });
             await showConfirm("Success", "The report has been finalised.", false);
-            // Refresh both lists
             loadRecentTransactions();
             loadFinalisedTransactions();
         } catch (error) {
@@ -621,19 +568,16 @@ const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
         const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
         if (key !== FINALISED_DELETE_KEY) {
-            if (key !== null) { // Only show message if user didn't hit cancel
+            if (key !== null) {
                 await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
             }
             return;
         }
     }
-
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
-
     const reportToDelete = cachedReports.find(r => r.id === docId) || cachedFinalisedReports.find(r => r.id === docId);
     if (!reportToDelete) return;
-
     if (reportToDelete.isLocal) {
         await localDb.delete('unsyncedReports', docId);
     } else {
@@ -642,12 +586,9 @@ const deleteReport = async (docId, isFinalised = false) => {
                 await reportsCollection.doc(docId).delete();
             } catch (e) { console.error(e); }
         } else {
-            // Note: Deleting finalised reports while offline is not supported in this design
             await localDb.put('deletionsQueue', { docId });
         }
     }
-    
-    // Refresh the relevant list
     if (isFinalised) {
         loadFinalisedTransactions();
     } else {
@@ -655,46 +596,37 @@ const deleteReport = async (docId, isFinalised = false) => {
     }
 };
 
-
 // --- Dashboard ---
 const renderDashboard = async () => {
-    dashboardLoader.style.display = 'block'; // Show loader initially
+    dashboardLoader.style.display = 'block';
     dashboardMessage.style.display = 'none';
-
-    // Ensure finalised reports are loaded
     if (!user || !navigator.onLine) {
          dashboardMessage.textContent = "Dashboard requires an internet connection to view finalised reports.";
          dashboardMessage.style.display = 'block';
          dashboardLoader.style.display = 'none';
          return;
     }
-    
-    await loadFinalisedTransactions(); // Load the correct data
+    await loadFinalisedTransactions();
     dashboardLoader.style.display = 'none';
-
     if (cachedFinalisedReports.length === 0) {
         dashboardMessage.textContent = "No finalised data available. Finalise some reports to see the dashboard.";
         dashboardMessage.style.display = 'block';
-        // Clear old charts if they exist
         if (pieChartInstance) pieChartInstance.destroy();
         if (barChartInstance) barChartInstance.destroy();
         return;
     }
     dashboardMessage.style.display = 'none';
-
     let totalPrincipalAll = 0, totalInterestAll = 0;
     cachedFinalisedReports.forEach(report => {
         totalPrincipalAll += parseFloat(report.totals.principal);
         totalInterestAll += parseFloat(report.totals.interest);
     });
-
     const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
     if (pieChartInstance) pieChartInstance.destroy();
     pieChartInstance = new Chart(pieCtx, {
         type: 'pie',
         data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] },
     });
-
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
     const recentReports = cachedFinalisedReports.slice(0, 7).reverse();
     if (barChartInstance) barChartInstance.destroy();
@@ -719,7 +651,6 @@ const signOut = () => auth.signOut();
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
-
     auth.onAuthStateChanged(firebaseUser => {
         if (firebaseUser) {
             user = firebaseUser;
@@ -738,8 +669,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             appContainer.style.display = 'none';
         }
     });
-
-    // Action Listeners
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
@@ -750,18 +679,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     exportViewPdfBtn.addEventListener('click', exportToPDF);
     scanImageBtn.addEventListener('click', () => imageUploadInput.click());
     imageUploadInput.addEventListener('change', handleImageScan);
-
-    // Modal Listeners
     confirmOkBtn.addEventListener('click', () => closeConfirm(true));
     confirmCancelBtn.addEventListener('click', () => closeConfirm(false));
     confirmModal.addEventListener('click', (e) => { if (e.target === confirmModal) closeConfirm(false); });
-
-    // Tab Listeners
     document.querySelectorAll('.tab-button').forEach(button => {
         button.addEventListener('click', (e) => showTab(e.target.dataset.tab));
     });
-
-    // Input & Search Listeners
     todayDateEl.addEventListener('input', updateAllCalculations);
     interestRateEl.addEventListener('input', updateAllCalculations);
     todayDateEl.addEventListener('blur', (e) => {
@@ -773,12 +696,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('finalisedReportSearchInput').addEventListener('input', e => { 
         renderFinalisedTransactions(e.target.value); 
     });
-
-    // Offline/Online Listeners
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
-
-    // Event Delegation for Loan Table
     loanTableBody.addEventListener('input', e => {
         if (e.target.matches('input')) {
             const currentRow = e.target.closest('tr');
