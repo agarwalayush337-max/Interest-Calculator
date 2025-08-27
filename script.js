@@ -143,60 +143,47 @@ const formatDateToDDMMYYYY = (date) => {
 };
 const roundToNearest = (num, nearest) => Math.round(num / nearest) * nearest;
 
-// --- Serverless Calculation ---
-const updateAllCalculations = async () => {
+const days360 = (startDate, endDate) => {
+    if (!startDate || !endDate || startDate > endDate) return 0;
+    let d1 = startDate.getDate(), m1 = startDate.getMonth() + 1, y1 = startDate.getFullYear();
+    let d2 = endDate.getDate(), m2 = endDate.getMonth() + 1, y2 = endDate.getFullYear();
+    if (d1 === 31) d1 = 30;
+    if (d2 === 31 && d1 === 30) d2 = 30;
+    return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
+};
+
+const calculateInterest = (principal, rate, durationInDays) => {
+    const effectiveDuration = (durationInDays > 0 && durationInDays < 30) ? 30 : durationInDays;
+    return principal * (rate / 100 / 30) * effectiveDuration;
+};
+
+const updateAllCalculations = () => {
     const todayDate = parseDate(todayDateEl.value);
     const interestRate = parseFloat(interestRateEl.value) || 0;
+    let totalPrincipal = 0, totalInterestRaw = 0;
+    document.querySelectorAll('#loanTable tbody tr').forEach(row => {
+        const principal = parseFloat(row.querySelector('.principal').value) || 0;
+        const loanDate = parseDate(row.querySelector('.date').value);
+        const durationEl = row.querySelector('.duration');
+        const interestEl = row.querySelector('.interest');
+        
+        const duration = days360(loanDate, todayDate);
+        const interest = calculateInterest(principal, interestRate, duration);
+        const roundedInterest = roundToNearest(interest, 5);
+        const displayDuration = (duration > 0 && duration < 30) ? 30 : duration;
 
-    const rows = Array.from(document.querySelectorAll('#loanTable tbody tr'));
-    const loansToCalculate = rows.map(row => {
-        return {
-            principal: row.querySelector('.principal').value || '0',
-            date: parseDate(row.querySelector('.date').value)
-        };
+        durationEl.textContent = displayDuration > 0 ? displayDuration : '';
+        interestEl.textContent = roundedInterest > 0 ? Math.round(roundedInterest) : '';
+        
+        totalPrincipal += principal;
+        totalInterestRaw += interest;
     });
-
-    try {
-        const response = await fetch('/.netlify/functions/calculateInterest', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                loans: loansToCalculate,
-                interestRate: interestRate,
-                todayDate: todayDate
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Calculation request failed');
-        }
-
-        const { results } = await response.json();
-        let totalPrincipal = 0;
-        let totalInterestRaw = 0;
-
-        rows.forEach((row, index) => {
-            const principal = parseFloat(row.querySelector('.principal').value) || 0;
-            const result = results[index];
-
-            const roundedInterest = roundToNearest(result.interest, 5);
-
-            row.querySelector('.duration').textContent = result.duration;
-            row.querySelector('.interest').textContent = roundedInterest > 0 ? Math.round(roundedInterest) : '';
-            
-            totalPrincipal += principal;
-            totalInterestRaw += result.interest;
-        });
-
-        const roundedTotalInterest = roundToNearest(totalInterestRaw, 10);
-        totalPrincipalEl.textContent = Math.round(totalPrincipal);
-        totalInterestEl.textContent = Math.round(roundedTotalInterest);
-        finalTotalEl.textContent = Math.round(totalPrincipal + roundedTotalInterest);
-
-    } catch (error) {
-        console.error("Error calling calculation function:", error);
-    }
-
+    
+    const roundedTotalInterest = roundToNearest(totalInterestRaw, 10);
+    totalPrincipalEl.textContent = Math.round(totalPrincipal);
+    totalInterestEl.textContent = Math.round(roundedTotalInterest);
+    finalTotalEl.textContent = Math.round(totalPrincipal + roundedTotalInterest);
+    
     saveCurrentState();
 };
 
@@ -365,7 +352,7 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
 
 const printAndSave = async () => {
     cleanAndSortTable();
-    updateAllCalculations();
+    await updateAllCalculations(); // Ensure calculations are complete
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
     if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
 
@@ -403,7 +390,7 @@ const printAndSave = async () => {
 
 const exportToPDF = async () => {
     cleanAndSortTable();
-    updateAllCalculations();
+    await updateAllCalculations(); // Ensure calculations are complete
     const loans = getCurrentLoans();
     if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
