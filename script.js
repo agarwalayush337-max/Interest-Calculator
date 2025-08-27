@@ -567,17 +567,40 @@ const finaliseReport = async (docId) => {
 const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
         const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
-        if (key !== FINALISED_DELETE_KEY) {
-            if (key !== null) {
-                await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
+        if (!key) return; 
+
+        try {
+            const response = await fetch('/.netlify/functions/deleteFinalisedReport', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reportId: docId,
+                    securityKey: key
+                    // We no longer need to send the userId
+                })
+            });
+
+            if (!response.ok) {
+                const errorInfo = await response.json();
+                throw new Error(errorInfo.error || "Failed to delete report.");
             }
-            return;
+
+            await showConfirm("Success", "The finalised report has been deleted.", false);
+            loadFinalisedTransactions(); 
+
+        } catch (error) {
+            console.error("Error deleting finalised report:", error);
+            await showConfirm("Error", error.message, false);
         }
+        return; 
     }
+
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
-    const reportToDelete = cachedReports.find(r => r.id === docId) || cachedFinalisedReports.find(r => r.id === docId);
+
+    const reportToDelete = cachedReports.find(r => r.id === docId);
     if (!reportToDelete) return;
+
     if (reportToDelete.isLocal) {
         await localDb.delete('unsyncedReports', docId);
     } else {
@@ -589,13 +612,8 @@ const deleteReport = async (docId, isFinalised = false) => {
             await localDb.put('deletionsQueue', { docId });
         }
     }
-    if (isFinalised) {
-        loadFinalisedTransactions();
-    } else {
-        loadRecentTransactions();
-    }
+    loadRecentTransactions();
 };
-
 // --- Dashboard ---
 const renderDashboard = async () => {
     dashboardLoader.style.display = 'block';
@@ -651,9 +669,8 @@ const signOut = () => auth.signOut();
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
-  auth.onAuthStateChanged(async (firebaseUser) => {
+ auth.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
-        // A user has signed in. Now, check if they are authorized.
         const userEmail = firebaseUser.email;
         const userRef = db.collection('allowedUsers').doc(userEmail);
 
@@ -663,7 +680,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // --- USER IS AUTHORIZED ---
                 console.log("User is authorized. Access granted.");
                 user = firebaseUser;
-                reportsCollection = db.collection('reports').doc(user.uid).collection('userReports');
+                // This line is CHANGED to point to the new shared collection
+                reportsCollection = db.collection('sharedReports'); 
+
                 authStatusEl.textContent = user.displayName || user.email;
                 loginOverlay.style.display = 'none';
                 appContainer.style.display = 'block';
@@ -676,14 +695,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // --- USER IS NOT AUTHORIZED ---
                 console.warn("Unauthorized user attempted to sign in:", userEmail);
                 await showConfirm("Access Denied", "You are not authorized to use this application.", false);
-                auth.signOut(); // Force sign-out
+                auth.signOut();
             }
         } catch (error) {
             console.error("Authorization check failed:", error);
             await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
-            auth.signOut(); // Force sign-out on error
+            auth.signOut();
         }
-
     } else {
         // User is signed out
         user = null;
