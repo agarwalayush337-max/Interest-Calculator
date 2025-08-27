@@ -458,23 +458,52 @@ const renderRecentTransactions = (filter = '') => {
 };
 
 const loadRecentTransactions = async () => {
-    if (!user) return;
+    console.log("--- Starting loadRecentTransactions with SIMPLEST query ---");
+    if (!user || !reportsCollection) {
+        console.log("User or DB collection is not ready.");
+        recentTransactionsLoader.style.display = 'none';
+        return;
+    }
+
     recentTransactionsLoader.style.display = 'flex';
-    let onlineReports = [], localReports = [];
-    if (navigator.onLine && reportsCollection) {
+    let onlineReports = [];
+
+    if (navigator.onLine) {
         try {
-            const snapshot = await reportsCollection.where("status", "!=", "finalised").orderBy("status").orderBy("createdAt", "desc").get();
+            console.log("Executing the simplest possible query: reportsCollection.get()");
+            
+            // --- THIS IS THE SIMPLIFIED QUERY ---
+            const snapshot = await reportsCollection.get();
+            
+            console.log(`SIMPLE QUERY successful! Firebase returned ${snapshot.size} documents.`);
+            
+            if (snapshot.size > 0) {
+                snapshot.forEach(doc => {
+                    console.log("  -> Found Document ID:", doc.id, "Data:", doc.data());
+                });
+            }
+            
             onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
-        } catch (error) { console.error("Error loading online reports:", error); }
+        } catch (error) {
+            console.error("--- A CRITICAL ERROR occurred during the SIMPLE query ---", error);
+        }
+    } else {
+        console.log("Offline mode, skipping Firestore query.");
     }
-    if (localDb) {
-        localReports = (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true }));
-    }
-    cachedReports = [...localReports, ...onlineReports].sort((a, b) =>
-        (b.createdAt?.toDate?.() || b.createdAt) - (a.createdAt?.toDate?.() || a.createdAt)
-    );
+    
+    // This part handles displaying whatever is found
+    const localReports = (localDb) ? (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true })) : [];
+    
+    // A safer sort function in case createdAt is missing
+    cachedReports = [...localReports, ...onlineReports].sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || 0;
+        const dateB = b.createdAt?.toDate?.() || 0;
+        return dateB - dateA;
+    });
+
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
+    console.log("--- Finished loadRecentTransactions with SIMPLEST query ---");
 };
 
 const renderFinalisedTransactions = (filter = '') => {
