@@ -108,9 +108,6 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
                inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
     transition: box-shadow 0.2s ease;
 }
-#interestRateContainer {
-    max-width: 250px;
-}
 .input-field input:focus {
     outline: none;
     box-shadow: inset 3px 3px 7px var(--shadow-dark),
@@ -322,3 +319,15 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     th, td { border-bottom: 1px solid #ccc; }
 }
 .print-header { display: none; }
+
+/* --- Width Adjustments --- */
+#interestRateContainer {
+    width: 150px;
+}
+#todayDateContainer {
+    max-width: 200px;
+}
+#recentSearchContainer,
+#finalisedSearchContainer {
+    max-width: 200px;
+}
