@@ -380,6 +380,7 @@ const printAndSave = async () => {
         createdAt: new Date(),
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
+    console.log('Step 2: Report object created. About to start saving process...');
 
     if (navigator.onLine && reportsCollection) {
         const baseName = `Summary of ${reportDate}`;
@@ -396,6 +397,8 @@ const printAndSave = async () => {
         await localDb.put('unsyncedReports', report);
         await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
+    console.log('Step 3: Saving process finished. About to print...');
+    
     document.getElementById('printTitle').textContent = `Interest Report`;
     document.getElementById('printDate').textContent = `As of ${reportDate}`;
     window.print();
