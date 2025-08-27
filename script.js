@@ -366,6 +366,7 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
     })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
 
 const printAndSave = async () => {
+    console.log("Save button clicked, printAndSave function started!"); // <-- ADD THIS LINE
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
