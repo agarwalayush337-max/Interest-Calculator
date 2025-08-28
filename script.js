@@ -432,9 +432,14 @@ const exportToPDF = async () => {
     const lastTable = doc.lastAutoTable;
     const tableY = lastTable.finalY + 10;
 
-    // Get column centers manually
-    const principalColX = lastTable.columnPositions[2] + lastTable.columnWidths[2] / 2;
-    const interestColX  = lastTable.columnPositions[5] + lastTable.columnWidths[5] / 2;
+    // Manually compute column positions (pageWidth = 210mm for A4, margin ~10)
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 10;
+    const usableWidth = pageWidth - margin * 2;
+    const colWidth = usableWidth / 7;
+
+    const principalColX = margin + colWidth * 2 + colWidth / 2; // 3rd column center
+    const interestColX  = margin + colWidth * 5 + colWidth / 2; // 6th column center
 
     // --- Total Principal ---
     doc.setFontSize(10).setFont("helvetica", "normal");
@@ -466,6 +471,7 @@ const exportToPDF = async () => {
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
+
 
 
 
