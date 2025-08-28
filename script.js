@@ -435,37 +435,39 @@ const exportToPDF = async () => {
         },
         // This function draws the custom two-line footer under the table
         didDrawPage: function (data) {
-            const table = data.table;
-            const finalY = table.finalY;
+            if (data.table) {
+                const table = data.table;
+                const finalY = table.finalY;
 
-            if (typeof finalY !== 'number') return;
+                if (typeof finalY !== 'number') return;
 
-            // --- Draw Total Principal (Two Lines) ---
-            if (table.columns[2]) {
-                const principalCol = table.columns[2];
-                const principalX = principalCol.x + (principalCol.width / 2);
-                
-                doc.setFontSize(8);
-                doc.setFont("helvetica", "normal");
-                doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
+                // --- Draw Total Principal (Two Lines) ---
+                if (table.columns[2]) {
+                    const principalCol = table.columns[2];
+                    const principalX = principalCol.x + (principalCol.width / 2);
+                    
+                    doc.setFontSize(8);
+                    doc.setFont("helvetica", "normal");
+                    doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
 
-                doc.setFontSize(14);
-                doc.setFont("helvetica", "bold");
-                doc.text(String(totalPrincipalEl.textContent), principalX, finalY + 14, { align: 'center' });
-            }
+                    doc.setFontSize(14);
+                    doc.setFont("helvetica", "bold");
+                    doc.text(String(totalPrincipalEl.textContent), principalX, finalY + 14, { align: 'center' });
+                }
 
-            // --- Draw Total Interest (Two Lines) ---
-            if (table.columns[5]) {
-                const interestCol = table.columns[5];
-                const interestX = interestCol.x + (interestCol.width / 2);
+                // --- Draw Total Interest (Two Lines) ---
+                if (table.columns[5]) {
+                    const interestCol = table.columns[5];
+                    const interestX = interestCol.x + (interestCol.width / 2);
 
-                doc.setFontSize(8);
-                doc.setFont("helvetica", "normal");
-                doc.text('Total Interest', interestX, finalY + 8, { align: 'center' });
+                    doc.setFontSize(8);
+                    doc.setFont("helvetica", "normal");
+                    doc.text('Total Interest', interestX, finalY + 8, { align: 'center' });
 
-                doc.setFontSize(14);
-                doc.setFont("helvetica", "bold");
-                doc.text(String(totalInterestEl.textContent), interestX, finalY + 14, { align: 'center' });
+                    doc.setFontSize(14);
+                    doc.setFont("helvetica", "bold");
+                    doc.text(String(totalInterestEl.textContent), interestX, finalY + 14, { align: 'center' });
+                }
             }
         }
     });
@@ -492,8 +494,8 @@ const exportToPDF = async () => {
 
     // Add custom totals below the table
     const tableFinalY = doc.autoTable.previous.finalY + 30;
-    if (table.columns[2]) {
-        const principalCol = table.columns[2];
+    if (doc.autoTable.previous && doc.autoTable.previous.columns[2]) {
+        const principalCol = doc.autoTable.previous.columns[2];
         const principalX = principalCol.x + (principalCol.width / 2);
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
@@ -502,8 +504,8 @@ const exportToPDF = async () => {
         doc.setFont("helvetica", "bold");
         doc.text(String(totalPrincipalEl.textContent), principalX, tableFinalY + 10, { align: 'center' });
     }
-    if (table.columns[5]) {
-        const interestCol = table.columns[5];
+    if (doc.autoTable.previous && doc.autoTable.previous.columns[5]) {
+        const interestCol = doc.autoTable.previous.columns[5];
         const interestX = interestCol.x + (interestCol.width / 2);
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
