@@ -424,53 +424,60 @@ const exportToPDF = async () => {
         styles: {
             halign: 'center'
         },
-        // This function adds the custom footer aligned with the table columns
+        // This is the updated, safer version of the function
         didDrawPage: function (data) {
             const table = data.table;
             const finalY = table.finalY;
 
-            // --- Draw Total Principal ---
-            const principalCol = table.columns[2]; 
-            const principalX = principalCol.x + principalCol.width; 
-            
+            // Safety check: Don't run if the table's position is not calculated
+            if (typeof finalY !== 'number') return;
+
             doc.setFontSize(10);
-            doc.setFont("helvetica", "bold");
-            doc.text(totalPrincipalEl.textContent, principalX - 2, finalY + 8, { align: 'right' });
-            doc.setFont("helvetica", "normal");
-            doc.text('Total Principal', principalX + 2, finalY + 8);
+
+            // --- Draw Total Principal ---
+            // Safety check: Only draw if the column exists
+            if (table.columns[2]) {
+                const principalCol = table.columns[2];
+                const principalX = principalCol.x + principalCol.width;
+                
+                doc.setFont("helvetica", "bold");
+                // Safety check: Ensure the text is a string
+                doc.text(String(totalPrincipalEl.textContent), principalX - 2, finalY + 8, { align: 'right' });
+                doc.setFont("helvetica", "normal");
+                doc.text('Total Principal', principalX + 2, finalY + 8);
+            }
 
             // --- Draw Total Interest ---
-            const interestCol = table.columns[5];
-            const interestX = interestCol.x + interestCol.width;
+            // Safety check: Only draw if the column exists
+            if (table.columns[5]) {
+                const interestCol = table.columns[5];
+                const interestX = interestCol.x + interestCol.width;
 
-            doc.setFont("helvetica", "bold");
-            doc.text(totalInterestEl.textContent, interestX - 2, finalY + 8, { align: 'right' });
-            doc.setFont("helvetica", "normal");
-            doc.text('Total Interest', interestX + 2, finalY + 8);
+                doc.setFont("helvetica", "bold");
+                doc.text(String(totalInterestEl.textContent), interestX - 2, finalY + 8, { align: 'right' });
+                doc.setFont("helvetica", "normal");
+                doc.text('Total Interest', interestX + 2, finalY + 8);
+            }
         }
     });
 
     const finalY = doc.autoTable.previous.finalY;
 
-    // --- Final Totals on the right side (WITH ALL THREE LINES RESTORED) ---
+    // --- Final Totals on the right side ---
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
 
-    // Define positions for the two columns
     const numberColumnX = 160;
     const labelColumnX = 165;
     
-    // Total Principal (Restored)
-    doc.text(totalPrincipalEl.textContent, numberColumnX, finalY + 17, { align: 'right' });
+    doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalY + 17, { align: 'right' });
     doc.text('Total Principal', labelColumnX, finalY + 17, { align: 'left' });
     
-    // Total Interest (Restored)
-    doc.text(totalInterestEl.textContent, numberColumnX, finalY + 24, { align: 'right' });
+    doc.text(String(totalInterestEl.textContent), numberColumnX, finalY + 24, { align: 'right' });
     doc.text('Total Interest', labelColumnX, finalY + 24, { align: 'left' });
     
-    // Total Amount
     doc.setFont("helvetica", "bold");
-    doc.text(finalTotalEl.textContent, numberColumnX, finalY + 31, { align: 'right' });
+    doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
