@@ -397,18 +397,12 @@ const exportToPDF = async () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // --- Custom Colors ---
-    const primaryColor = '#3D52D5'; // A nice blue for headers
-    const secondaryColor = '#E0E5EC'; // Light grey for alternating rows
+    // --- 1. Date on the top right, smaller letters ---
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Date- ${todayDateEl.value}`, 200, 20, { align: 'right' });
 
-    // --- Date in Big Letters (Top Left) ---
-    doc.setFontSize(28); // Larger font size for the date
-    doc.setFont("helvetica", "bold");
-    doc.text(`${todayDateEl.value}`, 14, 25); // Use todayDateEl.value for the report date
-    doc.setFont("helvetica", "normal"); // Reset font
-    doc.setFontSize(11); // Reset font size for other text
-
-    // --- Prepare Table Data including totals ---
+    // --- Prepare Table Data ---
     const tableBodyData = loans.map((loan, i) => [
         i + 1, 
         loan.no, 
@@ -417,65 +411,62 @@ const exportToPDF = async () => {
         loan.duration, 
         loan.interest
     ]);
-
-    // Add Total Principal and Total Interest rows to the table body
-    tableBodyData.push(
-        [{ content: 'Total Principal', colSpan: 2, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }, { content: totalPrincipalEl.textContent, styles: { fontStyle: 'bold' } }, '', '', { content: totalInterestEl.textContent, styles: { fontStyle: 'bold' } }],
-        // This row is tricky because autoTable doesn't easily support dynamic colspan for just one cell within the data array.
-        // It's better to add the totals below the table as individual text elements.
-        // For now, let's keep the two lines for principal and interest, but merge them visually below.
-    );
+    
+    // --- 4. Add Totals row at the end of the table body ---
+    tableBodyData.push([
+        { content: 'Total', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: totalPrincipalEl.textContent, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: '', colSpan: 2 }, // Empty cells for Date and Duration
+        { content: totalInterestEl.textContent, styles: { halign: 'right', fontStyle: 'bold' } }
+    ]);
 
 
     doc.autoTable({
-        startY: 35, // Adjust startY to give space for the new date header
+        startY: 30,
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest']],
         body: tableBodyData,
-        theme: 'striped',
+        theme: 'grid', // A clean theme with grid lines
+        // --- 6. New modern color scheme ---
         headStyles: {
-            fillColor: primaryColor, // Header background color
-            textColor: [255, 255, 255], // Header text color (white)
-            fontStyle: 'bold'
+            fillColor: [41, 49, 51], // Dark Charcoal
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
         },
-        alternateRowStyles: {
-            fillColor: secondaryColor // Alternating row background color
+        // --- 3. Align headers ---
+        headerStyles: {
+            halign: 'center'
         },
-        styles: {
-            fontSize: 9, // Smaller font for table content
-            cellPadding: 2,
-        },
+        // --- 2 & 3. Auto-width and field alignment ---
         columnStyles: {
-            0: { cellWidth: 10 }, // SL
-            1: { cellWidth: 20 }, // No
-            2: { cellWidth: 25, halign: 'right' }, // Principal
-            3: { cellWidth: 25 }, // Date
-            4: { cellWidth: 25, halign: 'right' }, // Duration
-            5: { cellWidth: 25, halign: 'right' } // Interest
+            2: { halign: 'right' }, // Principal
+            4: { halign: 'right' }, // Duration
+            5: { halign: 'right' }  // Interest
         },
-        didDrawCell: (data) => {
-            // This is a custom hook to style the total rows if they were added as a regular row
-            // If we add totals as regular rows in tableBodyData, we can style them here.
-            // For now, we'll draw them as separate text below.
+        // Style the final "Total" row
+        didParseCell: function (data) {
+            if (data.row.index === tableBodyData.length - 1) {
+                data.cell.styles.fillColor = '#f5f5f5'; // Light grey for the totals row
+                data.cell.styles.fontSize = 10;
+            }
         }
     });
 
     const finalY = doc.autoTable.previous.finalY;
 
-    // --- Totals at Bottom Left (New Format) ---
+    // --- 5. Final Totals on the right side ---
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
 
     // Total Principal
-    doc.text(`${totalPrincipalEl.textContent} Total Principal`, 14, finalY + 10);
+    doc.text(`${totalPrincipalEl.textContent} Total Principal`, 200, finalY + 10, { align: 'right' });
     // Total Interest
-    doc.text(`${totalInterestEl.textContent} Total Interest`, 14, finalY + 17);
+    doc.text(`${totalInterestEl.textContent} Total Interest`, 200, finalY + 17, { align: 'right' });
+    // Total Amount
     doc.setFont("helvetica", "bold");
-    // Final Total Amount
-    doc.text(`${finalTotalEl.textContent} Final Total Amount`, 14, finalY + 24);
+    doc.text(`${finalTotalEl.textContent} Total Amount`, 200, finalY + 24, { align: 'right' });
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
-
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
