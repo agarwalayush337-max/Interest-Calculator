@@ -354,7 +354,7 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
 // This is the final, most robust version of the PDF generation function
 const generatePDF = async (action = 'save') => {
     cleanAndSortTable();
-    await updateAllCalculations();
+    updateAllCalculations(); // Corrected: Removed incorrect await
     const loans = getCurrentLoans();
     if (loans.length === 0) {
         showConfirm("Cannot Generate PDF", "Please add loan data to generate a report.", false);
@@ -407,20 +407,22 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    // --- THIS IS THE UPDATED SECTION ---
-    if (action === 'print') {
-        // Add the autoPrint command to the PDF document
+    // --- This section checks for the device type ---
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (action === 'print' && !isMobile) {
+        // On DESKTOP, use the auto-print method
         doc.autoPrint();
-        // Open the PDF in a new window. The PDF itself will trigger the print dialog.
         doc.output('dataurlnewwindow');
     } else {
-        // Default action is to download the file
+        // On MOBILE (for the 'print' action) or for any 'save' action, directly download the file
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
+
 const printAndSave = async () => {
     cleanAndSortTable();
-    await updateAllCalculations();
+    updateAllCalculations(); // Corrected: Removed incorrect await
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
     if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
 
@@ -450,12 +452,9 @@ const printAndSave = async () => {
         await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
 
-    // Instead of window.print(), we now call our PDF generator
     generatePDF('print');
-
     loadRecentTransactions();
 };
-
 
 const exportToPDF = () => {
     generatePDF('save');
