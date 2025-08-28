@@ -490,6 +490,29 @@ const exportToPDF = async () => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalSummaryY + 14, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalSummaryY + 14, { align: 'left' });
 
+    // Add custom totals below the table
+    const tableFinalY = doc.autoTable.previous.finalY + 30;
+    if (table.columns[2]) {
+        const principalCol = table.columns[2];
+        const principalX = principalCol.x + (principalCol.width / 2);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text('Total Principal', principalX, tableFinalY, { align: 'center' });
+        doc.setFontSize(20);
+        doc.setFont("helvetica", "bold");
+        doc.text(String(totalPrincipalEl.textContent), principalX, tableFinalY + 10, { align: 'center' });
+    }
+    if (table.columns[5]) {
+        const interestCol = table.columns[5];
+        const interestX = interestCol.x + (interestCol.width / 2);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text('Total Interest', interestX, tableFinalY, { align: 'center' });
+        doc.setFontSize(20);
+        doc.setFont("helvetica", "bold");
+        doc.text(String(totalInterestEl.textContent), interestX, tableFinalY + 10, { align: 'center' });
+    }
+
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
 
