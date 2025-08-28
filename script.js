@@ -402,19 +402,25 @@ const exportToPDF = async () => {
     doc.setFont("helvetica", "normal");
     doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
 
-    // Prepare Table Data
-    const tableBodyData = loans.map((loan, i) => [
-        i + 1,
-        loan.no,
-        loan.principal,
-        loan.date,
-        loan.duration,
-        loan.interest
-    ]);
+    // Prepare Table Data with Total column
+    const tableBodyData = loans.map((loan, i) => {
+        const principal = parseFloat(loan.principal) || 0;
+        const interest = parseFloat(loan.interest) || 0;
+        const total = Math.round(principal + interest);
+        return [
+            i + 1,
+            loan.no,
+            loan.principal,
+            loan.date,
+            loan.duration,
+            loan.interest,
+            String(total)
+        ];
+    });
 
     doc.autoTable({
         startY: 30,
-        head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest']],
+        head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
         body: tableBodyData,
         theme: 'striped',
         headStyles: {
@@ -424,61 +430,50 @@ const exportToPDF = async () => {
         styles: {
             halign: 'center'
         },
-        // This is the updated, safer version of the function
+        // This function creates the custom two-line footer
         didDrawPage: function (data) {
             const table = data.table;
             const finalY = table.finalY;
 
-            // Safety check: Don't run if the table's position is not calculated
             if (typeof finalY !== 'number') return;
 
-            doc.setFontSize(10);
-
-            // --- Draw Total Principal ---
-            // Safety check: Only draw if the column exists
+            // --- Draw Total Principal (Two Lines) ---
             if (table.columns[2]) {
                 const principalCol = table.columns[2];
-                const principalX = principalCol.x + principalCol.width;
+                // Calculate the center position of the Principal column
+                const principalX = principalCol.x + (principalCol.width / 2);
                 
-                doc.setFont("helvetica", "bold");
-                // Safety check: Ensure the text is a string
-                doc.text(String(totalPrincipalEl.textContent), principalX - 2, finalY + 8, { align: 'right' });
+                // Line 1: The label (small font)
+                doc.setFontSize(8);
                 doc.setFont("helvetica", "normal");
-                doc.text('Total Principal', principalX + 2, finalY + 8);
+                doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
+
+                // Line 2: The value (large, bold font)
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.text(String(totalPrincipalEl.textContent), principalX, finalY + 14, { align: 'center' });
             }
 
-            // --- Draw Total Interest ---
-            // Safety check: Only draw if the column exists
+            // --- Draw Total Interest (Two Lines) ---
             if (table.columns[5]) {
                 const interestCol = table.columns[5];
-                const interestX = interestCol.x + interestCol.width;
+                // Calculate the center position of the Interest column
+                const interestX = interestCol.x + (interestCol.width / 2);
 
-                doc.setFont("helvetica", "bold");
-                doc.text(String(totalInterestEl.textContent), interestX - 2, finalY + 8, { align: 'right' });
+                // Line 1: The label (small font)
+                doc.setFontSize(8);
                 doc.setFont("helvetica", "normal");
-                doc.text('Total Interest', interestX + 2, finalY + 8);
+                doc.text('Total Interest', interestX, finalY + 8, { align: 'center' });
+
+                // Line 2: The value (large, bold font)
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.text(String(totalInterestEl.textContent), interestX, finalY + 14, { align: 'center' });
             }
         }
     });
-
-    const finalY = doc.autoTable.previous.finalY;
-
-    // --- Final Totals on the right side ---
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-
-    const numberColumnX = 160;
-    const labelColumnX = 165;
     
-    doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalY + 17, { align: 'right' });
-    doc.text('Total Principal', labelColumnX, finalY + 17, { align: 'left' });
-    
-    doc.text(String(totalInterestEl.textContent), numberColumnX, finalY + 24, { align: 'right' });
-    doc.text('Total Interest', labelColumnX, finalY + 24, { align: 'left' });
-    
-    doc.setFont("helvetica", "bold");
-    doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
-    doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
+    // The separate summary at the very bottom is no longer needed with this new design.
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
