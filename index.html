@@ -4,8 +4,8 @@
     <title>Interest Calculator</title>
     <meta name="theme-color" content="#E0E5EC">
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="icon-192x192.png">
     <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="icon" href="icon-192x192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -40,10 +40,6 @@
 
         <div id="calculatorTab" class="tab-content active">
             <div class="main-content">
-                <div class="print-header">
-                    <p id="printDateHeader"></p>
-                </div>
-
                 <div class="input-group">
                     <div class="input-field" id="todayDateContainer">
                         <label for="todayDate">Today's Date</label>
@@ -64,17 +60,11 @@
                                 <th>Date</th>
                                 <th>Duration (Days)</th>
                                 <th>Interest</th>
-                                <th>Total</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody></tbody>
                     </table>
-                </div>
-
-                <div class="print-footer">
-                    <div id="printTableFooter"></div>
-                    <div id="printFinalTotals"></div>
                 </div>
 
                 <div class="action-bar" id="mainActionBar">
@@ -107,18 +97,67 @@
                         <p id="finalTotal">0</p>
                     </div>
                 </div>
+                
+                <div class="print-header">
+                    <h1 id="printTitle">Interest Report</h1>
+                    <p id="printDate"></p>
+                </div>
             </div>
         </div>
 
         <div id="recentTransactionsTab" class="tab-content">
+            <div class="main-content">
+                <h2>Recent Transactions</h2>
+                 <div class="input-field search-bar" id="recentSearchContainer">
+                    <label for="reportSearchInput">Search Reports</label>
+                    <input type="search" id="reportSearchInput" placeholder="Search by Date, No, or Amount...">
+                </div>
+                 <div id="recentTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                <ul id="recentTransactionsList"></ul>
             </div>
-        <div id="finalisedTransactionsTab" class="tab-content">
-            </div>
-        <div id="dashboardTab" class="tab-content">
-            </div>
-    </div>
-    <div id="confirmModal" class="modal-overlay" style="display: none;">
         </div>
+
+        <div id="finalisedTransactionsTab" class="tab-content">
+            <div class="main-content">
+                <h2>Finalised Transactions</h2>
+                <div class="input-field search-bar" id="finalisedSearchContainer">
+                    <label for="finalisedReportSearchInput">Search Finalised Reports</label>
+                    <input type="search" id="finalisedReportSearchInput" placeholder="Search by Report Name, Loan No, or Principal...">
+                </div>
+                <div id="finalisedTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                <ul id="finalisedTransactionsList"></ul>
+            </div>
+        </div>
+
+        <div id="dashboardTab" class="tab-content">
+            <div class="main-content">
+                <h2>Dashboard</h2>
+                <div id="dashboardContent" class="dashboard-grid">
+                    <div class="chart-container">
+                        <h3>Principal vs. Interest (All Reports)</h3>
+                        <canvas id="totalsPieChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Total Principal per Report (Last 7)</h3>
+                        <canvas id="principalBarChart"></canvas>
+                    </div>
+                </div>
+                 <div id="dashboardLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                 <p id="dashboardMessage" style="display: none;"></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h2 id="confirmTitle">Confirmation</h2>
+            <p id="confirmMessage">Are you sure?</p>
+            <div class="modal-actions">
+                <button id="confirmCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmOkBtn" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
     
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
@@ -130,3 +169,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 
     <script src="script.js"></script></body></html>
+
+
+
