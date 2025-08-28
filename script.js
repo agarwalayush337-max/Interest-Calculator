@@ -351,6 +351,7 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
     })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
 
 // This is the updated central function for creating the PDF
+// This is the final, most robust version of the PDF generation function
 const generatePDF = async (action = 'save') => {
     cleanAndSortTable();
     await updateAllCalculations();
@@ -406,21 +407,27 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    // --- THIS IS THE UPDATED SECTION ---
-    // Decide what to do with the generated PDF
+    // --- THIS IS THE UPDATED AND MORE ROBUST SECTION ---
     if (action === 'print') {
-        // Use the iframe method to print directly without opening a new tab
         const iframe = document.createElement('iframe');
-        iframe.style.display = 'none'; // Make it invisible
-        iframe.src = doc.output('datauristring'); // Load the PDF into the iframe
+        iframe.style.display = 'none';
+        iframe.src = doc.output('datauristring');
         document.body.appendChild(iframe);
-        
-        // Wait for the iframe to load, then trigger the print dialog
-        iframe.onload = () => {
-            iframe.contentWindow.print();
-            // Remove the iframe after a short delay
-            setTimeout(() => { document.body.removeChild(iframe); }, 1000);
-        };
+
+        // Give the iframe a moment to load the PDF content, then try to print
+        setTimeout(() => {
+            try {
+                iframe.contentWindow.print();
+            } catch (e) {
+                console.error("Direct print failed:", e);
+                // If direct print is blocked, fall back to opening the PDF in a new tab
+                alert("Could not open print dialog automatically. Your PDF will open in a new tab for printing.");
+                doc.output('dataurlnewwindow');
+            } finally {
+                // Clean up the iframe after a short delay
+                setTimeout(() => { document.body.removeChild(iframe); }, 2000);
+            }
+        }, 500); // 0.5 second delay
     } else {
         // Default action is to download the file
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
