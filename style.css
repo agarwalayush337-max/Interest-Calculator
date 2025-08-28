@@ -327,57 +327,101 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     tr { page-break-inside: avoid; }
     th, td { border-bottom: 1px solid #ccc; }
 }
-.print-header { display: none; }
+/* --- (The first part of the stylesheet is the same) --- */
 
-/* --- Width Adjustments --- */
-#interestRateContainer {
-    width: 100px;
+/* This hides our new print sections in the normal browser view */
+.print-header, .print-footer {
+    display: none;
 }
-#todayDateContainer {
-    max-width: 110px;
-}
-#recentSearchContainer,
-#finalisedSearchContainer {
-    max-width: 270px;
-}
-/* --- Responsive Styles for Mobile --- */
-@media screen and (max-width: 768px) {
-    
-    /* Reduce padding for more space on small screens */
+
+
+/* --- NEW AND IMPROVED PRINT STYLES --- */
+@media print {
+    /* Basic setup */
     body {
-        padding: 0.5rem;
-    }
-    .main-content {
         padding: 1rem;
+        font-size: 10pt;
+        background: white;
+        color: black;
     }
 
-    /* Stack the main header items vertically */
-    header {
-        flex-direction: column;
-        gap: 1rem;
-        padding: 1rem;
+    /* Hide everything that is not the report */
+    header, .tabs, .action-bar, .totals-summary, .login-overlay, .input-group, #recentTransactionsTab, #finalisedTransactionsTab, #dashboardTab {
+        display: none !important;
+    }
+    
+    /* Show our special print-only sections */
+    .print-header {
+        display: block !important;
+        text-align: right;
+        margin-bottom: 2rem;
+        font-size: 12pt;
     }
 
-    /* Make the top input boxes stack cleanly */
-    .input-group {
-        grid-template-columns: 1fr; /* Stack instead of side-by-side */
+    /* Table styling */
+    .container, .main-content, .table-container {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        margin: 0;
     }
-    #todayDateContainer, #interestRateContainer {
-        width: auto;
-        max-width: none;
-    }
-
-    /* --- New Table Style: Horizontal Scroll --- */
-    .table-container {
-        /* This is the key property. It adds a scrollbar if the content is too wide. */
-        overflow-x: auto;
-
-        /* This helps scrolling feel smoother on touch devices */
-        -webkit-overflow-scrolling: touch;
-    }
-
-    /* Ensure the table itself uses all the space it needs and inputs don't wrap */
     table {
-        white-space: nowrap;
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: center;
+    }
+    th {
+        font-weight: bold;
+        background-color: #f2f2f2;
+    }
+    tr:nth-child(even) {
+        background-color: #f9f9f9; /* Striped rows */
+    }
+    td:last-child {
+        display: none; /* Hide the 'X' button column */
+    }
+    th:last-child {
+        display: none;
+    }
+
+    /* Print Footer Styling */
+    .print-footer {
+        display: block !important;
+        margin-top: 2rem;
+    }
+    #printTableFooter {
+        display: flex;
+        justify-content: space-around;
+        width: 60%;
+        margin: 0 auto 2rem auto;
+        text-align: center;
+    }
+    .print-footer-item .print-label {
+        font-size: 8pt;
+    }
+    .print-footer-item .print-value {
+        font-size: 14pt;
+        font-weight: bold;
+    }
+
+    #printFinalTotals {
+        text-align: right;
+        font-size: 12pt;
+    }
+    #printFinalTotals > div {
+        margin-bottom: 0.5rem;
+    }
+    #printFinalTotals span {
+        display: inline-block;
+        width: 100px;
+        text-align: right;
+        margin-right: 1rem;
+    }
+    #printFinalTotals .bold {
+        font-weight: bold;
     }
 }
