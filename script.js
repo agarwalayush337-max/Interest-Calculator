@@ -407,31 +407,17 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    // --- THIS IS THE UPDATED SECTION USING A BLOB URL ---
+    // --- THIS IS THE UPDATED SECTION ---
     if (action === 'print') {
-        // Create a Blob from the PDF data.
-        const pdfBlob = doc.output('blob');
-        // Create a temporary, same-origin URL for the Blob.
-        const blobUrl = URL.createObjectURL(pdfBlob);
-
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = blobUrl;
-        document.body.appendChild(iframe);
-
-        // The onload event is more reliable with blob URLs.
-        iframe.onload = () => {
-            iframe.contentWindow.print();
-            // Clean up the temporary URL and iframe after printing.
-            URL.revokeObjectURL(blobUrl);
-            setTimeout(() => { document.body.removeChild(iframe); }, 100);
-        };
+        // Add the autoPrint command to the PDF document
+        doc.autoPrint();
+        // Open the PDF in a new window. The PDF itself will trigger the print dialog.
+        doc.output('dataurlnewwindow');
     } else {
-        // Default action is to download the file.
+        // Default action is to download the file
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
-
 const printAndSave = async () => {
     cleanAndSortTable();
     await updateAllCalculations();
