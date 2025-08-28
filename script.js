@@ -590,7 +590,7 @@ const finaliseReport = async (docId) => {
             }
             const reportData = reportDoc.data();
             
-            const newName = `Final Hisab Of ${reportData.reportDate}`;
+            const newName = `Final Hisab of ${reportData.reportDate}`;
 
             await reportsCollection.doc(docId).update({ 
                 status: 'finalised',
