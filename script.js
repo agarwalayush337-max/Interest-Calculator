@@ -400,7 +400,7 @@ const exportToPDF = async () => {
     // Date on the top right, smaller and shifted left
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
-    doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
+    doc.text(`Date- ${todayDateEl.value || ''}`, 190, 20, { align: 'right' });
 
     // Prepare Table Data, including the new 'Total' column value
     const tableBodyData = loans.map((loan, i) => {
@@ -409,31 +409,22 @@ const exportToPDF = async () => {
         const total = Math.round(principal + interest);
         return [
             i + 1,
-            loan.no,
-            loan.principal,
-            loan.date,
-            loan.duration,
-            loan.interest,
+            loan.no || '',
+            principal.toString(),
+            loan.date || '',
+            loan.duration || '',
+            interest.toString(),
             String(total)
         ];
     });
 
     doc.autoTable({
         startY: 30,
-        // Add 'Total' to the table header
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
         body: tableBodyData,
-        // Use the striped theme as requested
         theme: 'striped',
-        // Center-align all content
-        headStyles: {
-            halign: 'center',
-            fontStyle: 'bold'
-        },
-        styles: {
-            halign: 'center'
-        },
-        // This function draws the custom two-line footer under the table
+        headStyles: { halign: 'center', fontStyle: 'bold' },
+        styles: { halign: 'center' },
         didDrawPage: function (data) {
             if (data.table) {
                 const table = data.table;
@@ -445,14 +436,16 @@ const exportToPDF = async () => {
                 if (table.columns[2]) {
                     const principalCol = table.columns[2];
                     const principalX = principalCol.x + (principalCol.width / 2);
-                    
+                    const principalText = totalPrincipalEl ? totalPrincipalEl.textContent || '0' : '0';
+                    const interestText = totalInterestEl ? totalInterestEl.textContent || '0' : '0';
+
                     doc.setFontSize(8);
                     doc.setFont("helvetica", "normal");
                     doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
 
                     doc.setFontSize(14);
                     doc.setFont("helvetica", "bold");
-                    doc.text(String(totalPrincipalEl.textContent), principalX, finalY + 14, { align: 'center' });
+                    doc.text(principalText, principalX, finalY + 14, { align: 'center' });
                 }
 
                 // --- Draw Total Interest (Two Lines) ---
@@ -466,34 +459,37 @@ const exportToPDF = async () => {
 
                     doc.setFontSize(14);
                     doc.setFont("helvetica", "bold");
-                    doc.text(String(totalInterestEl.textContent), interestX, finalY + 14, { align: 'center' });
+                    doc.text(interestText, interestX, finalY + 14, { align: 'center' });
                 }
             }
         }
     });
 
-    // Calculate a new Y position for the final summary, adding space for the custom footer
-    const finalSummaryY = doc.autoTable.previous.finalY + 20;
+    // Calculate a new Y position for the final summary
+    const finalSummaryY = doc.autoTable.previous ? doc.autoTable.previous.finalY + 20 : 50;
 
-    // --- Final Totals on the right side (All three lines) ---
+    // --- Final Totals on the right side ---
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
 
     const numberColumnX = 160;
     const labelColumnX = 165;
-    
-    doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalSummaryY, { align: 'right' });
+    const principalText = totalPrincipalEl ? totalPrincipalEl.textContent || '0' : '0';
+    const interestText = totalInterestEl ? totalInterestEl.textContent || '0' : '0';
+    const finalText = finalTotalEl ? finalTotalEl.textContent || '0' : '0';
+
+    doc.text(principalText, numberColumnX, finalSummaryY, { align: 'right' });
     doc.text('Total Principal', labelColumnX, finalSummaryY, { align: 'left' });
     
-    doc.text(String(totalInterestEl.textContent), numberColumnX, finalSummaryY + 7, { align: 'right' });
+    doc.text(interestText, numberColumnX, finalSummaryY + 7, { align: 'right' });
     doc.text('Total Interest', labelColumnX, finalSummaryY + 7, { align: 'left' });
     
     doc.setFont("helvetica", "bold");
-    doc.text(String(finalTotalEl.textContent), numberColumnX, finalSummaryY + 14, { align: 'right' });
+    doc.text(finalText, numberColumnX, finalSummaryY + 14, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalSummaryY + 14, { align: 'left' });
 
     // Add custom totals below the table
-    const tableFinalY = doc.autoTable.previous.finalY + 30;
+    const tableFinalY = doc.autoTable.previous ? doc.autoTable.previous.finalY + 30 : 80;
     if (doc.autoTable.previous && doc.autoTable.previous.columns[2]) {
         const principalCol = doc.autoTable.previous.columns[2];
         const principalX = principalCol.x + (principalCol.width / 2);
@@ -502,7 +498,7 @@ const exportToPDF = async () => {
         doc.text('Total Principal', principalX, tableFinalY, { align: 'center' });
         doc.setFontSize(20);
         doc.setFont("helvetica", "bold");
-        doc.text(String(totalPrincipalEl.textContent), principalX, tableFinalY + 10, { align: 'center' });
+        doc.text(principalText, principalX, tableFinalY + 10, { align: 'center' });
     }
     if (doc.autoTable.previous && doc.autoTable.previous.columns[5]) {
         const interestCol = doc.autoTable.previous.columns[5];
@@ -512,12 +508,11 @@ const exportToPDF = async () => {
         doc.text('Total Interest', interestX, tableFinalY, { align: 'center' });
         doc.setFontSize(20);
         doc.setFont("helvetica", "bold");
-        doc.text(String(totalInterestEl.textContent), interestX, tableFinalY + 10, { align: 'center' });
+        doc.text(interestText, interestX, tableFinalY + 10, { align: 'center' });
     }
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
-
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
