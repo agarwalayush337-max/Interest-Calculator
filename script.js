@@ -407,55 +407,20 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    // --- THIS IS THE UPDATED SECTION ---
-    if (action === 'print') {
-        // Add the autoPrint command to the PDF document
+    // --- THIS IS THE UPDATED SECTION WITH MOBILE DETECTION ---
+    
+    // Simple check for mobile devices
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (action === 'print' && !isMobile) {
+        // On DESKTOP, use the auto-print method
         doc.autoPrint();
-        // Open the PDF in a new window. The PDF itself will trigger the print dialog.
         doc.output('dataurlnewwindow');
     } else {
-        // Default action is to download the file
+        // On MOBILE (for 'print' action) or for any 'save' action, directly download the file
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
-const printAndSave = async () => {
-    cleanAndSortTable();
-    await updateAllCalculations();
-    const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
-    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
-
-    const reportDate = todayDateEl.value;
-    const report = {
-        reportDate,
-        interestRate: interestRateEl.value,
-        loans,
-        createdAt: new Date(),
-        status: 'pending',
-        totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
-    };
-
-    if (navigator.onLine && reportsCollection) {
-        const baseName = `Summary of ${reportDate}`;
-        const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
-        report.reportName = querySnapshot.size > 0 ? `${baseName} (${querySnapshot.size + 1})` : baseName;
-        report.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        try {
-            await reportsCollection.add(report);
-            await showConfirm("Success", "Report saved to the cloud.", false);
-        } catch (error) { console.error("Error saving online:", error); }
-    } else {
-        report.localId = `local_${Date.now()}`;
-        report.reportName = `(Unsynced) Summary of ${reportDate}`;
-        await localDb.put('unsyncedReports', report);
-        await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
-    }
-
-    // Instead of window.print(), we now call our PDF generator
-    generatePDF('print');
-
-    loadRecentTransactions();
-};
-
 
 const exportToPDF = () => {
     generatePDF('save');
