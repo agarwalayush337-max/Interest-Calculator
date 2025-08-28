@@ -390,14 +390,14 @@ const printAndSave = async () => {
 
 const exportToPDF = async () => {
     cleanAndSortTable();
-    updateAllCalculations();
+    updateAllCalculations(); // Ensure calculations are complete
     const loans = getCurrentLoans();
     if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Date on the top right
+    // Date on the top right, smaller and shifted left
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
@@ -414,7 +414,7 @@ const exportToPDF = async () => {
             loan.date,
             loan.duration,
             loan.interest,
-            String(total) // Add the new total to the row data
+            String(total)
         ];
     });
 
@@ -423,7 +423,9 @@ const exportToPDF = async () => {
         // Add 'Total' to the table header
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
         body: tableBodyData,
+        // Use the striped theme as requested
         theme: 'striped',
+        // Center-align all content
         headStyles: {
             halign: 'center',
             fontStyle: 'bold'
@@ -431,7 +433,7 @@ const exportToPDF = async () => {
         styles: {
             halign: 'center'
         },
-        // This function adds the custom two-line footer
+        // This function draws the custom two-line footer under the table
         didDrawPage: function (data) {
             const table = data.table;
             const finalY = table.finalY;
@@ -442,9 +444,11 @@ const exportToPDF = async () => {
             if (table.columns[2]) {
                 const principalCol = table.columns[2];
                 const principalX = principalCol.x + (principalCol.width / 2);
+                
                 doc.setFontSize(8);
                 doc.setFont("helvetica", "normal");
                 doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
+
                 doc.setFontSize(14);
                 doc.setFont("helvetica", "bold");
                 doc.text(String(totalPrincipalEl.textContent), principalX, finalY + 14, { align: 'center' });
@@ -454,9 +458,11 @@ const exportToPDF = async () => {
             if (table.columns[5]) {
                 const interestCol = table.columns[5];
                 const interestX = interestCol.x + (interestCol.width / 2);
+
                 doc.setFontSize(8);
                 doc.setFont("helvetica", "normal");
                 doc.text('Total Interest', interestX, finalY + 8, { align: 'center' });
+
                 doc.setFontSize(14);
                 doc.setFont("helvetica", "bold");
                 doc.text(String(totalInterestEl.textContent), interestX, finalY + 14, { align: 'center' });
@@ -473,13 +479,13 @@ const exportToPDF = async () => {
 
     const numberColumnX = 160;
     const labelColumnX = 165;
-
+    
     doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalSummaryY, { align: 'right' });
     doc.text('Total Principal', labelColumnX, finalSummaryY, { align: 'left' });
-
+    
     doc.text(String(totalInterestEl.textContent), numberColumnX, finalSummaryY + 7, { align: 'right' });
     doc.text('Total Interest', labelColumnX, finalSummaryY + 7, { align: 'left' });
-
+    
     doc.setFont("helvetica", "bold");
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalSummaryY + 14, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalSummaryY + 14, { align: 'left' });
