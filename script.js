@@ -390,31 +390,88 @@ const printAndSave = async () => {
 
 const exportToPDF = async () => {
     cleanAndSortTable();
-    updateAllCalculations();
+    updateAllCalculations(); // Ensure calculations are complete
     const loans = getCurrentLoans();
     if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    doc.setFontSize(18);
-    doc.text("Interest Report", 14, 22);
-    doc.setFontSize(11);
-    doc.text(`As of Date: ${todayDateEl.value}`, 14, 29);
-    doc.text(`Interest Rate: ${interestRateEl.value}% (Monthly)`, 120, 29);
+    // --- Custom Colors ---
+    const primaryColor = '#3D52D5'; // A nice blue for headers
+    const secondaryColor = '#E0E5EC'; // Light grey for alternating rows
+
+    // --- Date in Big Letters (Top Left) ---
+    doc.setFontSize(28); // Larger font size for the date
+    doc.setFont("helvetica", "bold");
+    doc.text(`${todayDateEl.value}`, 14, 25); // Use todayDateEl.value for the report date
+    doc.setFont("helvetica", "normal"); // Reset font
+    doc.setFontSize(11); // Reset font size for other text
+
+    // --- Prepare Table Data including totals ---
+    const tableBodyData = loans.map((loan, i) => [
+        i + 1, 
+        loan.no, 
+        loan.principal, 
+        loan.date, 
+        loan.duration, 
+        loan.interest
+    ]);
+
+    // Add Total Principal and Total Interest rows to the table body
+    tableBodyData.push(
+        [{ content: 'Total Principal', colSpan: 2, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }, { content: totalPrincipalEl.textContent, styles: { fontStyle: 'bold' } }, '', '', { content: totalInterestEl.textContent, styles: { fontStyle: 'bold' } }],
+        // This row is tricky because autoTable doesn't easily support dynamic colspan for just one cell within the data array.
+        // It's better to add the totals below the table as individual text elements.
+        // For now, let's keep the two lines for principal and interest, but merge them visually below.
+    );
+
 
     doc.autoTable({
-        startY: 35,
+        startY: 35, // Adjust startY to give space for the new date header
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest']],
-        body: loans.map((loan, i) => [i + 1, loan.no, loan.principal, loan.date, loan.duration, loan.interest]),
+        body: tableBodyData,
+        theme: 'striped',
+        headStyles: {
+            fillColor: primaryColor, // Header background color
+            textColor: [255, 255, 255], // Header text color (white)
+            fontStyle: 'bold'
+        },
+        alternateRowStyles: {
+            fillColor: secondaryColor // Alternating row background color
+        },
+        styles: {
+            fontSize: 9, // Smaller font for table content
+            cellPadding: 2,
+        },
+        columnStyles: {
+            0: { cellWidth: 10 }, // SL
+            1: { cellWidth: 20 }, // No
+            2: { cellWidth: 25, halign: 'right' }, // Principal
+            3: { cellWidth: 25 }, // Date
+            4: { cellWidth: 25, halign: 'right' }, // Duration
+            5: { cellWidth: 25, halign: 'right' } // Interest
+        },
+        didDrawCell: (data) => {
+            // This is a custom hook to style the total rows if they were added as a regular row
+            // If we add totals as regular rows in tableBodyData, we can style them here.
+            // For now, we'll draw them as separate text below.
+        }
     });
 
     const finalY = doc.autoTable.previous.finalY;
+
+    // --- Totals at Bottom Left (New Format) ---
     doc.setFontSize(12);
-    doc.text(`Total Principal: ${totalPrincipalEl.textContent}`, 14, finalY + 10);
-    doc.text(`Total Interest: ${totalInterestEl.textContent}`, 14, finalY + 17);
+    doc.setFont("helvetica", "normal");
+
+    // Total Principal
+    doc.text(`${totalPrincipalEl.textContent} Total Principal`, 14, finalY + 10);
+    // Total Interest
+    doc.text(`${totalInterestEl.textContent} Total Interest`, 14, finalY + 17);
     doc.setFont("helvetica", "bold");
-    doc.text(`Final Total Amount: ${finalTotalEl.textContent}`, 14, finalY + 24);
+    // Final Total Amount
+    doc.text(`${finalTotalEl.textContent} Final Total Amount`, 14, finalY + 24);
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
