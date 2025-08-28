@@ -506,8 +506,20 @@ const renderFinalisedTransactions = (filter = '') => {
     filteredReports.forEach(report => {
         const li = document.createElement('li');
         li.dataset.reportId = report.id;
+
+        // Format the createdAt timestamp
+        let creationDate = '';
+        if (report.createdAt && report.createdAt.toDate) {
+            creationDate = report.createdAt.toDate().toLocaleString('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            }).toLowerCase();
+        }
+
         li.innerHTML = `
-            <span>${report.reportName || `Report from ${report.reportDate}`}</span>
+            <div style="flex-grow: 1;">
+                <span style="font-weight: 600;">${report.reportName || `Report from ${report.reportDate}`}</span>
+                <div style="font-size: 0.8rem; color: var(--subtle-text-color);">${creationDate}</div>
+            </div>
             <div class="button-group">
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true)">View</button>
                 <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Delete</button>
@@ -520,8 +532,21 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        const snapshot = await reportsCollection.where("status", "==", "finalised").orderBy("createdAt", "desc").get();
-        cachedFinalisedReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
+        // We only filter by status, sorting will be done in the browser
+        const snapshot = await reportsCollection.where("status", "==", "finalised").get();
+        let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
+        
+        // Sort reports by reportDate (descending) in the browser
+        reports.sort((a, b) => {
+            const dateA = parseDate(a.reportDate);
+            const dateB = parseDate(b.reportDate);
+            if (!dateA) return 1;
+            if (!dateB) return -1;
+            return dateB - dateA; // Sorts newest date first
+        });
+
+        cachedFinalisedReports = reports;
+
     } catch (error) {
         console.error("Error loading finalised reports:", error);
     }
@@ -574,40 +599,39 @@ const finaliseReport = async (docId) => {
     }
 };
 
-const deleteReport = async (docId, isFinalised = false) => {
-    if (isFinalised) {
-        const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
-        if (key !== FINALISED_DELETE_KEY) {
-            if (key !== null) { 
-                await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
-            }
-            return;
-        }
-    }
-
-    const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
+const finaliseReport = async (docId) => {
+    const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
     if (!confirmed) return;
 
     if (navigator.onLine && reportsCollection) {
         try {
-            await reportsCollection.doc(docId).delete();
-            await showConfirm("Success", "The report has been deleted.", false);
+            // First, get the report to read its date
+            const reportDoc = await reportsCollection.doc(docId).get();
+            if (!reportDoc.exists) {
+                throw new Error("Report not found.");
+            }
+            const reportData = reportDoc.data();
+            
+            // Create the new name
+            const newName = `Final Hisab Of ${reportData.reportDate}`;
+
+            // Update the status and the reportName at the same time
+            await reportsCollection.doc(docId).update({ 
+                status: 'finalised',
+                reportName: newName 
+            });
+
+            await showConfirm("Success", "The report has been finalised.", false);
+            loadRecentTransactions();
+            loadFinalisedTransactions();
         } catch (error) {
-            console.error("Error deleting report:", error);
-            await showConfirm("Error", "Failed to delete the report.", false);
+            console.error("Error finalising report:", error);
+            await showConfirm("Error", "Could not finalise the report.", false);
         }
     } else {
-        await showConfirm("Offline", "You must be online to delete reports.", false);
-        return;
-    }
-    
-    if (isFinalised) {
-        loadFinalisedTransactions();
-    } else {
-        loadRecentTransactions();
+        await showConfirm("Offline", "You must be online to finalise a report.", false);
     }
 };
-
 // --- Dashboard ---
 const renderDashboard = async () => {
     dashboardLoader.style.display = 'block';
