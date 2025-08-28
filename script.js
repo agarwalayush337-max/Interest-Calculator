@@ -390,14 +390,14 @@ const printAndSave = async () => {
 
 const exportToPDF = async () => {
     cleanAndSortTable();
-    updateAllCalculations(); 
+    updateAllCalculations(); // Ensure calculations are complete
     const loans = getCurrentLoans();
     if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Date on top right
+    // Date on the top right
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
@@ -418,56 +418,59 @@ const exportToPDF = async () => {
         ];
     });
 
-    // Generate table
+    // --- NEW: Add the final "TOTAL" row to the table data ---
+    tableBodyData.push([
+        { 
+            content: 'TOTAL', 
+            colSpan: 2, 
+            styles: { halign: 'right', fontStyle: 'bold' } 
+        },
+        { 
+            content: totalPrincipalEl.textContent, 
+            styles: { halign: 'center', fontStyle: 'bold', fontSize: 11 } 
+        },
+        '', // Empty cell for Date
+        '', // Empty cell for Duration
+        { 
+            content: totalInterestEl.textContent, 
+            styles: { halign: 'center', fontStyle: 'bold', fontSize: 11 } 
+        },
+        '' // Empty cell for the row Total
+    ]);
+
     doc.autoTable({
         startY: 30,
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
         body: tableBodyData,
         theme: 'striped',
-        headStyles: { halign: 'center', fontStyle: 'bold' },
-        styles: { halign: 'center' }
+        headStyles: {
+            halign: 'center',
+            fontStyle: 'bold'
+        },
+        styles: {
+            halign: 'center'
+        }
+        // The didDrawPage hook is no longer needed and has been removed.
     });
 
-    // After table ends
-    const lastTable = doc.lastAutoTable;
-    const tableY = lastTable.finalY + 10;
+    const finalY = doc.autoTable.previous.finalY;
 
-    // Manually compute column positions (pageWidth = 210mm for A4, margin ~10)
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 10;
-    const usableWidth = pageWidth - margin * 2;
-    const colWidth = usableWidth / 7;
+    // --- Final Totals on the right side ---
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
 
-    const principalColX = margin + colWidth * 2 + colWidth / 2; // 3rd column center
-    const interestColX  = margin + colWidth * 5 + colWidth / 2; // 6th column center
-
-    // --- Total Principal ---
-    doc.setFontSize(10).setFont("helvetica", "normal");
-    doc.text('Total Principal', principalColX, tableY, { align: 'center' });
-    doc.setFontSize(22).setFont("helvetica", "bold");
-    doc.text(String(totalPrincipalEl.textContent), principalColX, tableY + 12, { align: 'center' });
-
-    // --- Total Interest ---
-    doc.setFontSize(10).setFont("helvetica", "normal");
-    doc.text('Total Interest', interestColX, tableY, { align: 'center' });
-    doc.setFontSize(22).setFont("helvetica", "bold");
-    doc.text(String(totalInterestEl.textContent), interestColX, tableY + 12, { align: 'center' });
-
-    // --- Right Side Summary ---
-    const finalSummaryY = lastTable.finalY + 40;
     const numberColumnX = 160;
     const labelColumnX = 165;
-
-    doc.setFontSize(12).setFont("helvetica", "normal");
-    doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalSummaryY, { align: 'right' });
-    doc.text('Total Principal', labelColumnX, finalSummaryY, { align: 'left' });
-
-    doc.text(String(totalInterestEl.textContent), numberColumnX, finalSummaryY + 7, { align: 'right' });
-    doc.text('Total Interest', labelColumnX, finalSummaryY + 7, { align: 'left' });
-
+    
+    doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalY + 17, { align: 'right' });
+    doc.text('Total Principal', labelColumnX, finalY + 17, { align: 'left' });
+    
+    doc.text(String(totalInterestEl.textContent), numberColumnX, finalY + 24, { align: 'right' });
+    doc.text('Total Interest', labelColumnX, finalY + 24, { align: 'left' });
+    
     doc.setFont("helvetica", "bold");
-    doc.text(String(finalTotalEl.textContent), numberColumnX, finalSummaryY + 14, { align: 'right' });
-    doc.text('Total Amount', labelColumnX, finalSummaryY + 14, { align: 'left' });
+    doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
+    doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
