@@ -429,24 +429,31 @@ const exportToPDF = async () => {
     });
 
     // After table ends
-    const tableY = doc.autoTable.previous.finalY + 10;
+    const lastTable = doc.lastAutoTable;
+    const tableY = lastTable.finalY + 10;
 
-    // --- Total Principal under Principal column ---
-    const principalColX = doc.autoTable.previous.columns[2].x + (doc.autoTable.previous.columns[2].width / 2);
-    doc.setFontSize(10).setFont("helvetica", "normal");
-    doc.text('Total Principal', principalColX, tableY, { align: 'center' });
-    doc.setFontSize(22).setFont("helvetica", "bold");
-    doc.text(String(totalPrincipalEl.textContent), principalColX, tableY + 12, { align: 'center' });
+    // Find Principal and Interest column positions
+    const principalCol = lastTable.columns.find(col => col.dataKey === 2);
+    const interestCol = lastTable.columns.find(col => col.dataKey === 5);
 
-    // --- Total Interest under Interest column ---
-    const interestColX = doc.autoTable.previous.columns[5].x + (doc.autoTable.previous.columns[5].width / 2);
-    doc.setFontSize(10).setFont("helvetica", "normal");
-    doc.text('Total Interest', interestColX, tableY, { align: 'center' });
-    doc.setFontSize(22).setFont("helvetica", "bold");
-    doc.text(String(totalInterestEl.textContent), interestColX, tableY + 12, { align: 'center' });
+    if (principalCol) {
+        const principalX = principalCol.x + principalCol.width / 2;
+        doc.setFontSize(10).setFont("helvetica", "normal");
+        doc.text('Total Principal', principalX, tableY, { align: 'center' });
+        doc.setFontSize(22).setFont("helvetica", "bold");
+        doc.text(String(totalPrincipalEl.textContent), principalX, tableY + 12, { align: 'center' });
+    }
+
+    if (interestCol) {
+        const interestX = interestCol.x + interestCol.width / 2;
+        doc.setFontSize(10).setFont("helvetica", "normal");
+        doc.text('Total Interest', interestX, tableY, { align: 'center' });
+        doc.setFontSize(22).setFont("helvetica", "bold");
+        doc.text(String(totalInterestEl.textContent), interestX, tableY + 12, { align: 'center' });
+    }
 
     // --- Right Side Summary ---
-    const finalSummaryY = doc.autoTable.previous.finalY + 40;
+    const finalSummaryY = lastTable.finalY + 40;
     const numberColumnX = 160;
     const labelColumnX = 165;
 
