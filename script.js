@@ -407,29 +407,27 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    // --- THIS IS THE UPDATED AND MORE ROBUST SECTION ---
+    // --- THIS IS THE UPDATED SECTION USING A BLOB URL ---
     if (action === 'print') {
+        // Create a Blob from the PDF data.
+        const pdfBlob = doc.output('blob');
+        // Create a temporary, same-origin URL for the Blob.
+        const blobUrl = URL.createObjectURL(pdfBlob);
+
         const iframe = document.createElement('iframe');
         iframe.style.display = 'none';
-        iframe.src = doc.output('datauristring');
+        iframe.src = blobUrl;
         document.body.appendChild(iframe);
 
-        // Give the iframe a moment to load the PDF content, then try to print
-        setTimeout(() => {
-            try {
-                iframe.contentWindow.print();
-            } catch (e) {
-                console.error("Direct print failed:", e);
-                // If direct print is blocked, fall back to opening the PDF in a new tab
-                alert("Could not open print dialog automatically. Your PDF will open in a new tab for printing.");
-                doc.output('dataurlnewwindow');
-            } finally {
-                // Clean up the iframe after a short delay
-                setTimeout(() => { document.body.removeChild(iframe); }, 2000);
-            }
-        }, 500); // 0.5 second delay
+        // The onload event is more reliable with blob URLs.
+        iframe.onload = () => {
+            iframe.contentWindow.print();
+            // Clean up the temporary URL and iframe after printing.
+            URL.revokeObjectURL(blobUrl);
+            setTimeout(() => { document.body.removeChild(iframe); }, 100);
+        };
     } else {
-        // Default action is to download the file
+        // Default action is to download the file.
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
