@@ -166,6 +166,7 @@ const updateAllCalculations = () => {
         const loanDate = parseDate(row.querySelector('.date').value);
         const durationEl = row.querySelector('.duration');
         const interestEl = row.querySelector('.interest');
+        const totalEl = row.querySelector('.total');
         
         const duration = days360(loanDate, todayDate);
         const interest = calculateInterest(principal, interestRate, duration);
@@ -174,6 +175,9 @@ const updateAllCalculations = () => {
 
         durationEl.textContent = displayDuration > 0 ? displayDuration : '';
         interestEl.textContent = roundedInterest > 0 ? Math.round(roundedInterest) : '';
+        
+        const rowTotal = principal + roundedInterest;
+        totalEl.textContent = rowTotal > 0 ? Math.round(rowTotal) : '';
         
         totalPrincipal += principal;
         totalInterestRaw += interest;
@@ -198,6 +202,7 @@ const addRow = (loan = { no: '', principal: '', date: '' }) => {
         <td><input type="text" class="date" placeholder="DD/MM/YYYY" value="${loan.date}"></td>
         <td class="read-only duration"></td>
         <td class="read-only interest"></td>
+        <td class="read-only total"></td>
         <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeRow(this)">X</button></td>`;
     renumberRows();
     updateAllCalculations();
@@ -350,16 +355,72 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
         interest: row.querySelector('.interest').textContent
     })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
 
-// This is the updated central function for creating the PDF
-// This is the final, most robust version of the PDF generation function
-const generatePDF = async (action = 'save') => {
+const printAndSave = async () => {
     cleanAndSortTable();
-    await updateAllCalculations();
-    const loans = getCurrentLoans();
-    if (loans.length === 0) {
-        showConfirm("Cannot Generate PDF", "Please add loan data to generate a report.", false);
-        return;
+    updateAllCalculations();
+    
+    // Populate the special print-only sections before printing
+    document.getElementById('printDateHeader').textContent = `Date- ${todayDateEl.value}`;
+    
+    const printTableFooter = document.getElementById('printTableFooter');
+    printTableFooter.innerHTML = `
+        <div class="print-footer-item">
+            <div class="print-label">Total Principal</div>
+            <div class="print-value">${totalPrincipalEl.textContent}</div>
+        </div>
+        <div class="print-footer-item">
+            <div class="print-label">Total Interest</div>
+            <div class="print-value">${totalInterestEl.textContent}</div>
+        </div>
+    `;
+    
+    const printFinalTotals = document.getElementById('printFinalTotals');
+    printFinalTotals.innerHTML = `
+        <div><span>${totalPrincipalEl.textContent}</span> Total Principal</div>
+        <div><span>${totalInterestEl.textContent}</span> Total Interest</div>
+        <div class="bold"><span>${finalTotalEl.textContent}</span> Total Amount</div>
+    `;
+
+    const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
+    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
+
+    const reportDate = todayDateEl.value;
+    const report = {
+        reportDate,
+        interestRate: interestRateEl.value,
+        loans,
+        createdAt: new Date(),
+        status: 'pending',
+        totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
+    };
+
+    if (navigator.onLine && reportsCollection) {
+        const baseName = `Summary of ${reportDate}`;
+        const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
+        report.reportName = querySnapshot.size > 0 ? `${baseName} (${querySnapshot.size + 1})` : baseName;
+        report.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        try {
+            await reportsCollection.add(report);
+            await showConfirm("Success", "Report saved to the cloud.", false);
+        } catch (error) { console.error("Error saving online:", error); }
+    } else {
+        report.localId = `local_${Date.now()}`;
+        report.reportName = `(Unsynced) Summary of ${reportDate}`;
+        await localDb.put('unsyncedReports', report);
+        await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
+
+    // Call the direct browser print command
+    window.print();
+
+    loadRecentTransactions();
+};
+
+const generateAndExportPDF = async () => {
+    cleanAndSortTable();
+    updateAllCalculations();
+    const loans = getCurrentLoans();
+    if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -372,7 +433,15 @@ const generatePDF = async (action = 'save') => {
         const principal = parseFloat(loan.principal) || 0;
         const interest = parseFloat(loan.interest) || 0;
         const total = Math.round(principal + interest);
-        return [i + 1, loan.no, loan.principal, loan.date, loan.duration, loan.interest, String(total)];
+        return [
+            i + 1,
+            loan.no,
+            loan.principal,
+            loan.date,
+            loan.duration,
+            loan.interest,
+            String(total)
+        ];
     });
 
     tableBodyData.push([
@@ -407,62 +476,8 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    // --- THIS IS THE UPDATED SECTION ---
-    if (action === 'print') {
-        // Add the autoPrint command to the PDF document
-        doc.autoPrint();
-        // Open the PDF in a new window. The PDF itself will trigger the print dialog.
-        doc.output('dataurlnewwindow');
-    } else {
-        // Default action is to download the file
-        doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
-    }
+    doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
-const printAndSave = async () => {
-    cleanAndSortTable();
-    await updateAllCalculations();
-    const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
-    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
-
-    const reportDate = todayDateEl.value;
-    const report = {
-        reportDate,
-        interestRate: interestRateEl.value,
-        loans,
-        createdAt: new Date(),
-        status: 'pending',
-        totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
-    };
-
-    if (navigator.onLine && reportsCollection) {
-        const baseName = `Summary of ${reportDate}`;
-        const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
-        report.reportName = querySnapshot.size > 0 ? `${baseName} (${querySnapshot.size + 1})` : baseName;
-        report.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        try {
-            await reportsCollection.add(report);
-            await showConfirm("Success", "Report saved to the cloud.", false);
-        } catch (error) { console.error("Error saving online:", error); }
-    } else {
-        report.localId = `local_${Date.now()}`;
-        report.reportName = `(Unsynced) Summary of ${reportDate}`;
-        await localDb.put('unsyncedReports', report);
-        await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
-    }
-
-    // Instead of window.print(), we now call our PDF generator
-    generatePDF('print');
-
-    loadRecentTransactions();
-};
-
-
-const exportToPDF = () => {
-    generatePDF('save');
-};
-
-
-
 
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
@@ -635,7 +650,7 @@ const finaliseReport = async (docId) => {
             }
             const reportData = reportDoc.data();
             
-            const newName = `Final Hisab of ${reportData.reportDate}`;
+            const newName = `Final Hisab Of ${reportData.reportDate}`;
 
             await reportsCollection.doc(docId).update({ 
                 status: 'finalised',
@@ -787,8 +802,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     printAndSaveBtn.addEventListener('click', printAndSave);
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
-    exportPdfBtn.addEventListener('click', exportToPDF);
-    exportViewPdfBtn.addEventListener('click', exportToPDF);
+    exportPdfBtn.addEventListener('click', generateAndExportPDF); // Corrected function name
+    exportViewPdfBtn.addEventListener('click', generateAndExportPDF); // Corrected function name
     scanImageBtn.addEventListener('click', () => imageUploadInput.click());
     imageUploadInput.addEventListener('change', handleImageScan);
     confirmOkBtn.addEventListener('click', () => closeConfirm(true));
