@@ -18,7 +18,7 @@ let localDb = null;
 let cachedReports = [];
 let cachedFinalisedReports = [];
 let pieChartInstance, barChartInstance;
-const FINALISED_DELETE_KEY = 'Ayush@81';
+const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
@@ -352,7 +352,7 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
 
 const printAndSave = async () => {
     cleanAndSortTable();
-    await updateAllCalculations(); // Ensure calculations are complete
+    updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
     if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
 
@@ -390,7 +390,7 @@ const printAndSave = async () => {
 
 const exportToPDF = async () => {
     cleanAndSortTable();
-    await updateAllCalculations(); // Ensure calculations are complete
+    updateAllCalculations();
     const loans = getCurrentLoans();
     if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
@@ -507,7 +507,6 @@ const renderFinalisedTransactions = (filter = '') => {
         const li = document.createElement('li');
         li.dataset.reportId = report.id;
 
-        // Format the createdAt timestamp
         let creationDate = '';
         if (report.createdAt && report.createdAt.toDate) {
             creationDate = report.createdAt.toDate().toLocaleString('en-IN', {
@@ -532,17 +531,15 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        // We only filter by status, sorting will be done in the browser
         const snapshot = await reportsCollection.where("status", "==", "finalised").get();
         let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         
-        // Sort reports by reportDate (descending) in the browser
         reports.sort((a, b) => {
             const dateA = parseDate(a.reportDate);
             const dateB = parseDate(b.reportDate);
             if (!dateA) return 1;
             if (!dateB) return -1;
-            return dateB - dateA; // Sorts newest date first
+            return dateB - dateA;
         });
 
         cachedFinalisedReports = reports;
@@ -587,17 +584,14 @@ const finaliseReport = async (docId) => {
 
     if (navigator.onLine && reportsCollection) {
         try {
-            // First, get the report to read its date
             const reportDoc = await reportsCollection.doc(docId).get();
             if (!reportDoc.exists) {
                 throw new Error("Report not found.");
             }
             const reportData = reportDoc.data();
             
-            // Create the new name
             const newName = `Final Hisab Of ${reportData.reportDate}`;
 
-            // Update the status and the reportName at the same time
             await reportsCollection.doc(docId).update({ 
                 status: 'finalised',
                 reportName: newName 
@@ -614,6 +608,41 @@ const finaliseReport = async (docId) => {
         await showConfirm("Offline", "You must be online to finalise a report.", false);
     }
 };
+
+const deleteReport = async (docId, isFinalised = false) => {
+    if (isFinalised) {
+        const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
+        if (key !== FINALISED_DELETE_KEY) {
+            if (key !== null) { 
+                await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
+            }
+            return;
+        }
+    }
+
+    const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
+    if (!confirmed) return;
+
+    if (navigator.onLine && reportsCollection) {
+        try {
+            await reportsCollection.doc(docId).delete();
+            await showConfirm("Success", "The report has been deleted.", false);
+        } catch (error) {
+            console.error("Error deleting report:", error);
+            await showConfirm("Error", "Failed to delete the report.", false);
+        }
+    } else {
+        await showConfirm("Offline", "You must be online to delete reports.", false);
+        return;
+    }
+    
+    if (isFinalised) {
+        loadFinalisedTransactions();
+    } else {
+        loadRecentTransactions();
+    }
+};
+
 // --- Dashboard ---
 const renderDashboard = async () => {
     dashboardLoader.style.display = 'block';
