@@ -584,24 +584,6 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
 const finaliseReport = async (docId) => {
     const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
     if (!confirmed) return;
-    if (navigator.onLine && reportsCollection) {
-        try {
-            await reportsCollection.doc(docId).update({ status: 'finalised' });
-            await showConfirm("Success", "The report has been finalised.", false);
-            loadRecentTransactions();
-            loadFinalisedTransactions();
-        } catch (error) {
-            console.error("Error finalising report:", error);
-            await showConfirm("Error", "Could not finalise the report.", false);
-        }
-    } else {
-        await showConfirm("Offline", "You must be online to finalise a report.", false);
-    }
-};
-
-const finaliseReport = async (docId) => {
-    const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
-    if (!confirmed) return;
 
     if (navigator.onLine && reportsCollection) {
         try {
