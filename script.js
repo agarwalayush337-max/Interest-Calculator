@@ -432,25 +432,21 @@ const exportToPDF = async () => {
     const lastTable = doc.lastAutoTable;
     const tableY = lastTable.finalY + 10;
 
-    // Find Principal and Interest column positions
-    const principalCol = lastTable.columns.find(col => col.dataKey === 2);
-    const interestCol = lastTable.columns.find(col => col.dataKey === 5);
+    // Get column centers manually
+    const principalColX = lastTable.columnPositions[2] + lastTable.columnWidths[2] / 2;
+    const interestColX  = lastTable.columnPositions[5] + lastTable.columnWidths[5] / 2;
 
-    if (principalCol) {
-        const principalX = principalCol.x + principalCol.width / 2;
-        doc.setFontSize(10).setFont("helvetica", "normal");
-        doc.text('Total Principal', principalX, tableY, { align: 'center' });
-        doc.setFontSize(22).setFont("helvetica", "bold");
-        doc.text(String(totalPrincipalEl.textContent), principalX, tableY + 12, { align: 'center' });
-    }
+    // --- Total Principal ---
+    doc.setFontSize(10).setFont("helvetica", "normal");
+    doc.text('Total Principal', principalColX, tableY, { align: 'center' });
+    doc.setFontSize(22).setFont("helvetica", "bold");
+    doc.text(String(totalPrincipalEl.textContent), principalColX, tableY + 12, { align: 'center' });
 
-    if (interestCol) {
-        const interestX = interestCol.x + interestCol.width / 2;
-        doc.setFontSize(10).setFont("helvetica", "normal");
-        doc.text('Total Interest', interestX, tableY, { align: 'center' });
-        doc.setFontSize(22).setFont("helvetica", "bold");
-        doc.text(String(totalInterestEl.textContent), interestX, tableY + 12, { align: 'center' });
-    }
+    // --- Total Interest ---
+    doc.setFontSize(10).setFont("helvetica", "normal");
+    doc.text('Total Interest', interestColX, tableY, { align: 'center' });
+    doc.setFontSize(22).setFont("helvetica", "bold");
+    doc.text(String(totalInterestEl.textContent), interestColX, tableY + 12, { align: 'center' });
 
     // --- Right Side Summary ---
     const finalSummaryY = lastTable.finalY + 40;
@@ -470,6 +466,7 @@ const exportToPDF = async () => {
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
+
 
 
 const clearSheet = async () => {
