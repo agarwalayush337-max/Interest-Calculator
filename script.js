@@ -390,7 +390,7 @@ const printAndSave = async () => {
 
 const exportToPDF = async () => {
     cleanAndSortTable();
-    updateAllCalculations(); // Ensure calculations are complete
+    updateAllCalculations();
     const loans = getCurrentLoans();
     if (loans.length === 0) return showConfirm("Cannot Export", "Please add loan data to export.", false);
 
@@ -402,7 +402,7 @@ const exportToPDF = async () => {
     doc.setFont("helvetica", "normal");
     doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
 
-    // Prepare Table Data with Total column
+    // Prepare Table Data, including the new 'Total' column value
     const tableBodyData = loans.map((loan, i) => {
         const principal = parseFloat(loan.principal) || 0;
         const interest = parseFloat(loan.interest) || 0;
@@ -414,12 +414,13 @@ const exportToPDF = async () => {
             loan.date,
             loan.duration,
             loan.interest,
-            String(total)
+            String(total) // Add the new total to the row data
         ];
     });
 
     doc.autoTable({
         startY: 30,
+        // Add 'Total' to the table header
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
         body: tableBodyData,
         theme: 'striped',
@@ -430,7 +431,7 @@ const exportToPDF = async () => {
         styles: {
             halign: 'center'
         },
-        // This function creates the custom two-line footer
+        // This function adds the custom two-line footer
         didDrawPage: function (data) {
             const table = data.table;
             const finalY = table.finalY;
@@ -440,15 +441,10 @@ const exportToPDF = async () => {
             // --- Draw Total Principal (Two Lines) ---
             if (table.columns[2]) {
                 const principalCol = table.columns[2];
-                // Calculate the center position of the Principal column
                 const principalX = principalCol.x + (principalCol.width / 2);
-                
-                // Line 1: The label (small font)
                 doc.setFontSize(8);
                 doc.setFont("helvetica", "normal");
                 doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
-
-                // Line 2: The value (large, bold font)
                 doc.setFontSize(14);
                 doc.setFont("helvetica", "bold");
                 doc.text(String(totalPrincipalEl.textContent), principalX, finalY + 14, { align: 'center' });
@@ -457,27 +453,39 @@ const exportToPDF = async () => {
             // --- Draw Total Interest (Two Lines) ---
             if (table.columns[5]) {
                 const interestCol = table.columns[5];
-                // Calculate the center position of the Interest column
                 const interestX = interestCol.x + (interestCol.width / 2);
-
-                // Line 1: The label (small font)
                 doc.setFontSize(8);
                 doc.setFont("helvetica", "normal");
                 doc.text('Total Interest', interestX, finalY + 8, { align: 'center' });
-
-                // Line 2: The value (large, bold font)
                 doc.setFontSize(14);
                 doc.setFont("helvetica", "bold");
                 doc.text(String(totalInterestEl.textContent), interestX, finalY + 14, { align: 'center' });
             }
         }
     });
-    
-    // The separate summary at the very bottom is no longer needed with this new design.
+
+    // Calculate a new Y position for the final summary, adding space for the custom footer
+    const finalSummaryY = doc.autoTable.previous.finalY + 20;
+
+    // --- Final Totals on the right side (All three lines) ---
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+
+    const numberColumnX = 160;
+    const labelColumnX = 165;
+
+    doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalSummaryY, { align: 'right' });
+    doc.text('Total Principal', labelColumnX, finalSummaryY, { align: 'left' });
+
+    doc.text(String(totalInterestEl.textContent), numberColumnX, finalSummaryY + 7, { align: 'right' });
+    doc.text('Total Interest', labelColumnX, finalSummaryY + 7, { align: 'left' });
+
+    doc.setFont("helvetica", "bold");
+    doc.text(String(finalTotalEl.textContent), numberColumnX, finalSummaryY + 14, { align: 'right' });
+    doc.text('Total Amount', labelColumnX, finalSummaryY + 14, { align: 'left' });
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
-
 
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
