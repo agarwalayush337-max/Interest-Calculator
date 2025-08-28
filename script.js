@@ -397,10 +397,10 @@ const exportToPDF = async () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // --- 1. Date on the top right, smaller letters ---
+    // --- 1. Date on the top right, smaller and shifted left ---
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
-    doc.text(`Date- ${todayDateEl.value}`, 200, 20, { align: 'right' });
+    doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' }); // Shifted from 200 to 190
 
     // --- Prepare Table Data ---
     const tableBodyData = loans.map((loan, i) => [
@@ -411,59 +411,45 @@ const exportToPDF = async () => {
         loan.duration, 
         loan.interest
     ]);
-    
-    // --- 4. Add Totals row at the end of the table body ---
-    tableBodyData.push([
-        { content: 'Total', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
-        { content: totalPrincipalEl.textContent, styles: { halign: 'right', fontStyle: 'bold' } },
-        { content: '', colSpan: 2 }, // Empty cells for Date and Duration
-        { content: totalInterestEl.textContent, styles: { halign: 'right', fontStyle: 'bold' } }
-    ]);
-
 
     doc.autoTable({
         startY: 30,
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest']],
         body: tableBodyData,
-        theme: 'grid', // A clean theme with grid lines
-        // --- 6. New modern color scheme ---
+        // --- 1. Bring back the earlier table design ---
+        theme: 'striped', 
+        // --- 2. Center-align all data ---
         headStyles: {
-            fillColor: [41, 49, 51], // Dark Charcoal
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
+            halign: 'center',
+            fontStyle: 'bold'
         },
-        // --- 3. Align headers ---
-        headerStyles: {
+        styles: {
             halign: 'center'
-        },
-        // --- 2 & 3. Auto-width and field alignment ---
-        columnStyles: {
-            2: { halign: 'right' }, // Principal
-            4: { halign: 'right' }, // Duration
-            5: { halign: 'right' }  // Interest
-        },
-        // Style the final "Total" row
-        didParseCell: function (data) {
-            if (data.row.index === tableBodyData.length - 1) {
-                data.cell.styles.fillColor = '#f5f5f5'; // Light grey for the totals row
-                data.cell.styles.fontSize = 10;
-            }
         }
     });
 
     const finalY = doc.autoTable.previous.finalY;
 
-    // --- 5. Final Totals on the right side ---
+    // --- 4. Align numbers and letters separately at the bottom ---
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
 
+    // Define positions for the two columns
+    const numberColumnX = 160;
+    const labelColumnX = 165;
+
     // Total Principal
-    doc.text(`${totalPrincipalEl.textContent} Total Principal`, 200, finalY + 10, { align: 'right' });
+    doc.text(totalPrincipalEl.textContent, numberColumnX, finalY + 10, { align: 'right' });
+    doc.text('Total Principal', labelColumnX, finalY + 10, { align: 'left' });
+    
     // Total Interest
-    doc.text(`${totalInterestEl.textContent} Total Interest`, 200, finalY + 17, { align: 'right' });
+    doc.text(totalInterestEl.textContent, numberColumnX, finalY + 17, { align: 'right' });
+    doc.text('Total Interest', labelColumnX, finalY + 17, { align: 'left' });
+    
     // Total Amount
     doc.setFont("helvetica", "bold");
-    doc.text(`${finalTotalEl.textContent} Total Amount`, 200, finalY + 24, { align: 'right' });
+    doc.text(finalTotalEl.textContent, numberColumnX, finalY + 24, { align: 'right' });
+    doc.text('Total Amount', labelColumnX, finalY + 24, { align: 'left' }); // Changed "Final Total Amount"
 
     doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
 };
