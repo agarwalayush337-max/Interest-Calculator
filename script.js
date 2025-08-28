@@ -426,27 +426,38 @@ const exportToPDF = async () => {
         headStyles: { halign: 'center', fontStyle: 'bold' },
         styles: { halign: 'center' },
         didDrawPage: function (data) {
-            if (data.table) {
-                const table = data.table;
-                const finalY = table.finalY;
+    const table = data.table;
+    const finalY = table.finalY;
+    if (typeof finalY !== 'number') return;
 
-                if (typeof finalY !== 'number') return;
+    // --- Draw Total Principal (Two Lines) ---
+    if (table.columns[2]) {
+        const principalCol = table.columns[2];
+        const principalX = principalCol.x + (principalCol.width / 2);
 
-                // --- Draw Total Principal (Two Lines) ---
-                if (table.columns[2]) {
-                    const principalCol = table.columns[2];
-                    const principalX = principalCol.x + (principalCol.width / 2);
-                    const principalText = totalPrincipalEl ? totalPrincipalEl.textContent || '0' : '0';
-                    const interestText = totalInterestEl ? totalInterestEl.textContent || '0' : '0';
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
 
-                    doc.setFontSize(8);
-                    doc.setFont("helvetica", "normal");
-                    doc.text('Total Principal', principalX, finalY + 8, { align: 'center' });
+        doc.setFontSize(22); // BIG font
+        doc.setFont("helvetica", "bold");
+        doc.text(String(totalPrincipalEl.textContent), principalX, finalY + 18, { align: 'center' });
+    }
 
-                    doc.setFontSize(14);
-                    doc.setFont("helvetica", "bold");
-                    doc.text(principalText, principalX, finalY + 14, { align: 'center' });
-                }
+    // --- Draw Total Interest (Two Lines) ---
+    if (table.columns[5]) {
+        const interestCol = table.columns[5];
+        const interestX = interestCol.x + (interestCol.width / 2);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text('Total Interest', interestX, finalY + 8, { align: 'center' });
+
+        doc.setFontSize(22); // BIG font
+        doc.setFont("helvetica", "bold");
+        doc.text(String(totalInterestEl.textContent), interestX, finalY + 18, { align: 'center' });
+    }
+}
 
                 // --- Draw Total Interest (Two Lines) ---
                 if (table.columns[5]) {
