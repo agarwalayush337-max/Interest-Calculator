@@ -350,8 +350,7 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
         interest: row.querySelector('.interest').textContent
     })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
 
-
-// This is the new central function for creating the PDF
+// This is the updated central function for creating the PDF
 const generatePDF = async (action = 'save') => {
     cleanAndSortTable();
     await updateAllCalculations();
@@ -407,11 +406,24 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
+    // --- THIS IS THE UPDATED SECTION ---
     // Decide what to do with the generated PDF
     if (action === 'print') {
-        doc.output('dataurlnewwindow'); // Open in new tab for printing
+        // Use the iframe method to print directly without opening a new tab
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none'; // Make it invisible
+        iframe.src = doc.output('datauristring'); // Load the PDF into the iframe
+        document.body.appendChild(iframe);
+        
+        // Wait for the iframe to load, then trigger the print dialog
+        iframe.onload = () => {
+            iframe.contentWindow.print();
+            // Remove the iframe after a short delay
+            setTimeout(() => { document.body.removeChild(iframe); }, 1000);
+        };
     } else {
-        doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`); // Download the file
+        // Default action is to download the file
+        doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
 
