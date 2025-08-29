@@ -440,30 +440,38 @@ const generatePDF = async (action = 'save') => {
 
 // A helper function to check if an identical report already exists
 const isDuplicateReport = (newReport, reportList) => {
-    // Stringify loans for easy and accurate comparison, sorting them first
-    const newReportLoansString = JSON.stringify(
-        newReport.loans.slice().sort((a, b) => a.no.localeCompare(b.no))
-    );
+    // This helper standardizes the loan array for a reliable comparison
+    const normalizeLoansForComparison = (loans) => {
+        return loans.map(l => ({
+            no: l.no.trim().toUpperCase(), // Standardize 'no' field
+            principal: parseFloat(l.principal) || 0, // Ensure principal is a number
+            date: l.date
+        })).sort((a, b) => a.no.localeCompare(b.no)); // Sort to ignore order differences
+    };
+
+    const newReportLoansString = JSON.stringify(normalizeLoansForComparison(newReport.loans));
+    const newInterestRate = parseFloat(newReport.interestRate) || 0;
 
     return reportList.some(existingReport => {
-        // First check the date and rate for a quick mismatch
+        const existingInterestRate = parseFloat(existingReport.interestRate) || 0;
+
+        // Compare date and the numeric interest rate
         if (newReport.reportDate !== existingReport.reportDate ||
-            newReport.interestRate !== existingReport.interestRate) {
+            newInterestRate !== existingInterestRate) {
             return false;
         }
 
-        // If date and rate match, do a deep check of the loans
-        const existingReportLoansString = JSON.stringify(
-            existingReport.loans.slice().sort((a, b) => a.no.localeCompare(b.no))
-        );
-
+        // If the basics match, compare the standardized loan data
+        const existingReportLoansString = JSON.stringify(normalizeLoansForComparison(existingReport.loans));
         return newReportLoansString === existingReportLoansString;
     });
 };
 
-
 // The new, primary function for saving a report
 const saveReport = async () => {
+    // **FIX**: Load the most recent reports to ensure the duplicate check is accurate
+    await loadRecentTransactions(); 
+
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
@@ -505,7 +513,7 @@ const saveReport = async () => {
         await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
 
-    loadRecentTransactions(); // Refresh the list of recent transactions
+    loadRecentTransactions(); // Refresh the list again after saving
     return true; // Indicate success
 };
 
