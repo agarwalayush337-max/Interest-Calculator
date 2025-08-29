@@ -290,7 +290,7 @@ const printAndSave = async () => {
     loadRecentTransactions();
 };
 
-const generateAndExportPDF = () => {
+const generateAndExportPDF = async () => {
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans();
@@ -310,7 +310,14 @@ const generateAndExportPDF = () => {
         { content: totalInterestEl.textContent, styles: { halign: 'center', fontStyle: 'bold', fontSize: 11 } },
         ''
     ]);
-    doc.autoTable({ startY: 30, head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']], body: tableBodyData, theme: 'striped', headStyles: { halign: 'center', fontStyle: 'bold' }, styles: { halign: 'center' } });
+    doc.autoTable({
+        startY: 30,
+        head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
+        body: tableBodyData,
+        theme: 'striped',
+        headStyles: { halign: 'center', fontStyle: 'bold' },
+        styles: { halign: 'center' }
+    });
     const finalY = doc.autoTable.previous.finalY;
     const numberColumnX = 160, labelColumnX = 165;
     doc.setFontSize(12).setFont("helvetica", "normal");
@@ -339,6 +346,7 @@ const renderRecentTransactions = (filter = '') => {
     filteredReports.forEach(report => {
         const li = document.createElement('li');
         if (report.isLocal) li.classList.add('unsynced');
+        li.dataset.reportId = report.id;
         li.innerHTML = `<span>${report.reportName || `Report from ${report.reportDate}`}</span><div class="button-group"><button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button><button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button><button class="btn btn-success" onclick="finaliseReport('${report.id}')">Finalise</button><button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button></div>`;
         recentTransactionsListEl.appendChild(li);
     });
@@ -371,6 +379,7 @@ const renderFinalisedTransactions = (filter = '') => {
     }
     filteredReports.forEach(report => {
         const li = document.createElement('li');
+        li.dataset.reportId = report.id;
         let creationDate = report.createdAt?.toDate()?.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).toLowerCase() || '';
         li.innerHTML = `<div style="flex-grow: 1;"><span style="font-weight: 600;">${report.reportName || `Report from ${report.reportDate}`}</span><div style="font-size: 0.8rem; color: var(--subtle-text-color);">${creationDate}</div></div><div class="button-group"><button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true)">View</button><button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Delete</button></div>`;
         listEl.appendChild(li);
@@ -458,19 +467,68 @@ const deleteReport = async (docId, isFinalised = false) => {
 };
 
 const renderDashboard = (reportsToRender) => {
-    // ... (This function remains unchanged)
+    dashboardLoader.style.display = 'none';
+    if (!reportsToRender || reportsToRender.length === 0) {
+        dashboardMessage.textContent = "No finalised data available for the selected date range.";
+        dashboardMessage.style.display = 'block';
+        dashboardContent.style.display = 'none';
+        if (pieChartInstance) pieChartInstance.destroy();
+        if (barChartInstance) barChartInstance.destroy();
+        return;
+    }
+    dashboardMessage.style.display = 'none';
+    dashboardContent.style.display = 'grid';
+    let totalPrincipalAll = 0, totalInterestAll = 0;
+    reportsToRender.forEach(report => {
+        totalPrincipalAll += parseFloat(report.totals.principal);
+        totalInterestAll += parseFloat(report.totals.interest);
+    });
+    const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
+    if (pieChartInstance) pieChartInstance.destroy();
+    pieChartInstance = new Chart(pieCtx, { type: 'pie', data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] } });
+    const barCtx = document.getElementById('principalBarChart').getContext('2d');
+    const recentReports = reportsToRender.slice(0, 7).reverse();
+    if (barChartInstance) barChartInstance.destroy();
+    barChartInstance = new Chart(barCtx, { type: 'bar', data: { labels: recentReports.map(r => r.reportDate), datasets: [{ label: 'Total Principal', data: recentReports.map(r => r.totals.principal), backgroundColor: '#3D52D5' }] }, options: { scales: { y: { beginAtZero: true } } } });
 };
 
 const getFinancialYearDates = (yearOffset = 0) => {
-    // ... (This function remains unchanged)
+    const today = new Date();
+    let currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    let fyStartYear;
+    if (currentMonth >= 3) { fyStartYear = currentYear; } else { fyStartYear = currentYear - 1; }
+    fyStartYear += yearOffset;
+    const startDate = new Date(fyStartYear, 3, 1);
+    const endDate = new Date(fyStartYear + 1, 2, 31);
+    return { startDate, endDate };
 };
 
 const formatDateForInput = (date) => {
-    // ... (This function remains unchanged)
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
 
 const filterAndRenderDashboard = () => {
-    // ... (This function remains unchanged)
+    if (!user || !navigator.onLine) {
+        dashboardMessage.textContent = "Dashboard requires an internet connection.";
+        dashboardMessage.style.display = 'block';
+        dashboardLoader.style.display = 'none';
+        return;
+    }
+    const startDateFilter = document.getElementById('startDateFilter').valueAsDate;
+    const endDateFilter = document.getElementById('endDateFilter').valueAsDate;
+    if (!startDateFilter || !endDateFilter) { renderDashboard([]); return; }
+    startDateFilter.setHours(0, 0, 0, 0);
+    endDateFilter.setHours(23, 59, 59, 999);
+    const filteredReports = cachedFinalisedReports.filter(report => {
+        const reportDate = parseDate(report.reportDate);
+        return reportDate >= startDateFilter && reportDate <= endDateFilter;
+    });
+    renderDashboard(filteredReports);
 };
 
 const signInWithGoogle = () => {
@@ -558,7 +616,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('filterCurrentFY').addEventListener('click', () => {
         const { startDate, endDate } = getFinancialYearDates(0);
         startDateFilterEl.value = formatDateForInput(startDate);
-endDateFilterEl.value = formatDateForInput(endDate);
+        endDateFilterEl.value = formatDateForInput(endDate);
         filterAndRenderDashboard();
     });
     document.getElementById('filterPrevFY').addEventListener('click', () => {
