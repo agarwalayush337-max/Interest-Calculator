@@ -1,4 +1,6 @@
-<!DOCTYPE html><html lang="en"><head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interest Calculator</title>
@@ -9,7 +11,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css"></head><body>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
     <div id="loginOverlay">
         <div class="login-box">
             <h1>Interest Calculator</h1>
@@ -132,6 +136,25 @@
         <div id="dashboardTab" class="tab-content">
             <div class="main-content">
                 <h2>Dashboard</h2>
+
+                <div class="dashboard-filters">
+                    <div class="date-range-picker">
+                        <div class="input-field">
+                            <label for="dashboardStartDate">Start Date</label>
+                            <input type="text" id="dashboardStartDate" placeholder="DD/MM/YYYY">
+                        </div>
+                        <div class="input-field">
+                            <label for="dashboardEndDate">End Date</label>
+                            <input type="text" id="dashboardEndDate" placeholder="DD/MM/YYYY">
+                        </div>
+                    </div>
+                    <div class="quick-filter-buttons">
+                        <button class="btn btn-secondary" id="last30DaysBtn">Last 30 Days</button>
+                        <button class="btn btn-secondary" id="currentFyBtn">Current F.Y.</button>
+                        <button class="btn btn-secondary" id="prevFyBtn">Prev. F.Y.</button>
+                    </div>
+                    <button class="btn btn-primary" id="applyDateFilterBtn">Apply Filter</button>
+                </div>
                 <div id="dashboardContent" class="dashboard-grid">
                     <div class="chart-container">
                         <h3>Principal vs. Interest (All Reports)</h3>
@@ -168,6 +191,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 
-    <script src="script.js"></script></body></html>
-
-
+    <script src="script.js"></script>
+</body>
+</html>
