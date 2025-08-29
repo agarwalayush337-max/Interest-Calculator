@@ -688,38 +688,37 @@ const deleteReport = async (docId, isFinalised = false) => {
 };
 
 // --- Dashboard ---
-const renderDashboard = async () => {
-    dashboardLoader.style.display = 'block';
-    dashboardMessage.style.display = 'none';
-    if (!user || !navigator.onLine) {
-         dashboardMessage.textContent = "Dashboard requires an internet connection to view finalised reports.";
-         dashboardMessage.style.display = 'block';
-         dashboardLoader.style.display = 'none';
-         return;
-    }
-    await loadFinalisedTransactions();
+// --- Dashboard ---
+const renderDashboard = (reportsToRender) => {
     dashboardLoader.style.display = 'none';
-    if (cachedFinalisedReports.length === 0) {
-        dashboardMessage.textContent = "No finalised data available. Finalise some reports to see the dashboard.";
+
+    if (!reportsToRender || reportsToRender.length === 0) {
+        dashboardMessage.textContent = "No finalised data available for the selected date range.";
         dashboardMessage.style.display = 'block';
+        dashboardContent.style.display = 'none';
         if (pieChartInstance) pieChartInstance.destroy();
         if (barChartInstance) barChartInstance.destroy();
         return;
     }
+
     dashboardMessage.style.display = 'none';
+    dashboardContent.style.display = 'grid';
+
     let totalPrincipalAll = 0, totalInterestAll = 0;
-    cachedFinalisedReports.forEach(report => {
+    reportsToRender.forEach(report => {
         totalPrincipalAll += parseFloat(report.totals.principal);
         totalInterestAll += parseFloat(report.totals.interest);
     });
+
     const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
     if (pieChartInstance) pieChartInstance.destroy();
     pieChartInstance = new Chart(pieCtx, {
         type: 'pie',
         data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] },
     });
+
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recentReports = cachedFinalisedReports.slice(0, 7).reverse();
+    const recentReports = reportsToRender.slice(0, 7).reverse();
     if (barChartInstance) barChartInstance.destroy();
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
@@ -727,6 +726,113 @@ const renderDashboard = async () => {
         options: { scales: { y: { beginAtZero: true } } }
     });
 };
+// --- New Dashboard Filtering Logic ---
+let initialDashboardLoad = true;
+
+const getFinancialYearDates = (yearOffset = 0) => {
+    const today = new Date();
+    let currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0 = Jan, 3 = Apr
+
+    let fyStartYear;
+    if (currentMonth >= 3) { // April or later
+        fyStartYear = currentYear;
+    } else { // Jan, Feb, Mar
+        fyStartYear = currentYear - 1;
+    }
+
+    fyStartYear += yearOffset;
+
+    const startDate = new Date(fyStartYear, 3, 1); // April 1st
+    const endDate = new Date(fyStartYear + 1, 2, 31); // March 31st
+
+    return { startDate, endDate };
+};
+
+const formatDateForInput = (date) => {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const filterAndRenderDashboard = () => {
+    if (!user || !navigator.onLine) {
+        dashboardMessage.textContent = "Dashboard requires an internet connection to view finalised reports.";
+        dashboardMessage.style.display = 'block';
+        dashboardLoader.style.display = 'none';
+        return;
+    }
+
+    const startDateFilter = document.getElementById('startDateFilter').valueAsDate;
+    const endDateFilter = document.getElementById('endDateFilter').valueAsDate;
+
+    if (!startDateFilter || !endDateFilter) {
+        renderDashboard([]); // Render empty state if dates are invalid
+        return;
+    }
+
+    // Set time to include the full start and end days
+    startDateFilter.setHours(0, 0, 0, 0);
+    endDateFilter.setHours(23, 59, 59, 999);
+
+    const filteredReports = cachedFinalisedReports.filter(report => {
+        const reportDate = parseDate(report.reportDate);
+        return reportDate >= startDateFilter && reportDate <= endDateFilter;
+    });
+
+    renderDashboard(filteredReports);
+};
+
+// Override the showTab function to handle the initial dashboard load
+const originalShowTab = showTab;
+showTab = async (tabId) => {
+    originalShowTab(tabId);
+    if (tabId === 'dashboardTab' && user) {
+        dashboardLoader.style.display = 'flex';
+        dashboardContent.style.display = 'none';
+        await loadFinalisedTransactions(); // Make sure we have the latest data
+        if (initialDashboardLoad) {
+            document.getElementById('filterCurrentFY').click(); // Default to Current F.Y. on first load
+            initialDashboardLoad = false;
+        } else {
+            filterAndRenderDashboard(); // Re-filter on subsequent views
+        }
+    }
+};
+
+// Add event listeners for the new filter controls
+document.addEventListener('DOMContentLoaded', () => {
+    const startDateFilterEl = document.getElementById('startDateFilter');
+    const endDateFilterEl = document.getElementById('endDateFilter');
+
+    startDateFilterEl.addEventListener('change', filterAndRenderDashboard);
+    endDateFilterEl.addEventListener('change', filterAndRenderDashboard);
+
+    document.getElementById('filter30Days').addEventListener('click', () => {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 30);
+        startDateFilterEl.value = formatDateForInput(startDate);
+        endDateFilterEl.value = formatDateForInput(endDate);
+        filterAndRenderDashboard();
+    });
+
+    document.getElementById('filterCurrentFY').addEventListener('click', () => {
+        const { startDate, endDate } = getFinancialYearDates(0);
+        startDateFilterEl.value = formatDateForInput(startDate);
+        endDateFilterEl.value = formatDateForInput(endDate);
+        filterAndRenderDashboard();
+    });
+
+    document.getElementById('filterPrevFY').addEventListener('click', () => {
+        const { startDate, endDate } = getFinancialYearDates(-1);
+        startDateFilterEl.value = formatDateForInput(startDate);
+        endDateFilterEl.value = formatDateForInput(endDate);
+        filterAndRenderDashboard();
+    });
+});
 
 // --- Authentication ---
 const signInWithGoogle = () => {
