@@ -95,7 +95,13 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
     margin-bottom: 1rem;
     align-items: start;
 }
-.input-field label { font-weight: 600; margin-bottom: 0.5rem; display: block; font-size: 0.9rem; white-space: nowrap; }
+.input-field label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: block;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
 .input-field.search-bar { margin-bottom: 1.5rem; }
 .input-field input {
     width: 100%;
@@ -170,9 +176,8 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     background-color: var(--success-color);
     color: white;
 }
-
 .btn-success:hover:not(:disabled) {
-    background-color: #248a7e; /* A slightly darker green for hover */
+    background-color: #248a7e;
 }
 .totals-summary {
     display: grid;
@@ -215,7 +220,7 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 #recentTransactionsList .button-group,
 #finalisedTransactionsList .button-group {
     display: flex;
-    gap: 0.7rem;
+    gap: 1rem;
 }
 #recentTransactionsList li.unsynced span::after {
     content: ' (unsynced)';
@@ -224,7 +229,29 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     color: var(--warning-color);
 }
 
-/* Dashboard Styles */
+/* --- Dashboard & Filter Styles --- */
+.dashboard-filters {
+    background: var(--background-color);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: flex-end;
+}
+.date-range {
+    display: flex;
+    gap: 1rem;
+    flex-grow: 1;
+}
+.quick-filters {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -243,7 +270,8 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     font-weight: 600;
     color: var(--subtle-text-color);
 }
-/* Sync Status Indicator */
+
+/* --- Other Component Styles --- */
 #syncStatus {
     font-size: 0.8rem;
     font-weight: 600;
@@ -273,7 +301,6 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 }
 #syncStatus.offline::before { background-color: var(--warning-color); }
 
-/* Modal Styles */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -300,7 +327,6 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 .modal-box h2 { margin-top: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; }
 
-/* Loader Styles */
 .loader-container { display: flex; justify-content: center; padding: 2rem; }
 .loader {
     border: 5px solid var(--background-color);
@@ -313,103 +339,116 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* Print Styles */
-@media print {
-    body { padding: 0; background: white; color: black; }
-    .container, .login-box, .total-item, #recentTransactionsList li, .table-container { box-shadow: none; border-radius: 0; border: none; background: white; }
-    header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child, td:last-child, .dashboard-grid, .search-bar { display: none; }
-    .main-content { padding: 0; }
-    .input-group { display: none !important; }
-    .print-header { display: block !important; text-align: center; margin-bottom: 2rem; }
-    .print-header h1 { margin: 0; font-size: 1.5rem; color: black; }
-    .print-header p { margin: 0.25rem 0 0 0; font-size: 1rem; color: #555; }
-    #loanTable input { border: none; background: transparent; padding: 0; width: 100%; color: black; }
-    tr { page-break-inside: avoid; }
-    th, td { border-bottom: 1px solid #ccc; }
-}
-.print-header { display: none; }
-
 /* --- Width Adjustments --- */
 #interestRateContainer {
     width: 100px;
 }
 #todayDateContainer {
-    max-width: 110px;
+    max-width: 100px;
 }
 #recentSearchContainer,
 #finalisedSearchContainer {
-    max-width: 270px;
+    max-width: 200px;
 }
-/* --- Responsive Styles for Mobile --- */
-@media screen and (max-width: 768px) {
-    
-    /* Reduce padding for more space on small screens */
-    body {
-        padding: 0.5rem;
-    }
-    .main-content {
-        padding: 1rem;
-    }
 
-    /* Stack the main header items vertically */
+/* This hides our new print sections in the normal browser view */
+.print-header, .print-footer {
+    display: none;
+}
+
+/* --- FINAL PRINT STYLES --- */
+@media print {
+    body {
+        padding: 1rem;
+        font-size: 10pt;
+        background: white;
+        color: black;
+    }
+    header, .tabs, .action-bar, .totals-summary, .login-overlay, .input-group, #recentTransactionsTab, #finalisedTransactionsTab, #dashboardTab, .dashboard-filters {
+        display: none !important;
+    }
+    .print-header {
+        display: block !important;
+        text-align: right;
+        margin-bottom: 2rem;
+        font-size: 12pt;
+    }
+    .container, .main-content, .table-container {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: center;
+    }
+    th {
+        font-weight: bold;
+        background-color: #f2f2f2;
+    }
+    tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+    td:last-child, th:last-child {
+        display: none;
+    }
+    .print-footer {
+        display: block !important;
+        margin-top: 2rem;
+        page-break-inside: avoid;
+    }
+    #printTableFooter {
+        display: flex;
+        justify-content: flex-end;
+        gap: 4rem;
+        padding-right: 10%;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    .print-footer-item .print-label { font-size: 8pt; }
+    .print-footer-item .print-value { font-size: 14pt; font-weight: bold; }
+    #printFinalTotals {
+        text-align: right;
+        font-size: 12pt;
+    }
+    #printFinalTotals > div { margin-bottom: 0.5rem; }
+    #printFinalTotals span {
+        display: inline-block;
+        width: 100px;
+        text-align: right;
+        margin-right: 1rem;
+    }
+    #printFinalTotals .bold { font-weight: bold; }
+}
+
+/* --- FINAL MOBILE RESPONSIVE STYLES --- */
+@media screen and (max-width: 768px) {
+    body { padding: 0.5rem; }
+    .main-content { padding: 1rem; }
     header {
         flex-direction: column;
         gap: 1rem;
         padding: 1rem;
     }
-
-    /* Make the top input boxes stack cleanly */
     .input-group {
-        grid-template-columns: 1fr; /* Stack instead of side-by-side */
+        grid-template-columns: 1fr;
     }
     #todayDateContainer, #interestRateContainer {
         width: auto;
         max-width: none;
     }
-
-    /* --- New Table Style: Horizontal Scroll --- */
     .table-container {
-        /* This is the key property. It adds a scrollbar if the content is too wide. */
         overflow-x: auto;
-
-        /* This helps scrolling feel smoother on touch devices */
         -webkit-overflow-scrolling: touch;
     }
-
-    /* Ensure the table itself uses all the space it needs and inputs don't wrap */
     table {
         white-space: nowrap;
-    }
-}
-/* --- Dashboard Filter Styles --- */
-.dashboard-filters {
-    background: var(--background-color);
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    border-radius: 12px;
-    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
-               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    align-items: flex-end;
-}
-
-.date-range {
-    display: flex;
-    gap: 1rem;
-    flex-grow: 1;
-}
-
-.quick-filters {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-/* Hide filters when printing */
-@media print {
-    .dashboard-filters {
-        display: none !important;
     }
 }
