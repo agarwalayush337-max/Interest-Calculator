@@ -29,7 +29,15 @@ exports.handler = async function(event) {
         role: 'user',
         parts: [
           { inline_data: { mimeType: mimeType, data: image } },
-          { text: `From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date'. Return the result as a clean JSON array of objects where each object has the keys "no", "principal", and "date".Format the 'Date' field into a 'DD/MM/YYYY' string. Format the 'no' field by replacing any '.',' ','-' with a '/',And if there is nothing between Alphabet And number in 'no' field then add '/'.The 'No' Field Will have a alpha numerical, and the numbers will be maximum 3, so if you see loanno Starting with Alphabet followed by 4 numbers, and if the first number is '1' then Cosider '1' as '/'. Do not include any text, explanations, or markdown formatting in your response, only the raw JSON array.` }
+          { text: `From the input image, extract all loan entries and return a raw JSON array of objects with keys "no", "principal", and "date". Do not include any text or markdown outside the final JSON.
+
+Apply these formatting rules:
+
+no: Normalize the 'LoanNo'. Replace any '.', ' ', or '-' with '/'. Insert a '/' between any alphabet and an adjacent number (e.g., 'K123' becomes 'K/123'). If the pattern is an alphabet followed by '1' and three other digits, treat '1' as the '/' separator (e.g., 'P1456' becomes 'P/456').
+
+principal: Extract as a number, stripping all currency symbols, commas, and text.
+
+date: Format as a 'DD/MM/YYYY' string. }
         ]
       }]
     };
