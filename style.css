@@ -381,3 +381,35 @@ td.read-only { font-weight: 500; font-size: 1rem; }
         white-space: nowrap;
     }
 }
+/* --- Dashboard Filter Styles --- */
+.dashboard-filters {
+    background: var(--background-color);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: flex-end;
+}
+
+.date-range {
+    display: flex;
+    gap: 1rem;
+    flex-grow: 1;
+}
+
+.quick-filters {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Hide filters when printing */
+@media print {
+    .dashboard-filters {
+        display: none !important;
+    }
+}
