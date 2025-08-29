@@ -29,15 +29,7 @@ exports.handler = async function(event) {
         role: 'user',
         parts: [
           { inline_data: { mimeType: mimeType, data: image } },
-          { text: `From the input image, extract all loan entries and return a raw JSON array of objects with keys "no", "principal", and "date". Do not include any text or markdown outside the final JSON.
-
-Apply these formatting rules:
-
-no: Normalize the 'LoanNo'. Replace any '.', ' ', or '-' with '/'. Insert a '/' between any alphabet and an adjacent number (e.g., 'K123' becomes 'K/123'). If the pattern is an alphabet followed by '1' and three other digits, treat '1' as the '/' separator (e.g., 'P1456' becomes 'P/456').
-
-principal: Extract as a number, stripping all currency symbols, commas, and text.
-
-date: Format as a 'DD/MM/YYYY' string. }
+          { text: `From the input image, extract loan entries into a raw JSON array of objects with keys 'no', 'principal', 'date'. Format 'no' by replacing '.', ' ', or '-' with '/', inserting '/' between letters and adjacent numbers (e.g., K123->K/123), and if a letter is followed by 4 digits where the first is '1', treat '1' as '/' (e.g., P1456->P/456); format 'principal' as a number, stripping symbols/text; and format 'date' as 'DD/MM/YYYY'. }
         ]
       }]
     };
