@@ -21,6 +21,12 @@ let pieChartInstance, barChartInstance;
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
 // --- DOM Elements ---
+const dashboardStartDateEl = document.getElementById('dashboardStartDate');
+const dashboardEndDateEl = document.getElementById('dashboardEndDate');
+const last30DaysBtn = document.getElementById('last30DaysBtn');
+const currentFyBtn = document.getElementById('currentFyBtn');
+const prevFyBtn = document.getElementById('prevFyBtn');
+const applyDateFilterBtn = document.getElementById('applyDateFilterBtn');
 const loginOverlay = document.getElementById('loginOverlay');
 const appContainer = document.getElementById('appContainer');
 const authStatusEl = document.getElementById('authStatus');
@@ -178,6 +184,15 @@ const updateAllCalculations = () => {
         totalPrincipal += principal;
         totalInterestRaw += interest;
     });
+    const getFinancialYear = (refDate = new Date()) => {
+    const year = refDate.getFullYear();
+    const month = refDate.getMonth(); // 0-11
+    const startYear = month >= 3 ? year : year - 1; // FY starts in April (month 3)
+    return {
+        startDate: new Date(startYear, 3, 1), // April 1st
+        endDate: new Date(startYear + 1, 2, 31) // March 31st
+    };
+};
     
     const roundedTotalInterest = roundToNearest(totalInterestRaw, 10);
     totalPrincipalEl.textContent = Math.round(totalPrincipal);
@@ -334,11 +349,17 @@ const showTab = (tabId) => {
             document.getElementById('finalisedTransactionsList').innerHTML = '';
             loadFinalisedTransactions();
         }
+        // Find this line in the showTab function: if (tabId === 'dashboardTab')
+// Replace the block with this:
         if (tabId === 'dashboardTab') {
+    // Set default dates to current FY if they are empty
+            if (!dashboardStartDateEl.value || !dashboardEndDateEl.value) {
+                const { startDate, endDate } = getFinancialYear();
+                dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
+                dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
+            }
             renderDashboard();
         }
-    }
-};
 
 // --- Actions: Save, Print, Clear, PDF ---
 const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable tbody tr'))
@@ -688,42 +709,71 @@ const deleteReport = async (docId, isFinalised = false) => {
 };
 
 // --- Dashboard ---
+// --- Dashboard ---
 const renderDashboard = async () => {
     dashboardLoader.style.display = 'block';
     dashboardMessage.style.display = 'none';
+    if (pieChartInstance) pieChartInstance.destroy();
+    if (barChartInstance) barChartInstance.destroy();
+
     if (!user || !navigator.onLine) {
-         dashboardMessage.textContent = "Dashboard requires an internet connection to view finalised reports.";
-         dashboardMessage.style.display = 'block';
-         dashboardLoader.style.display = 'none';
-         return;
-    }
-    await loadFinalisedTransactions();
-    dashboardLoader.style.display = 'none';
-    if (cachedFinalisedReports.length === 0) {
-        dashboardMessage.textContent = "No finalised data available. Finalise some reports to see the dashboard.";
+        dashboardMessage.textContent = "Dashboard requires an internet connection to view finalised reports.";
         dashboardMessage.style.display = 'block';
-        if (pieChartInstance) pieChartInstance.destroy();
-        if (barChartInstance) barChartInstance.destroy();
+        dashboardLoader.style.display = 'none';
         return;
     }
+
+    await loadFinalisedTransactions();
+
+    const startDate = parseDate(dashboardStartDateEl.value);
+    const endDate = parseDate(dashboardEndDateEl.value);
+
+    if (!startDate || !endDate) {
+        dashboardMessage.textContent = "Please select a valid start and end date to see the dashboard.";
+        dashboardMessage.style.display = 'block';
+        dashboardLoader.style.display = 'none';
+        return;
+    }
+
+    const filteredReports = cachedFinalisedReports.filter(report => {
+        const reportDate = parseDate(report.reportDate);
+        return reportDate && reportDate >= startDate && reportDate <= endDate;
+    });
+
+    dashboardLoader.style.display = 'none';
+
+    if (filteredReports.length === 0) {
+        dashboardMessage.textContent = "No finalised data available for the selected date range.";
+        dashboardMessage.style.display = 'block';
+        return;
+    }
+
     dashboardMessage.style.display = 'none';
     let totalPrincipalAll = 0, totalInterestAll = 0;
-    cachedFinalisedReports.forEach(report => {
-        totalPrincipalAll += parseFloat(report.totals.principal);
-        totalInterestAll += parseFloat(report.totals.interest);
+
+    filteredReports.forEach(report => {
+        totalPrincipalAll += parseFloat(report.totals.principal) || 0;
+        totalInterestAll += parseFloat(report.totals.interest) || 0;
     });
+
     const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
-    if (pieChartInstance) pieChartInstance.destroy();
     pieChartInstance = new Chart(pieCtx, {
         type: 'pie',
         data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] },
     });
+
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recentReports = cachedFinalisedReports.slice(0, 7).reverse();
-    if (barChartInstance) barChartInstance.destroy();
+    const recentReports = filteredReports.slice(0, 7).reverse(); // Show latest 7 from the filtered range
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
-        data: { labels: recentReports.map(r => r.reportDate), datasets: [{ label: 'Total Principal', data: recentReports.map(r => r.totals.principal), backgroundColor: '#3D52D5' }] },
+        data: { 
+            labels: recentReports.map(r => r.reportDate), 
+            datasets: [{ 
+                label: 'Total Principal', 
+                data: recentReports.map(r => r.totals.principal), 
+                backgroundColor: '#3D52D5' 
+            }] 
+        },
         options: { scales: { y: { beginAtZero: true } } }
     });
 };
@@ -779,6 +829,42 @@ document.addEventListener('DOMContentLoaded', async () => {
             loginOverlay.style.display = 'flex';
             appContainer.style.display = 'none';
         }
+        // --- Dashboard Filter Event Listeners ---
+last30DaysBtn.addEventListener('click', () => {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 30);
+    dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
+    dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
+    renderDashboard(); // Apply immediately
+});
+
+currentFyBtn.addEventListener('click', () => {
+    const { startDate, endDate } = getFinancialYear();
+    dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
+    dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
+    renderDashboard(); // Apply immediately
+});
+
+prevFyBtn.addEventListener('click', () => {
+    const today = new Date();
+    const prevYearDate = new Date(new Date().setFullYear(today.getFullYear() - 1));
+    const { startDate, endDate } = getFinancialYear(prevYearDate);
+    dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
+    dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
+    renderDashboard(); // Apply immediately
+});
+
+applyDateFilterBtn.addEventListener('click', renderDashboard);
+
+dashboardStartDateEl.addEventListener('blur', (e) => {
+    const parsed = parseDate(e.target.value);
+    if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
+});
+dashboardEndDateEl.addEventListener('blur', (e) => {
+    const parsed = parseDate(e.target.value);
+    if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
+});
     });
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
