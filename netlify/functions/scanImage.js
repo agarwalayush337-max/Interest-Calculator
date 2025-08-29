@@ -29,7 +29,7 @@ exports.handler = async function(event) {
         role: 'user',
         parts: [
           { inline_data: { mimeType: mimeType, data: image } },
-          { text: `From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date'. Return the result as a clean JSON array of objects where each object has the keys "no", "principal", and "date".Format the 'Date' field into a 'DD/MM/YYYY' string. Format the 'no' field by replacing any '.',' ','-' with a '/',And if there is nothing between Alphabet And number in 'no' field then add '/'.Do not include any text, explanations, or markdown formatting in your response, only the raw JSON array.` }
+          { text: `From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date'. Return the result as a clean JSON array of objects where each object has the keys "no", "principal", and "date".Format the 'Date' field into a 'DD/MM/YYYY' string. Format the 'no' field by replacing any '.',' ','-' with a '/',And if there is nothing between Alphabet And number in 'no' field then add '/'.if a letter is followed by 4 digits where the first is '1', treat '1' as '/' (e.g., D1456->D/456).Do not include any text, explanations, or markdown formatting in your response, only the raw JSON array.` }
         ]
       }]
     };
