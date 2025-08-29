@@ -21,12 +21,6 @@ let pieChartInstance, barChartInstance;
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
 // --- DOM Elements ---
-const dashboardStartDateEl = document.getElementById('dashboardStartDate');
-const dashboardEndDateEl = document.getElementById('dashboardEndDate');
-const last30DaysBtn = document.getElementById('last30DaysBtn');
-const currentFyBtn = document.getElementById('currentFyBtn');
-const prevFyBtn = document.getElementById('prevFyBtn');
-const applyDateFilterBtn = document.getElementById('applyDateFilterBtn');
 const loginOverlay = document.getElementById('loginOverlay');
 const appContainer = document.getElementById('appContainer');
 const authStatusEl = document.getElementById('authStatus');
@@ -60,6 +54,13 @@ const dashboardLoader = document.getElementById('dashboardLoader');
 const dashboardMessage = document.getElementById('dashboardMessage');
 const scanImageBtn = document.getElementById('scanImageBtn');
 const imageUploadInput = document.getElementById('imageUploadInput');
+const dashboardStartDateEl = document.getElementById('dashboardStartDate');
+const dashboardEndDateEl = document.getElementById('dashboardEndDate');
+const last30DaysBtn = document.getElementById('last30DaysBtn');
+const currentFyBtn = document.getElementById('currentFyBtn');
+const prevFyBtn = document.getElementById('prevFyBtn');
+const applyDateFilterBtn = document.getElementById('applyDateFilterBtn');
+
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -158,6 +159,16 @@ const days360 = (startDate, endDate) => {
     return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
 };
 
+const getFinancialYear = (refDate = new Date()) => {
+    const year = refDate.getFullYear();
+    const month = refDate.getMonth(); // 0-11
+    const startYear = month >= 3 ? year : year - 1; // FY starts in April (month 3)
+    return {
+        startDate: new Date(startYear, 3, 1), // April 1st
+        endDate: new Date(startYear + 1, 2, 31) // March 31st
+    };
+};
+
 const calculateInterest = (principal, rate, durationInDays) => {
     const effectiveDuration = (durationInDays > 0 && durationInDays < 30) ? 30 : durationInDays;
     return principal * (rate / 100 / 30) * effectiveDuration;
@@ -184,15 +195,6 @@ const updateAllCalculations = () => {
         totalPrincipal += principal;
         totalInterestRaw += interest;
     });
-    const getFinancialYear = (refDate = new Date()) => {
-    const year = refDate.getFullYear();
-    const month = refDate.getMonth(); // 0-11
-    const startYear = month >= 3 ? year : year - 1; // FY starts in April (month 3)
-    return {
-        startDate: new Date(startYear, 3, 1), // April 1st
-        endDate: new Date(startYear + 1, 2, 31) // March 31st
-    };
-};
     
     const roundedTotalInterest = roundToNearest(totalInterestRaw, 10);
     totalPrincipalEl.textContent = Math.round(totalPrincipal);
@@ -349,10 +351,8 @@ const showTab = (tabId) => {
             document.getElementById('finalisedTransactionsList').innerHTML = '';
             loadFinalisedTransactions();
         }
-        // Find this line in the showTab function: if (tabId === 'dashboardTab')
-// Replace the block with this:
         if (tabId === 'dashboardTab') {
-    // Set default dates to current FY if they are empty
+            // Set default dates to current FY if they are empty
             if (!dashboardStartDateEl.value || !dashboardEndDateEl.value) {
                 const { startDate, endDate } = getFinancialYear();
                 dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
@@ -360,6 +360,8 @@ const showTab = (tabId) => {
             }
             renderDashboard();
         }
+    }
+};
 
 // --- Actions: Save, Print, Clear, PDF ---
 const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable tbody tr'))
@@ -371,11 +373,9 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
         interest: row.querySelector('.interest').textContent
     })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
 
-// This is the updated central function for creating the PDF
-// This is the final, most robust version of the PDF generation function
 const generatePDF = async (action = 'save') => {
     cleanAndSortTable();
-    updateAllCalculations(); // Corrected: Removed incorrect await
+    updateAllCalculations(); 
     const loans = getCurrentLoans();
     if (loans.length === 0) {
         showConfirm("Cannot Generate PDF", "Please add loan data to generate a report.", false);
@@ -428,22 +428,19 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    // --- This section checks for the device type ---
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     if (action === 'print' && !isMobile) {
-        // On DESKTOP, use the auto-print method
         doc.autoPrint();
         doc.output('dataurlnewwindow');
     } else {
-        // On MOBILE (for the 'print' action) or for any 'save' action, directly download the file
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
 
 const printAndSave = async () => {
     cleanAndSortTable();
-    updateAllCalculations(); // Corrected: Removed incorrect await
+    updateAllCalculations(); 
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
     if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
 
@@ -480,9 +477,6 @@ const printAndSave = async () => {
 const exportToPDF = () => {
     generatePDF('save');
 };
-
-
-
 
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
@@ -709,7 +703,6 @@ const deleteReport = async (docId, isFinalised = false) => {
 };
 
 // --- Dashboard ---
-// --- Dashboard ---
 const renderDashboard = async () => {
     dashboardLoader.style.display = 'block';
     dashboardMessage.style.display = 'none';
@@ -722,7 +715,7 @@ const renderDashboard = async () => {
         dashboardLoader.style.display = 'none';
         return;
     }
-
+    
     await loadFinalisedTransactions();
 
     const startDate = parseDate(dashboardStartDateEl.value);
@@ -741,7 +734,7 @@ const renderDashboard = async () => {
     });
 
     dashboardLoader.style.display = 'none';
-
+    
     if (filteredReports.length === 0) {
         dashboardMessage.textContent = "No finalised data available for the selected date range.";
         dashboardMessage.style.display = 'block';
@@ -750,7 +743,7 @@ const renderDashboard = async () => {
 
     dashboardMessage.style.display = 'none';
     let totalPrincipalAll = 0, totalInterestAll = 0;
-
+    
     filteredReports.forEach(report => {
         totalPrincipalAll += parseFloat(report.totals.principal) || 0;
         totalInterestAll += parseFloat(report.totals.interest) || 0;
@@ -829,42 +822,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             loginOverlay.style.display = 'flex';
             appContainer.style.display = 'none';
         }
-        // --- Dashboard Filter Event Listeners ---
-last30DaysBtn.addEventListener('click', () => {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 30);
-    dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
-    dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
-    renderDashboard(); // Apply immediately
-});
-
-currentFyBtn.addEventListener('click', () => {
-    const { startDate, endDate } = getFinancialYear();
-    dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
-    dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
-    renderDashboard(); // Apply immediately
-});
-
-prevFyBtn.addEventListener('click', () => {
-    const today = new Date();
-    const prevYearDate = new Date(new Date().setFullYear(today.getFullYear() - 1));
-    const { startDate, endDate } = getFinancialYear(prevYearDate);
-    dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
-    dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
-    renderDashboard(); // Apply immediately
-});
-
-applyDateFilterBtn.addEventListener('click', renderDashboard);
-
-dashboardStartDateEl.addEventListener('blur', (e) => {
-    const parsed = parseDate(e.target.value);
-    if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
-});
-dashboardEndDateEl.addEventListener('blur', (e) => {
-    const parsed = parseDate(e.target.value);
-    if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
-});
     });
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
@@ -911,4 +868,41 @@ dashboardEndDateEl.addEventListener('blur', (e) => {
             updateAllCalculations();
         }
     }, true);
+
+    // --- Dashboard Filter Event Listeners ---
+    last30DaysBtn.addEventListener('click', () => {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 30);
+        dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
+        dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
+        renderDashboard(); // Apply immediately
+    });
+
+    currentFyBtn.addEventListener('click', () => {
+        const { startDate, endDate } = getFinancialYear();
+        dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
+        dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
+        renderDashboard(); // Apply immediately
+    });
+
+    prevFyBtn.addEventListener('click', () => {
+        const today = new Date();
+        const prevYearDate = new Date(new Date().setFullYear(today.getFullYear() - 1));
+        const { startDate, endDate } = getFinancialYear(prevYearDate);
+        dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
+        dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
+        renderDashboard(); // Apply immediately
+    });
+    
+    applyDateFilterBtn.addEventListener('click', renderDashboard);
+
+    dashboardStartDateEl.addEventListener('blur', (e) => {
+        const parsed = parseDate(e.target.value);
+        if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
+    });
+    dashboardEndDateEl.addEventListener('blur', (e) => {
+        const parsed = parseDate(e.target.value);
+        if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
+    });
 });
