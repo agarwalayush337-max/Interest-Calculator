@@ -132,6 +132,24 @@
         <div id="dashboardTab" class="tab-content">
             <div class="main-content">
                 <h2>Dashboard</h2>
+                <div class="dashboard-filters">
+            <div class="date-range">
+                <div class="input-field">
+                    <label for="startDateFilter">Start Date</label>
+                    <input type="date" id="startDateFilter">
+                </div>
+                <div class="input-field">
+                    <label for="endDateFilter">End Date</label>
+                    <input type="date" id="endDateFilter">
+                </div>
+            </div>
+            <div class="quick-filters">
+                <button class="btn btn-secondary" id="filter30Days">Last 30 Days</button>
+                <button class="btn btn-secondary" id="filterCurrentFY">Current F.Y.</button>
+                <button class="btn btn-secondary" id="filterPrevFY">Prev. F.Y.</button>
+            </div>
+        </div>
+        <div id="dashboardContent" class="dashboard-grid">
                 <div id="dashboardContent" class="dashboard-grid">
                     <div class="chart-container">
                         <h3>Principal vs. Interest (All Reports)</h3>
@@ -169,6 +187,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 
     <script src="script.js"></script></body></html>
+
 
 
 
