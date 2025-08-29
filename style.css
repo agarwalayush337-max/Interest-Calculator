@@ -382,3 +382,40 @@ td.read-only { font-weight: 500; font-size: 1rem; }
         white-space: nowrap;
     }
 }
+/* Dashboard Filter Styles */
+.dashboard-filters {
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 12px;
+    background-color: var(--background-color);
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.5rem;
+}
+
+.date-range-picker {
+    display: flex;
+    gap: 1rem;
+    flex-grow: 1;
+}
+
+.quick-filter-buttons {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+#applyDateFilterBtn {
+    padding: 0.75rem 1.5rem; /* Make apply button more prominent */
+}
+
+/* Responsive adjustments for filters */
+@media screen and (max-width: 768px) {
+    .date-range-picker {
+        flex-direction: column;
+        width: 100%;
+    }
+}
