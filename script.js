@@ -38,7 +38,7 @@ const googleSignInBtn = document.getElementById('googleSignInBtn');
 const loginMessage = document.getElementById('loginMessage');
 const signOutBtn = document.getElementById('signOutBtn');
 const addRowBtn = document.getElementById('addRowBtn');
-const printAndSaveBtn = document.getElementById('printAndSaveBtn');
+const saveBtn = document.getElementById('saveBtn');
 const clearSheetBtn = document.getElementById('clearSheetBtn');
 const exitViewModeBtn = document.getElementById('exitViewModeBtn');
 const confirmModal = document.getElementById('confirmModal');
@@ -438,11 +438,39 @@ const generatePDF = async (action = 'save') => {
     }
 };
 
-const printAndSave = async () => {
+// A helper function to check if an identical report already exists
+const isDuplicateReport = (newReport, reportList) => {
+    // Stringify loans for easy and accurate comparison, sorting them first
+    const newReportLoansString = JSON.stringify(
+        newReport.loans.slice().sort((a, b) => a.no.localeCompare(b.no))
+    );
+
+    return reportList.some(existingReport => {
+        // First check the date and rate for a quick mismatch
+        if (newReport.reportDate !== existingReport.reportDate ||
+            newReport.interestRate !== existingReport.interestRate) {
+            return false;
+        }
+
+        // If date and rate match, do a deep check of the loans
+        const existingReportLoansString = JSON.stringify(
+            existingReport.loans.slice().sort((a, b) => a.no.localeCompare(b.no))
+        );
+
+        return newReportLoansString === existingReportLoansString;
+    });
+};
+
+
+// The new, primary function for saving a report
+const saveReport = async () => {
     cleanAndSortTable();
-    updateAllCalculations(); 
+    updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
-    if (loans.length === 0) return showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
+    if (loans.length === 0) {
+        showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
+        return false; // Indicate failure
+    }
 
     const reportDate = todayDateEl.value;
     const report = {
@@ -454,6 +482,13 @@ const printAndSave = async () => {
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
+    // Check for duplicates before saving
+    if (isDuplicateReport(report, cachedReports)) {
+        await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
+        return false; // Indicate failure
+    }
+
+    // Proceed with saving if it's not a duplicate
     if (navigator.onLine && reportsCollection) {
         const baseName = `Summary of ${reportDate}`;
         const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
@@ -470,13 +505,17 @@ const printAndSave = async () => {
         await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
 
-    generatePDF('print');
-    loadRecentTransactions();
+    loadRecentTransactions(); // Refresh the list of recent transactions
+    return true; // Indicate success
 };
 
-const exportToPDF = () => {
+
+// Updated export function that now saves before exporting
+const exportToPDF = async () => {
+    await saveReport();
     generatePDF('save');
 };
+
 
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
@@ -826,7 +865,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
-    printAndSaveBtn.addEventListener('click', printAndSave);
+    saveBtn.addEventListener('click', saveReport);
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
     exportPdfBtn.addEventListener('click', exportToPDF);
