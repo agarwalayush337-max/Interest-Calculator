@@ -29,7 +29,7 @@ exports.handler = async function(event) {
         role: 'user',
         parts: [
           { inline_data: { mimeType: mimeType, data: image } },
-          { text: `From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date'. Return the result as a clean JSON array of objects where each object has the keys "no", "principal", and "date".Format the 'Date' field into a 'DD/MM/YYYY' string. Format the 'no' field by replacing any '.',' ','-' with a '/',And if there is nothing between Alphabet And number in 'no' field then add '/'.if in 'no' field an alphabet is followed by 4 digits where the first digit is '1', then treat '1' as '/' (e.g., D1456->D/456).Do not include any text, explanations, or markdown formatting in your response, only the raw JSON array.` }
+          { text: `From the provided image, extract all loan entries. For each entry, provide the 'LoanNo', 'Principal', and 'Date'. Return the data as a clean JSON array of objects with the keys "no", "principal", and "date". Format the 'Date' as a 'DD/MM/YYYY' string. For the "no" field, apply this specific formatting rule: if a loan number starts with a letter followed immediately by the digit '1' and three other digits (e.g., A1531), you must **replace** the '1' with a '/' to get a result like 'A/531'. Do not just add a slash. Provide only the raw JSON array in your response.` }
         ]
       }]
     };
