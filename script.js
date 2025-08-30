@@ -548,12 +548,12 @@ const saveReport = async (silent = false) => {
     }
     
     if (success) {
-        resetCalculatorState(); // Automatically clear the sheet on successful save
+        resetCalculatorState();
         loadRecentTransactions();
+        listenForLiveStateChanges(); // Reconnects the live listener
     }
     return success;
 };
-
 // MODIFIED: Saves silently and checks for success before generating PDF.
 const exportToPDF = async () => {
     const wasSaved = await saveReport(true); // Pass true for silent save
@@ -571,17 +571,13 @@ const clearSheet = async () => {
 };
 
 // --- Recent & Finalised Transactions ---
-const renderRecentTransactions = (filter = '') => {
-    recentTransactionsListEl.innerHTML = '';
-    const searchTerm = filter.toLowerCase();
-    const filteredReports = cachedReports.filter(report => {
-        if (!searchTerm) return true;
-        if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
-        return report.loans?.some(loan =>
-            loan.no?.toLowerCase().includes(searchTerm) ||
-            loan.principal?.toLowerCase().includes(searchTerm)
-        );
-    });
+const clearSheet = async () => {
+    const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
+    if (confirmed) {
+        resetCalculatorState();
+        listenForLiveStateChanges(); // Reconnects the live listener
+    }
+};
 
     if (filteredReports.length === 0) {
         recentTransactionsListEl.innerHTML = '<li>No matching transactions found.</li>';
@@ -734,7 +730,8 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
-    // Call addRow without triggering updates for each row to improve performance
+    
+    // Prevent writes while loading the report data
     isUpdatingFromListener = true;
     if (report.loans) report.loans.forEach(loan => addRow(loan));
     isUpdatingFromListener = false;
