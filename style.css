@@ -468,3 +468,8 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 #loanSearchTable .status-searching {
      background-color: var(--subtle-text-color);
 }
+/* --- Uppercase Loan Number Inputs --- */
+#loanTable input.no,
+#loanSearchTable input.search-no {
+    text-transform: uppercase;
+}
