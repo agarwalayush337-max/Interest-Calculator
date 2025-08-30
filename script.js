@@ -1161,15 +1161,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateSyncStatus();
     auth.onAuthStateChanged(async (firebaseUser) => {
         if (firebaseUser) {
-            user = firebaseUser;
-            reportsCollection = db.collection('sharedReports');
-            authStatusEl.textContent = user.displayName || user.email;
-            loginOverlay.style.display = 'none';
-            appContainer.style.display = 'block';
-            
-            listenForLiveStateChanges(); 
-            syncData();
+            const userEmail = firebaseUser.email;
+            const userRef = db.collection('allowedUsers').doc(userEmail);
+            try {
+                const doc = await userRef.get();
+                if (doc.exists) {
+                    user = firebaseUser;
+                    reportsCollection = db.collection('sharedReports');
+                    authStatusEl.textContent = user.displayName || user.email;
+                    loginOverlay.style.display = 'none';
+                    appContainer.style.display = 'block';
+                    
+                    listenForLiveStateChanges(); 
+                    syncData();
 
+                } else {
+                    await showConfirm("Access Denied", "You are not authorized to use this application.", false);
+                    auth.signOut();
+                }
+            } catch (error) {
+                console.error("Authorization check failed:", error);
+                await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
+                auth.signOut();
+            }
         } else {
             user = null;
             currentlyEditingReportId = null;
@@ -1180,14 +1194,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (liveStateUnsubscribe) {
                 liveStateUnsubscribe();
                 liveStateUnsubscribe = null;
-        navigator.serviceWorker.addEventListener('message', event => {
-        if (event.data && event.data.action === 'scan-image') {
-            // Received an image file from the share action
-            showTab('calculatorTab'); // Switch to the calculator tab
-            handleImageScan(event.data.file); // Process the shared file
-         }
-     }
-   });
+            }
+        }
+    });
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
@@ -1280,6 +1289,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             searchFiltersContainer.querySelector('.active-filter').classList.remove('active-filter');
             e.target.classList.add('active-filter');
             filterSearchResults(e.target.dataset.filter);
+        }
+    });
+
+    // Listen for messages from the Service Worker (for shared images)
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.action === 'scan-image') {
+            showTab('calculatorTab');
+            handleImageScan(event.data.file);
         }
     });
 });
