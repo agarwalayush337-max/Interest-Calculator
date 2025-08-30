@@ -559,12 +559,20 @@ const saveReport = async (silent = false) => {
 };
 
 const exportToPDF = async () => {
-    const wasSaved = await saveReport(true); 
-    if (wasSaved) {
+    // Check if the view-mode action bar is currently visible.
+    const isViewMode = viewModeActionBar.style.display !== 'none';
+
+    if (isViewMode) {
+        // If in view-only mode, just generate the PDF from the visible data.
         generatePDF('save');
+    } else {
+        // If in edit mode, save silently first, then generate the PDF.
+        const wasSaved = await saveReport(true); 
+        if (wasSaved) {
+            generatePDF('save');
+        }
     }
 };
-
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
