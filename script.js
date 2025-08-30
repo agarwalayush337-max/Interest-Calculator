@@ -25,7 +25,6 @@ const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
 let isUpdatingFromListener = false;
-// NEW: A unique ID for this browser session to prevent self-updates
 const sessionClientId = Date.now().toString() + Math.random().toString();
 
 // --- DOM Elements ---
@@ -370,6 +369,20 @@ const showTab = (tabId) => {
     }
 };
 
+// --- NEW: Helper function to reset the calculator to a default state ---
+const resetCalculatorState = () => {
+    const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
+    const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
+
+    liveStateRef.set({
+        todayDate: formatDateToDDMMYYYY(new Date()),
+        interestRate: '1.75',
+        loans: defaultLoans,
+        lastUpdatedBy: sessionClientId + '_reset'
+    });
+    currentlyEditingReportId = null;
+};
+
 // --- Actions: Save, Print, Clear, PDF ---
 const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable tbody tr'))
     .map(row => ({
@@ -467,14 +480,15 @@ const isDuplicateReport = (newReport, reportList) => {
     });
 };
 
-const saveReport = async () => {
+// MODIFIED: Accepts a 'silent' parameter and clears the sheet on success.
+const saveReport = async (silent = false) => {
     await loadRecentTransactions(); 
 
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
     if (loans.length === 0) {
-        showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
+        if (!silent) showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
         return false;
     }
 
@@ -488,23 +502,23 @@ const saveReport = async () => {
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
+    let success = false;
     if (currentlyEditingReportId) {
         if (navigator.onLine && reportsCollection) {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
-                await showConfirm("Success", "Report updated successfully.", false);
-                currentlyEditingReportId = null; 
+                if (!silent) await showConfirm("Success", "Report updated successfully.", false);
+                success = true;
             } catch (error) {
                 console.error("Error updating report:", error);
-                await showConfirm("Error", "Failed to update the report.", false);
+                if (!silent) await showConfirm("Error", "Failed to update the report.", false);
             }
         } else {
-            await showConfirm("Offline", "You must be online to update an existing report.", false);
-            return false;
+            if (!silent) await showConfirm("Offline", "You must be online to update an existing report.", false);
         }
     } else {
         if (isDuplicateReport(report, cachedReports)) {
-            await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
+            if (!silent) await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
             return false;
         }
         
@@ -518,7 +532,8 @@ const saveReport = async () => {
             try {
                 report.isDeleted = false;
                 await reportsCollection.add(report);
-                await showConfirm("Success", "Report saved to the cloud.", false);
+                if (!silent) await showConfirm("Success", "Report saved to the cloud.", false);
+                success = true;
             } catch (error) { console.error("Error saving online:", error); }
         } else {
             report.localId = `local_${Date.now()}`;
@@ -527,37 +542,34 @@ const saveReport = async () => {
             report.isDeleted = false;
             delete report.lastUpdatedAt;
             await localDb.put('unsyncedReports', report);
-            await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
+            if (!silent) await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
+            success = true;
         }
     }
-
-    loadRecentTransactions();
-    return true;
+    
+    if (success) {
+        resetCalculatorState(); // Automatically clear the sheet on successful save
+        loadRecentTransactions();
+    }
+    return success;
 };
 
+// MODIFIED: Saves silently and checks for success before generating PDF.
 const exportToPDF = async () => {
-    await saveReport();
-    generatePDF('save');
+    const wasSaved = await saveReport(true); // Pass true for silent save
+    if (wasSaved) {
+        generatePDF('save');
+    }
 };
 
+// MODIFIED: Uses the new resetCalculatorState helper function.
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
-        // We no longer clear the table here. We just send the new default state to Firestore.
-        const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
-        const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
-
-        // The onSnapshot listener will receive this update and rebuild the UI correctly.
-        liveStateRef.set({
-            todayDate: formatDateToDDMMYYYY(new Date()),
-            interestRate: '1.75',
-            loans: defaultLoans,
-            lastUpdatedBy: sessionClientId + '_reset' // Ensures this client also updates
-        });
-        
-        currentlyEditingReportId = null;
+        resetCalculatorState();
     }
 };
+
 // --- Recent & Finalised Transactions ---
 const renderRecentTransactions = (filter = '') => {
     recentTransactionsListEl.innerHTML = '';
@@ -702,10 +714,11 @@ const setViewMode = (isViewOnly) => {
     });
 };
 
+// MODIFIED: "Back to Calculator" now resets the state and re-enables live sync.
 const exitViewMode = () => {
+    resetCalculatorState();
     setViewMode(false);
-    listenForLiveStateChanges(); 
-    currentlyEditingReportId = null;
+    listenForLiveStateChanges();
 };
 
 const viewReport = (reportId, isEditable, isFinalised = false) => {
@@ -721,7 +734,10 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
+    // Call addRow without triggering updates for each row to improve performance
+    isUpdatingFromListener = true;
     if (report.loans) report.loans.forEach(loan => addRow(loan));
+    isUpdatingFromListener = false;
     
     if (isEditable) {
         currentlyEditingReportId = reportId;
@@ -943,10 +959,7 @@ const filterSearchResults = (filter) => {
 const clearSearchSheet = async () => {
     const confirmed = await showConfirm("Clear Search Sheet", "Are you sure you want to clear all search rows?");
     if (confirmed) {
-        loanSearchTableBody.innerHTML = '';
-        for (let i = 0; i < 5; i++) {
-            addSearchRow();
-        }
+        resetCalculatorState();
     }
 };
 
@@ -1066,7 +1079,7 @@ const listenForLiveStateChanges = () => {
         if (doc.exists) {
             const state = doc.data();
             if (state.lastUpdatedBy === sessionClientId) {
-                return; // Do nothing if the update came from this same browser session
+                return;
             }
 
             isUpdatingFromListener = true;
@@ -1133,7 +1146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
-    saveBtn.addEventListener('click', saveReport);
+    saveBtn.addEventListener('click', () => saveReport(false));
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
     exportPdfBtn.addEventListener('click', exportToPDF);
