@@ -243,7 +243,6 @@ const addRow = (loan = { no: '', principal: '', date: '' }) => {
         <td class="read-only interest"></td>
         <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeRow(this)">X</button></td>`;
     renumberRows();
-    // Do not call updateAllCalculations here if we are in a bulk update from the listener
     if (!isUpdatingFromListener) {
         updateAllCalculations();
     }
@@ -382,7 +381,7 @@ const resetCalculatorState = () => {
         todayDate: formatDateToDDMMYYYY(new Date()),
         interestRate: '1.75',
         loans: defaultLoans,
-        lastUpdatedBy: sessionClientId + '_reset' // Ensures this client also updates
+        lastUpdatedBy: sessionClientId + '_reset'
     });
     currentlyEditingReportId = null;
 };
@@ -484,9 +483,10 @@ const isDuplicateReport = (newReport, reportList) => {
     });
 };
 
+// MODIFIED: Asks user whether to clear the sheet after a successful save.
 const saveReport = async (silent = false) => {
+    // This initial part remains the same, gathering data and preparing the report.
     await loadRecentTransactions(); 
-
     cleanAndSortTable();
     updateAllCalculations();
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
@@ -510,7 +510,9 @@ const saveReport = async (silent = false) => {
         if (navigator.onLine && reportsCollection) {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
-                if (!silent) await showConfirm("Success", "Report updated successfully.", false);
+                if (!silent) {
+                    // Success message is now part of the confirmation to clear
+                }
                 success = true;
             } catch (error) {
                 console.error("Error updating report:", error);
@@ -535,7 +537,9 @@ const saveReport = async (silent = false) => {
             try {
                 report.isDeleted = false;
                 await reportsCollection.add(report);
-                if (!silent) await showConfirm("Success", "Report saved to the cloud.", false);
+                if (!silent) {
+                    // Success message is now part of the confirmation to clear
+                }
                 success = true;
             } catch (error) { console.error("Error saving online:", error); }
         } else {
@@ -550,29 +554,36 @@ const saveReport = async (silent = false) => {
         }
     }
     
+    // --- NEW LOGIC: Ask to clear sheet after successful save ---
     if (success) {
-        resetCalculatorState();
         loadRecentTransactions();
+
+        let shouldClear = false;
+        if (silent) {
+            shouldClear = true; // For Export PDF, clear automatically
+        } else {
+            shouldClear = await showConfirm(
+                "Save Successful", 
+                "Your report has been saved. Would you like to clear the sheet for a new entry?"
+            );
+        }
+
+        if (shouldClear) {
+            resetCalculatorState();
+        }
+        
         listenForLiveStateChanges();
     }
     return success;
 };
 
 const exportToPDF = async () => {
-    // Check if the view-mode action bar is currently visible.
-    const isViewMode = viewModeActionBar.style.display !== 'none';
-
-    if (isViewMode) {
-        // If in view-only mode, just generate the PDF from the visible data.
+    const wasSaved = await saveReport(true); 
+    if (wasSaved) {
         generatePDF('save');
-    } else {
-        // If in edit mode, save silently first, then generate the PDF.
-        const wasSaved = await saveReport(true); 
-        if (wasSaved) {
-            generatePDF('save');
-        }
     }
 };
+
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
@@ -757,7 +768,6 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
         currentlyEditingReportId = null;
         setViewMode(true);
     }
-    // Manually trigger final calculation after bulk-adding rows
     updateAllCalculations();
 };
 
@@ -968,7 +978,7 @@ const filterSearchResults = (filter) => {
 };
 
 const clearSearchSheet = async () => {
-    const confirmed = await showConfirm("Clear Search Sheet", "Are you sure you want to clear all search rows?");
+    const confirmed = await showConfirm("Clear Sheet", "Are you sure you want to clear all search rows?");
     if (confirmed) {
         resetCalculatorState();
         listenForLiveStateChanges();
