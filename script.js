@@ -1,3 +1,4 @@
+// --- At the top of the file, BEFORE any other code ---
 // Register the Service Worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
@@ -241,35 +242,6 @@ const updateAllCalculations = () => {
     }
 };
 
-
-const checkClipboardForImage = async () => {
-    if (!navigator.clipboard || !navigator.clipboard.read) {
-        return; // Clipboard API not supported or not in a secure context.
-    }
-    try {
-        const clipboardItems = await navigator.clipboard.read();
-        for (const item of clipboardItems) {
-            const imageType = item.types.find(type => type.startsWith('image/'));
-            if (imageType) {
-                const blob = await item.getType(imageType);
-                const confirmed = await showConfirm(
-                    "Image Found on Clipboard", 
-                    "Do you want to scan the image from your clipboard?"
-                );
-                if (confirmed) {
-                    const file = new File([blob], "pasted_image.png", { type: blob.type });
-                    handleImageScan(file);
-                }
-                return; // Stop after finding the first image.
-            }
-        }
-    } catch (err) {
-        // This usually happens if the user denies permission. We can ignore it silently.
-        console.log('Could not read clipboard. Permission may have been denied.');
-    }
-};
-
-
 // --- Table Management ---
 const addRow = (loan = { no: '', principal: '', date: '' }) => {
     const rowCount = loanTableBody.rows.length;
@@ -335,9 +307,8 @@ const fillTableFromScan = (loans) => {
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
 
-const handleImageScan = async (fileOrEvent) => {
-    // Determine if we received a File object directly or an event from the input
-    const file = fileOrEvent.target ? fileOrEvent.target.files[0] : fileOrEvent;
+const handleImageScan = async (event) => {
+    const file = event.target.files[0];
 
     if (!file) return;
     showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
@@ -377,8 +348,7 @@ const handleImageScan = async (fileOrEvent) => {
         await showConfirm('Error', error.message, false);
     }
     
-    // Reset the input field if the source was the input element
-    if (fileOrEvent.target) {
+    if (event.target) {
         imageUploadInput.value = '';
     }
 };
@@ -388,11 +358,6 @@ const showTab = (tabId) => {
     document.querySelectorAll('.tab-content, .tab-button').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
-    
-    // Check the clipboard for an image whenever the calculator tab is shown
-    if (tabId === 'calculatorTab') {
-        checkClipboardForImage();
-    }
 
     if (user) {
         if (tabId === 'recentTransactionsTab') {
@@ -536,9 +501,7 @@ const isDuplicateReport = (newReport, reportList) => {
     });
 };
 
-// MODIFIED: Asks user whether to clear the sheet after a successful save.
 const saveReport = async (silent = false) => {
-    // This initial part remains the same, gathering data and preparing the report.
     await loadRecentTransactions(); 
     cleanAndSortTable();
     updateAllCalculations();
@@ -564,7 +527,7 @@ const saveReport = async (silent = false) => {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
                 if (!silent) {
-                    // Success message is now part of the confirmation to clear
+                    // Success message is part of the confirmation to clear
                 }
                 success = true;
             } catch (error) {
@@ -591,7 +554,7 @@ const saveReport = async (silent = false) => {
                 report.isDeleted = false;
                 await reportsCollection.add(report);
                 if (!silent) {
-                    // Success message is now part of the confirmation to clear
+                    // Success message is part of the confirmation to clear
                 }
                 success = true;
             } catch (error) { console.error("Error saving online:", error); }
@@ -607,13 +570,12 @@ const saveReport = async (silent = false) => {
         }
     }
     
-    // --- NEW LOGIC: Ask to clear sheet after successful save ---
     if (success) {
         loadRecentTransactions();
 
         let shouldClear = false;
         if (silent) {
-            shouldClear = true; // For Export PDF, clear automatically
+            shouldClear = true;
         } else {
             shouldClear = await showConfirm(
                 "Save Successful", 
@@ -1031,7 +993,7 @@ const filterSearchResults = (filter) => {
 };
 
 const clearSearchSheet = async () => {
-    const confirmed = await showConfirm("Clear Sheet", "Are you sure you want to clear all search rows?");
+    const confirmed = await showConfirm("Clear Search Sheet", "Are you sure you want to clear all search rows?");
     if (confirmed) {
         resetCalculatorState();
         listenForLiveStateChanges();
@@ -1190,35 +1152,41 @@ const listenForLiveStateChanges = () => {
     });
 };
 
+// --- NEW: Function to handle paste events ---
+const handlePaste = (event) => {
+    // Only act if the user is on the calculator tab
+    if (!document.getElementById('calculatorTab').classList.contains('active')) {
+        return;
+    }
+
+    const items = event.clipboardData.items;
+    for (const item of items) {
+        if (item.type.indexOf('image') !== -1) {
+            const file = item.getAsFile();
+            // Prevent the browser's default paste behavior (like showing the image)
+            event.preventDefault();
+            // Pass the file to our existing scan function
+            handleImageScan(file);
+            return; // Stop after handling the first image
+        }
+    }
+};
+
 // --- Initial Load & Event Listeners ---
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
     auth.onAuthStateChanged(async (firebaseUser) => {
         if (firebaseUser) {
-            const userEmail = firebaseUser.email;
-            const userRef = db.collection('allowedUsers').doc(userEmail);
-            try {
-                const doc = await userRef.get();
-                if (doc.exists) {
-                    user = firebaseUser;
-                    reportsCollection = db.collection('sharedReports');
-                    authStatusEl.textContent = user.displayName || user.email;
-                    loginOverlay.style.display = 'none';
-                    appContainer.style.display = 'block';
-                    
-                    listenForLiveStateChanges(); 
-                    syncData();
+            user = firebaseUser;
+            reportsCollection = db.collection('sharedReports');
+            authStatusEl.textContent = user.displayName || user.email;
+            loginOverlay.style.display = 'none';
+            appContainer.style.display = 'block';
+            
+            listenForLiveStateChanges(); 
+            syncData();
 
-                } else {
-                    await showConfirm("Access Denied", "You are not authorized to use this application.", false);
-                    auth.signOut();
-                }
-            } catch (error) {
-                console.error("Authorization check failed:", error);
-                await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
-                auth.signOut();
-            }
         } else {
             user = null;
             currentlyEditingReportId = null;
@@ -1335,11 +1303,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Automatically check clipboard when the app tab becomes visible
-    document.addEventListener('visibilitychange', () => {
-        // Check if the page is now visible and if the calculator tab is the active one
-        if (document.visibilityState === 'visible' && document.getElementById('calculatorTab').classList.contains('active')) {
-            checkClipboardForImage();
-        }
-    });
+    // Listen for standard paste events
+    document.addEventListener('paste', handlePaste);
 });
