@@ -1080,21 +1080,32 @@ const listenForLiveStateChanges = () => {
             todayDateEl.value = state.todayDate || formatDateToDDMMYYYY(new Date());
             interestRateEl.value = state.interestRate || '1.75';
             
-            // Rebuild the table with the new data
             loanTableBody.innerHTML = '';
             if (state.loans && state.loans.length > 0) {
                 state.loans.forEach(loan => addRow(loan));
             }
-            // Ensure there's always an empty row at the end
-             addRow({ no: '', principal: '', date: '' });
+            // Ensure there are always enough rows
+            while (loanTableBody.rows.length < 5) {
+                addRow({ no: '', principal: '', date: '' });
+            }
+             if (loanTableBody.lastChild.querySelector('.principal').value) { 
+                 addRow({ no: '', principal: '', date: '' }); 
+             }
         } else {
-            // If no document exists for the user, create one with the default state
+            // If no live state exists, create a default one for the user.
+            // This sets the date and adds the 5 blank rows on first load.
+            todayDateEl.value = formatDateToDDMMYYYY(new Date());
+            interestRateEl.value = '1.75';
+            loanTableBody.innerHTML = '';
+            for (let i = 0; i < 5; i++) {
+                addRow({ no: '', principal: '', date: '' });
+            }
+            // Save this default state to Firestore to start the session.
             updateLiveState();
         }
 
         updateAllCalculations(); // Recalculate totals
 
-        // Reset the flag shortly after to allow user input to be sent
         setTimeout(() => { isUpdatingFromListener = false; }, 100);
     }, error => {
         console.error("Error with live listener:", error);
