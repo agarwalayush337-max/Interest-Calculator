@@ -18,18 +18,27 @@ exports.handler = async function(event) {
     const client = await auth.getClient();
     const accessToken = (await client.getAccessToken()).token;
 
-    // --- UPDATED MODEL NAME ---
-    const MODEL_ID = 'gemini-2.5-flash-lite';
+    const MODEL_ID = 'gemini-1.5-flash-latest'; // Using the latest flash model
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
-    const { image, mimeType } = JSON.parse(event.body);
+    // --- NEW: Check for the type of scan requested ---
+    const { image, mimeType, scanType } = JSON.parse(event.body);
     
+    let promptText;
+    if (scanType === 'loan_numbers') {
+        // Prompt for the new search feature: only get loan numbers
+        promptText = `From the provided image, extract only the loan numbers (values similar to 'A/123', 'B456', etc.). Return the data as a clean JSON array of strings. For any loan number that starts with a letter, the digit '1', and three other digits (e.g., A1531), you must **replace** the '1' with a '/' to get a result like 'A/531'. Do not just add a slash. Provide only the raw JSON array in your response.`;
+    } else {
+        // Original prompt for the calculator
+        promptText = `From the provided image, extract all loan entries. For each entry, provide the 'LoanNo', 'Principal', and 'Date'. Return the data as a clean JSON array of objects with the keys "no", "principal", and "date". Format the 'Date' as a 'DD/MM/YYYY' string. For the "no" field, apply this specific formatting rule: if a loan number starts with a letter followed immediately by the digit '1' and three other digits (e.g., A1531), you must **replace** the '1' with a '/' to get a result like 'A/531'. Do not just add a slash. Provide only the raw JSON array in your response.`;
+    }
+
     const requestBody = {
       contents: [{
         role: 'user',
         parts: [
           { inline_data: { mimeType: mimeType, data: image } },
-          { text: `From the provided image, extract all loan entries. For each entry, provide the 'LoanNo', 'Principal', and 'Date'. Return the data as a clean JSON array of objects with the keys "no", "principal", and "date". Format the 'Date' as a 'DD/MM/YYYY' string. For the "no" field, apply this specific formatting rule: if a loan number starts with a letter followed immediately by the digit '1' and three other digits (e.g., A1531), you must **replace** the '1' with a '/' to get a result like 'A/531'. Do not just add a slash. Provide only the raw JSON array in your response.` }
+          { text: promptText } // Use the selected prompt
         ]
       }]
     };
@@ -56,19 +65,27 @@ exports.handler = async function(event) {
       throw new Error("Could not find parsable text in Gemini's response.");
     }
     
-    // Clean the response to handle markdown code blocks
     const regex = /```json\s*([\s\S]*?)\s*```/;
     const match = jsonText.match(regex);
     if (match) {
       jsonText = match[1];
     }
-
-    const loans = JSON.parse(jsonText);
+    
+    // --- NEW: Return the correct JSON structure based on scan type ---
+    let responseBody;
+    if (scanType === 'loan_numbers') {
+        const loanNumbers = JSON.parse(jsonText);
+        responseBody = JSON.stringify({ loanNumbers });
+    } else {
+        const loans = JSON.parse(jsonText);
+        responseBody = JSON.stringify({ loans });
+    }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ loans: loans }),
+      body: responseBody,
     };
+
   } catch (error) {
     console.error('FATAL: Internal function error.', error);
     return {
