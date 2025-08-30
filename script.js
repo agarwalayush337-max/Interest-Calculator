@@ -543,20 +543,21 @@ const exportToPDF = async () => {
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
-        loanTableBody.innerHTML = '';
+        // We no longer clear the table here. We just send the new default state to Firestore.
         const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
-        // Update the live state with an empty (default) sheet
         const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
+
+        // The onSnapshot listener will receive this update and rebuild the UI correctly.
         liveStateRef.set({
             todayDate: formatDateToDDMMYYYY(new Date()),
             interestRate: '1.75',
             loans: defaultLoans,
-            lastUpdatedBy: sessionClientId
+            lastUpdatedBy: sessionClientId + '_reset' // Ensures this client also updates
         });
+        
         currentlyEditingReportId = null;
     }
 };
-
 // --- Recent & Finalised Transactions ---
 const renderRecentTransactions = (filter = '') => {
     recentTransactionsListEl.innerHTML = '';
