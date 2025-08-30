@@ -19,7 +19,6 @@ let cachedReports = [];
 let cachedFinalisedReports = [];
 let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
-// NEW: Variable to track the report being edited
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
@@ -501,14 +500,12 @@ const saveReport = async () => {
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
-    // --- SMART SAVE LOGIC ---
     if (currentlyEditingReportId) {
-        // --- UPDATE existing report ---
         if (navigator.onLine && reportsCollection) {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
                 await showConfirm("Success", "Report updated successfully.", false);
-                currentlyEditingReportId = null; // Reset after successful update
+                currentlyEditingReportId = null; 
             } catch (error) {
                 console.error("Error updating report:", error);
                 await showConfirm("Error", "Failed to update the report.", false);
@@ -518,7 +515,6 @@ const saveReport = async () => {
             return false;
         }
     } else {
-        // --- CREATE new report (original logic) ---
         if (isDuplicateReport(report, cachedReports)) {
             await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
             return false;
@@ -532,6 +528,8 @@ const saveReport = async () => {
             delete report.lastUpdatedAt;
             
             try {
+                // MODIFIED: Add isDeleted flag on creation
+                report.isDeleted = false;
                 await reportsCollection.add(report);
                 await showConfirm("Success", "Report saved to the cloud.", false);
             } catch (error) { console.error("Error saving online:", error); }
@@ -539,6 +537,8 @@ const saveReport = async () => {
             report.localId = `local_${Date.now()}`;
             report.reportName = `(Unsynced) Summary of ${reportDate}`;
             report.createdAt = new Date();
+            // MODIFIED: Add isDeleted flag for offline reports
+            report.isDeleted = false;
             delete report.lastUpdatedAt;
             await localDb.put('unsyncedReports', report);
             await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
@@ -548,7 +548,6 @@ const saveReport = async () => {
     loadRecentTransactions();
     return true;
 };
-
 
 const exportToPDF = async () => {
     await saveReport();
@@ -561,7 +560,7 @@ const clearSheet = async () => {
         loanTableBody.innerHTML = '';
         while (loanTableBody.rows.length < 5) addRow({ no: '', principal: '', date: '' });
         updateAllCalculations();
-        currentlyEditingReportId = null; // Reset editing state
+        currentlyEditingReportId = null;
     }
 };
 
@@ -593,7 +592,7 @@ const renderRecentTransactions = (filter = '') => {
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
                 <button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button>
                 <button class="btn btn-success" onclick="finaliseReport('${report.id}')">Finalise</button>
-                <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
+                <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Archive</button>
             </div>`;
         recentTransactionsListEl.appendChild(li);
     });
@@ -608,7 +607,13 @@ const loadRecentTransactions = async () => {
     let onlineReports = [], localReports = [];
     if (navigator.onLine) {
         try {
-            const snapshot = await reportsCollection.where("status", "!=", "finalised").orderBy("status").orderBy("createdAt", "desc").get();
+            // MODIFIED: Query now filters for isDeleted != true
+            const snapshot = await reportsCollection
+                .where("isDeleted", "!=", true)
+                .where("status", "!=", "finalised")
+                .orderBy("status")
+                .orderBy("createdAt", "desc")
+                .get();
             onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         } catch (error) {
             console.error("Error loading online reports:", error);
@@ -658,7 +663,7 @@ const renderFinalisedTransactions = (filter = '') => {
             </div>
             <div class="button-group">
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true)">View</button>
-                <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Delete</button>
+                <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Archive</button>
             </div>`;
         listEl.appendChild(li);
     });
@@ -668,17 +673,19 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        // Query without server-side sorting
-        const snapshot = await reportsCollection.where("status", "==", "finalised").get();
+        // MODIFIED: Query now filters for isDeleted != true
+        const snapshot = await reportsCollection
+            .where("isDeleted", "!=", true)
+            .where("status", "==", "finalised")
+            .get();
         let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         
-        // Correctly sort reports on the client-side after parsing dates
         reports.sort((a, b) => {
             const dateA = parseDate(a.reportDate);
             const dateB = parseDate(b.reportDate);
             if (!dateA) return 1;
             if (!dateB) return -1;
-            return dateB - dateA; // Sorts from newest to oldest
+            return dateB - dateA; 
         });
 
         cachedFinalisedReports = reports;
@@ -689,7 +696,6 @@ const loadFinalisedTransactions = async () => {
     document.getElementById('finalisedTransactionsLoader').style.display = 'none';
     renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
 };
-
 
 const setViewMode = (isViewOnly) => {
     const isEditable = !isViewOnly;
@@ -707,7 +713,7 @@ const setViewMode = (isViewOnly) => {
 const exitViewMode = () => {
     setViewMode(false);
     loadCurrentState();
-    currentlyEditingReportId = null; // Reset editing state
+    currentlyEditingReportId = null;
 };
 
 const viewReport = (reportId, isEditable, isFinalised = false) => {
@@ -721,11 +727,11 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
     if (report.loans) report.loans.forEach(loan => addRow(loan));
     
     if (isEditable) {
-        currentlyEditingReportId = reportId; // Set the ID for editing
+        currentlyEditingReportId = reportId;
         addRow({ no: '', principal: '', date: '' });
         setViewMode(false);
     } else {
-        currentlyEditingReportId = null; // Not editing, so ensure it's null
+        currentlyEditingReportId = null;
         setViewMode(true);
     }
     updateAllCalculations();
@@ -753,32 +759,39 @@ const finaliseReport = async (docId) => {
     }
 };
 
+// MODIFIED: This function now performs a "soft delete" (archive)
 const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
-        const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
+        const key = prompt("This is a finalised transaction. Please enter the security key to archive.");
         if (key !== FINALISED_DELETE_KEY) {
             if (key !== null) { 
-                await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
+                await showConfirm("Access Denied", "The security key is incorrect. Archiving cancelled.", false);
             }
             return;
         }
     }
 
-    const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
+    const confirmed = await showConfirm("Archive Report", "Are you sure you want to archive this report? It will be hidden from the list but not permanently deleted.");
     if (!confirmed) return;
+
     if (navigator.onLine && reportsCollection) {
         try {
-            await reportsCollection.doc(docId).delete();
-            await showConfirm("Success", "The report has been deleted.", false);
+            // This is the core change: update instead of delete
+            await reportsCollection.doc(docId).update({
+                isDeleted: true,
+                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await showConfirm("Success", "The report has been archived.", false);
         } catch (error) {
-            console.error("Error deleting report:", error);
-            await showConfirm("Error", "Failed to delete the report.", false);
+            console.error("Error archiving report:", error);
+            await showConfirm("Error", "Failed to archive the report.", false);
         }
     } else {
-        await showConfirm("Offline", "You must be online to delete reports.", false);
+        await showConfirm("Offline", "You must be online to archive reports.", false);
         return;
     }
     
+    // Refresh the correct list after archiving
     if (isFinalised) {
         loadFinalisedTransactions();
     } else {
@@ -1054,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } else {
             user = null;
-            currentlyEditingReportId = null; // Reset editing state on sign out
+            currentlyEditingReportId = null;
             reportsCollection = null;
             cachedReports = [];
             loginOverlay.style.display = 'flex';
@@ -1146,14 +1159,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     numberImageUploadInput.addEventListener('change', handleNumberScan);
     clearSearchSheetBtn.addEventListener('click', clearSearchSheet);
     
-    // Live searching as the user types
     loanSearchTableBody.addEventListener('input', (e) => {
         if (e.target.matches('.search-no')) {
             performLoanSearch(e.target);
         }
     });
 
-    // Filter button logic
     searchFiltersContainer.addEventListener('click', (e) => {
         if (e.target.matches('.btn')) {
             searchFiltersContainer.querySelector('.active-filter').classList.remove('active-filter');
