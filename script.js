@@ -606,19 +606,17 @@ const loadRecentTransactions = async () => {
     if (navigator.onLine) {
         try {
             // --- MODIFIED QUERY ---
-            // Changed where("status", "!=", "finalised") to where("status", "==", "pending")
-            // This makes the query valid by only using one inequality filter (on isDeleted).
-            // Also removed the unnecessary orderBy("status").
+            // Added orderBy("isDeleted") as the first sort condition to satisfy
+            // Firestore's rule for queries with inequality filters.
             const snapshot = await reportsCollection
                 .where("isDeleted", "!=", true)
                 .where("status", "==", "pending")
+                .orderBy("isDeleted")
                 .orderBy("createdAt", "desc")
                 .get();
             onlineReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         } catch (error) {
             console.error("Error loading online reports:", error);
-            // If you get an error about an index after this change,
-            // just click the link in the console to create it.
         }
     }
     const local = (localDb) ? (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true })) : [];
