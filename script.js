@@ -241,6 +241,35 @@ const updateAllCalculations = () => {
     }
 };
 
+
+const checkClipboardForImage = async () => {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+        return; // Clipboard API not supported or not in a secure context.
+    }
+    try {
+        const clipboardItems = await navigator.clipboard.read();
+        for (const item of clipboardItems) {
+            const imageType = item.types.find(type => type.startsWith('image/'));
+            if (imageType) {
+                const blob = await item.getType(imageType);
+                const confirmed = await showConfirm(
+                    "Image Found on Clipboard", 
+                    "Do you want to scan the image from your clipboard?"
+                );
+                if (confirmed) {
+                    const file = new File([blob], "pasted_image.png", { type: blob.type });
+                    handleImageScan(file);
+                }
+                return; // Stop after finding the first image.
+            }
+        }
+    } catch (err) {
+        // This usually happens if the user denies permission. We can ignore it silently.
+        console.log('Could not read clipboard. Permission may have been denied.');
+    }
+};
+
+
 // --- Table Management ---
 const addRow = (loan = { no: '', principal: '', date: '' }) => {
     const rowCount = loanTableBody.rows.length;
@@ -359,6 +388,12 @@ const showTab = (tabId) => {
     document.querySelectorAll('.tab-content, .tab-button').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+    
+    // Check the clipboard for an image whenever the calculator tab is shown
+    if (tabId === 'calculatorTab') {
+        checkClipboardForImage();
+    }
+
     if (user) {
         if (tabId === 'recentTransactionsTab') {
             recentTransactionsListEl.innerHTML = '';
