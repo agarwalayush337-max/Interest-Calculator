@@ -419,3 +419,52 @@ td.read-only { font-weight: 500; font-size: 1rem; }
         width: 100%;
     }
 }
+/* --- Loan Search Tab Styles --- */
+.search-filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.search-filters .btn {
+    opacity: 0.7; /* Make non-active filters slightly transparent */
+}
+
+.search-filters .btn.active-filter {
+    opacity: 1;
+    /* Use inset shadow to show the button is "pressed" */
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+
+.btn-warning {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background-color: #e8950f; /* Slightly darker orange for hover */
+}
+
+#loanSearchTable .status-cell {
+    font-weight: 600;
+    text-align: center;
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    color: white;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+#loanSearchTable .status-available {
+    background-color: var(--success-color);
+}
+
+#loanSearchTable .status-not-available {
+    background-color: var(--warning-color);
+}
+
+#loanSearchTable .status-searching {
+     background-color: var(--subtle-text-color);
+}
