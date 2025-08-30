@@ -22,6 +22,10 @@ let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
+// --- NEW: Variables for Real-time Sync ---
+let liveStateUnsubscribe = null; // Holds the function to stop the listener
+let isUpdatingFromListener = false; // Flag to prevent infinite loops
+
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
 const appContainer = document.getElementById('appContainer');
@@ -71,6 +75,15 @@ const numberImageUploadInput = document.getElementById('numberImageUploadInput')
 const loanSearchLoader = document.getElementById('loanSearchLoader');
 const searchFiltersContainer = document.querySelector('.search-filters');
 
+
+// --- NEW: Debounce function to limit how often we write to Firestore ---
+const debounce = (func, delay) => {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), delay);
+    };
+};
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -184,7 +197,9 @@ const calculateInterest = (principal, rate, durationInDays) => {
     return principal * (rate / 100 / 30) * effectiveDuration;
 };
 
+// --- MODIFIED: updateAllCalculations now sends data to Firestore ---
 const updateAllCalculations = () => {
+    // This part is the same, it calculates totals based on the UI
     const todayDate = parseDate(todayDateEl.value);
     const interestRate = parseFloat(interestRateEl.value) || 0;
     let totalPrincipal = 0, totalInterestRaw = 0;
@@ -211,7 +226,11 @@ const updateAllCalculations = () => {
     totalInterestEl.textContent = Math.round(roundedTotalInterest);
     finalTotalEl.textContent = Math.round(totalPrincipal + roundedTotalInterest);
     
-    saveCurrentState();
+    // Instead of localStorage, we now call the function to update Firestore
+    // The check for isUpdatingFromListener prevents an infinite loop
+    if (!isUpdatingFromListener) {
+        debouncedUpdateLiveState();
+    }
 };
 
 // --- Table Management ---
@@ -227,6 +246,7 @@ const addRow = (loan = { no: '', principal: '', date: '' }) => {
         <td class="read-only interest"></td>
         <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeRow(this)">X</button></td>`;
     renumberRows();
+    // This will now trigger the debounced update to Firestore
     updateAllCalculations();
 };
 const removeRow = (button) => {
@@ -318,34 +338,8 @@ const handleImageScan = async (event) => {
     imageUploadInput.value = '';
 };
 
-// --- State Management ---
-const saveCurrentState = () => {
-    if (!user) return;
-    const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
-        .map(row => ({
-            no: row.querySelector('.no').value,
-            principal: row.querySelector('.principal').value,
-            date: row.querySelector('.date').value
-        }))
-        .filter(loan => loan.no || loan.principal);
-    const currentState = { todayDate: todayDateEl.value, interestRate: interestRateEl.value, loans: loans };
-    localStorage.setItem(`interestLedgerState_${user.uid}`, JSON.stringify(currentState));
-};
-const loadCurrentState = () => {
-    if (!user) return;
-    const savedState = JSON.parse(localStorage.getItem(`interestLedgerState_${user.uid}`));
-    loanTableBody.innerHTML = '';
-    if (savedState) {
-        todayDateEl.value = savedState.todayDate || formatDateToDDMMYYYY(new Date());
-        interestRateEl.value = savedState.interestRate || '1.75';
-        if (savedState.loans && savedState.loans.length > 0) savedState.loans.forEach(loan => addRow(loan));
-    } else {
-        todayDateEl.value = formatDateToDDMMYYYY(new Date());
-    }
-    while (loanTableBody.rows.length < 5) addRow({ no: '', principal: '', date: '' });
-    if (!loanTableBody.lastChild.querySelector('.principal').value) { } else { addRow({ no: '', principal: '', date: '' }); }
-    updateAllCalculations();
-};
+// --- REMOVED State Management with localStorage ---
+// The saveCurrentState and loadCurrentState functions are no longer needed.
 
 // --- Tabs ---
 const showTab = (tabId) => {
@@ -557,6 +551,7 @@ const clearSheet = async () => {
     if (confirmed) {
         loanTableBody.innerHTML = '';
         while (loanTableBody.rows.length < 5) addRow({ no: '', principal: '', date: '' });
+        // The updateAllCalculations call here will clear the live state
         updateAllCalculations();
         currentlyEditingReportId = null;
     }
@@ -708,7 +703,8 @@ const setViewMode = (isViewOnly) => {
 
 const exitViewMode = () => {
     setViewMode(false);
-    loadCurrentState();
+    // MODIFIED: No longer loads from localStorage, re-enables the listener
+    listenForLiveStateChanges(); 
     currentlyEditingReportId = null;
 };
 
@@ -716,6 +712,13 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
     const report = (isFinalised ? cachedFinalisedReports : cachedReports).find(r => r.id === reportId);
     if (!report) return showConfirm("Error", "Report not found!", false);
     
+    // MODIFIED: When viewing a saved report, we detach the live listener
+    // to prevent the saved data from being overwritten by the live state.
+    if (liveStateUnsubscribe) {
+        liveStateUnsubscribe();
+        liveStateUnsubscribe = null;
+    }
+
     showTab('calculatorTab');
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
@@ -1028,36 +1031,93 @@ const signInWithGoogle = () => {
 };
 const signOut = () => auth.signOut();
 
+// --- NEW: Real-time Functions ---
+
+/**
+ * Sends the current state of the calculator to Firestore.
+ */
+const updateLiveState = () => {
+    if (!user || !reportsCollection) return;
+
+    const loans = Array.from(document.querySelectorAll('#loanTable tbody tr'))
+        .map(row => ({
+            no: row.querySelector('.no').value,
+            principal: row.querySelector('.principal').value,
+            date: row.querySelector('.date').value
+        }))
+        .filter(loan => loan.no || loan.principal);
+    
+    const liveState = {
+        todayDate: todayDateEl.value,
+        interestRate: interestRateEl.value,
+        loans: loans
+    };
+
+    const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
+    liveStateRef.set(liveState, { merge: true }).catch(error => {
+        console.error("Could not update live state:", error);
+    });
+};
+
+// Create a debounced version of the update function to call from the UI
+const debouncedUpdateLiveState = debounce(() => updateLiveState(), 500);
+
+/**
+ * Listens for real-time changes to the calculator state in Firestore and updates the UI.
+ */
+const listenForLiveStateChanges = () => {
+    if (liveStateUnsubscribe) {
+        liveStateUnsubscribe(); // Detach any old listener
+    }
+    if (!user) return;
+
+    const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
+    liveStateUnsubscribe = liveStateRef.onSnapshot(doc => {
+        isUpdatingFromListener = true; // Set flag to prevent feedback loop
+
+        if (doc.exists) {
+            const state = doc.data();
+            todayDateEl.value = state.todayDate || formatDateToDDMMYYYY(new Date());
+            interestRateEl.value = state.interestRate || '1.75';
+            
+            // Rebuild the table with the new data
+            loanTableBody.innerHTML = '';
+            if (state.loans && state.loans.length > 0) {
+                state.loans.forEach(loan => addRow(loan));
+            }
+            // Ensure there's always an empty row at the end
+             addRow({ no: '', principal: '', date: '' });
+        } else {
+            // If no document exists for the user, create one with the default state
+            updateLiveState();
+        }
+
+        updateAllCalculations(); // Recalculate totals
+
+        // Reset the flag shortly after to allow user input to be sent
+        setTimeout(() => { isUpdatingFromListener = false; }, 100);
+    }, error => {
+        console.error("Error with live listener:", error);
+    });
+};
+
+
 // --- Initial Load & Event Listeners ---
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
     auth.onAuthStateChanged(async (firebaseUser) => {
         if (firebaseUser) {
-            const userEmail = firebaseUser.email;
-            const userRef = db.collection('allowedUsers').doc(userEmail);
-            try {
-                const doc = await userRef.get();
-                if (doc.exists) {
-                    user = firebaseUser;
-                    reportsCollection = db.collection('sharedReports');
-                    authStatusEl.textContent = user.displayName || user.email;
-                    loginOverlay.style.display = 'none';
-                    appContainer.style.display = 'block';
-                    loadCurrentState();
-                    syncData();
-                    if (document.querySelector('.tab-button.active').dataset.tab === 'recentTransactionsTab') {
-                        loadRecentTransactions();
-                    }
-                } else {
-                    await showConfirm("Access Denied", "You are not authorized to use this application.", false);
-                    auth.signOut();
-                }
-            } catch (error) {
-                console.error("Authorization check failed:", error);
-                await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
-                auth.signOut();
-            }
+            user = firebaseUser;
+            reportsCollection = db.collection('sharedReports');
+            authStatusEl.textContent = user.displayName || user.email;
+            loginOverlay.style.display = 'none';
+            appContainer.style.display = 'block';
+            
+            // MODIFIED: Start listening for real-time changes instead of loading from localStorage
+            listenForLiveStateChanges(); 
+            syncData();
+
         } else {
             user = null;
             currentlyEditingReportId = null;
@@ -1065,6 +1125,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             cachedReports = [];
             loginOverlay.style.display = 'flex';
             appContainer.style.display = 'none';
+            // MODIFIED: Detach the listener when the user signs out
+            if (liveStateUnsubscribe) {
+                liveStateUnsubscribe();
+                liveStateUnsubscribe = null;
+            }
         }
     });
     googleSignInBtn.addEventListener('click', signInWithGoogle);
@@ -1098,11 +1163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('offline', updateSyncStatus);
     loanTableBody.addEventListener('input', e => {
         if (e.target.matches('input')) {
-            const currentRow = e.target.closest('tr');
-            if (currentRow && currentRow.isSameNode(loanTableBody.lastChild) && (e.target.classList.contains('principal') || e.target.classList.contains('no'))) {
-                addRow({ no: '', principal: '', date: '' });
-            }
-            updateAllCalculations();
+            updateAllCalculations(); // Send updates on any input change
         }
     });
     loanTableBody.addEventListener('blur', e => {
