@@ -590,7 +590,7 @@ const renderRecentTransactions = (filter = '') => {
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
                 <button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button>
                 <button class="btn btn-success" onclick="finaliseReport('${report.id}')">Finalise</button>
-                <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Archive</button>
+                <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
             </div>`;
         recentTransactionsListEl.appendChild(li);
     });
@@ -605,9 +605,6 @@ const loadRecentTransactions = async () => {
     let onlineReports = [], localReports = [];
     if (navigator.onLine) {
         try {
-            // --- MODIFIED QUERY ---
-            // Added orderBy("isDeleted") as the first sort condition to satisfy
-            // Firestore's rule for queries with inequality filters.
             const snapshot = await reportsCollection
                 .where("isDeleted", "!=", true)
                 .where("status", "==", "pending")
@@ -663,7 +660,7 @@ const renderFinalisedTransactions = (filter = '') => {
             </div>
             <div class="button-group">
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true)">View</button>
-                <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Archive</button>
+                <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Delete</button>
             </div>`;
         listEl.appendChild(li);
     });
@@ -760,16 +757,16 @@ const finaliseReport = async (docId) => {
 
 const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
-        const key = prompt("This is a finalised transaction. Please enter the security key to archive.");
+        const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
         if (key !== FINALISED_DELETE_KEY) {
             if (key !== null) { 
-                await showConfirm("Access Denied", "The security key is incorrect. Archiving cancelled.", false);
+                await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
             }
             return;
         }
     }
 
-    const confirmed = await showConfirm("Archive Report", "Are you sure you want to archive this report? It will be hidden from the list but not permanently deleted.");
+    const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
 
     if (navigator.onLine && reportsCollection) {
@@ -778,13 +775,13 @@ const deleteReport = async (docId, isFinalised = false) => {
                 isDeleted: true,
                 deletedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            await showConfirm("Success", "The report has been archived.", false);
+            await showConfirm("Success", "The report has been deleted.", false);
         } catch (error) {
-            console.error("Error archiving report:", error);
-            await showConfirm("Error", "Failed to archive the report.", false);
+            console.error("Error deleting report:", error);
+            await showConfirm("Error", "Failed to delete the report.", false);
         }
     } else {
-        await showConfirm("Offline", "You must be online to archive reports.", false);
+        await showConfirm("Offline", "You must be online to delete reports.", false);
         return;
     }
     
