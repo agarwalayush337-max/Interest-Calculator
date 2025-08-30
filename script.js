@@ -17,8 +17,10 @@ let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
 let cachedFinalisedReports = [];
-let loanSearchCache = new Map(); // For fast loan number lookups
+let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
+// NEW: Variable to track the report being edited
+let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
 // --- DOM Elements ---
@@ -455,6 +457,7 @@ const generatePDF = async (action = 'save') => {
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
+
 const isDuplicateReport = (newReport, reportList) => {
     const normalizeLoansForComparison = (loans) => {
         return loans.map(l => ({
@@ -476,6 +479,7 @@ const isDuplicateReport = (newReport, reportList) => {
         return newReportLoansString === existingReportLoansString;
     });
 };
+
 const saveReport = async () => {
     await loadRecentTransactions(); 
 
@@ -492,33 +496,59 @@ const saveReport = async () => {
         reportDate,
         interestRate: interestRateEl.value,
         loans,
-        createdAt: new Date(),
+        lastUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         status: 'pending',
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
-    if (isDuplicateReport(report, cachedReports)) {
-        await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
-        return false;
-    }
-    if (navigator.onLine && reportsCollection) {
-        const baseName = `Summary of ${reportDate}`;
-        const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
-        report.reportName = querySnapshot.size > 0 ? `${baseName} (${querySnapshot.size + 1})` : baseName;
-        report.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        try {
-            await reportsCollection.add(report);
-            await showConfirm("Success", "Report saved to the cloud.", false);
-        } catch (error) { console.error("Error saving online:", error); }
+    // --- SMART SAVE LOGIC ---
+    if (currentlyEditingReportId) {
+        // --- UPDATE existing report ---
+        if (navigator.onLine && reportsCollection) {
+            try {
+                await reportsCollection.doc(currentlyEditingReportId).update(report);
+                await showConfirm("Success", "Report updated successfully.", false);
+                currentlyEditingReportId = null; // Reset after successful update
+            } catch (error) {
+                console.error("Error updating report:", error);
+                await showConfirm("Error", "Failed to update the report.", false);
+            }
+        } else {
+            await showConfirm("Offline", "You must be online to update an existing report.", false);
+            return false;
+        }
     } else {
-        report.localId = `local_${Date.now()}`;
-        report.reportName = `(Unsynced) Summary of ${reportDate}`;
-        await localDb.put('unsyncedReports', report);
-        await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
+        // --- CREATE new report (original logic) ---
+        if (isDuplicateReport(report, cachedReports)) {
+            await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
+            return false;
+        }
+        
+        if (navigator.onLine && reportsCollection) {
+            const baseName = `Summary of ${reportDate}`;
+            const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
+            report.reportName = querySnapshot.size > 0 ? `${baseName} (${querySnapshot.size + 1})` : baseName;
+            report.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            delete report.lastUpdatedAt;
+            
+            try {
+                await reportsCollection.add(report);
+                await showConfirm("Success", "Report saved to the cloud.", false);
+            } catch (error) { console.error("Error saving online:", error); }
+        } else {
+            report.localId = `local_${Date.now()}`;
+            report.reportName = `(Unsynced) Summary of ${reportDate}`;
+            report.createdAt = new Date();
+            delete report.lastUpdatedAt;
+            await localDb.put('unsyncedReports', report);
+            await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
+        }
     }
+
     loadRecentTransactions();
     return true;
 };
+
 
 const exportToPDF = async () => {
     await saveReport();
@@ -531,6 +561,7 @@ const clearSheet = async () => {
         loanTableBody.innerHTML = '';
         while (loanTableBody.rows.length < 5) addRow({ no: '', principal: '', date: '' });
         updateAllCalculations();
+        currentlyEditingReportId = null; // Reset editing state
     }
 };
 
@@ -637,7 +668,7 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        // Query without server-side sorting to allow for correct client-side sorting
+        // Query without server-side sorting
         const snapshot = await reportsCollection.where("status", "==", "finalised").get();
         let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         
@@ -645,7 +676,6 @@ const loadFinalisedTransactions = async () => {
         reports.sort((a, b) => {
             const dateA = parseDate(a.reportDate);
             const dateB = parseDate(b.reportDate);
-            // Handle cases where a date might be invalid or missing
             if (!dateA) return 1;
             if (!dateB) return -1;
             return dateB - dateA; // Sorts from newest to oldest
@@ -660,6 +690,7 @@ const loadFinalisedTransactions = async () => {
     renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
 };
 
+
 const setViewMode = (isViewOnly) => {
     const isEditable = !isViewOnly;
     mainActionBar.style.display = isEditable ? 'flex' : 'none';
@@ -673,17 +704,30 @@ const setViewMode = (isViewOnly) => {
     });
 };
 
-const exitViewMode = () => { setViewMode(false); loadCurrentState(); };
+const exitViewMode = () => {
+    setViewMode(false);
+    loadCurrentState();
+    currentlyEditingReportId = null; // Reset editing state
+};
 
 const viewReport = (reportId, isEditable, isFinalised = false) => {
     const report = (isFinalised ? cachedFinalisedReports : cachedReports).find(r => r.id === reportId);
     if (!report) return showConfirm("Error", "Report not found!", false);
+    
     showTab('calculatorTab');
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
     if (report.loans) report.loans.forEach(loan => addRow(loan));
-    if (isEditable) { addRow({ no: '', principal: '', date: '' }); setViewMode(false); } else { setViewMode(true); }
+    
+    if (isEditable) {
+        currentlyEditingReportId = reportId; // Set the ID for editing
+        addRow({ no: '', principal: '', date: '' });
+        setViewMode(false);
+    } else {
+        currentlyEditingReportId = null; // Not editing, so ensure it's null
+        setViewMode(true);
+    }
     updateAllCalculations();
 };
 
@@ -744,11 +788,6 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 
 // --- Loan Search Feature Functions ---
-
-/**
- * Builds a fast-lookup map from the cached finalised reports.
- * Maps each loan number to its details for instant searching.
- */
 const buildLoanSearchCache = () => {
     loanSearchCache.clear();
     if (cachedFinalisedReports.length === 0) return;
@@ -766,15 +805,11 @@ const buildLoanSearchCache = () => {
             });
         }
     });
-    // After building the cache, re-run search on all visible rows
     document.querySelectorAll('#loanSearchTable tbody tr').forEach(row => {
         performLoanSearch(row.querySelector('.search-no'));
     });
 };
 
-/**
- * Adds a new, empty row to the loan search table.
- */
 const addSearchRow = (loanNo = '') => {
     const rowCount = loanSearchTableBody.rows.length;
     const row = loanSearchTableBody.insertRow();
@@ -788,9 +823,6 @@ const addSearchRow = (loanNo = '') => {
     renumberSearchRows();
 };
 
-/**
- * Removes a row from the loan search table.
- */
 const removeSearchRow = (button) => {
     const row = button.closest('tr');
     if (loanSearchTableBody.rows.length > 0) {
@@ -799,18 +831,12 @@ const removeSearchRow = (button) => {
     }
 };
 
-/**
- * Renumbers the rows in the search table after a row is added or removed.
- */
 const renumberSearchRows = () => {
     document.querySelectorAll('#loanSearchTable tbody tr').forEach((r, index) => {
         r.cells[0].textContent = index + 1;
     });
 };
 
-/**
- * Performs the search for a single loan number and updates its row.
- */
 const performLoanSearch = (inputElement) => {
     if (!inputElement) return;
     
@@ -820,7 +846,6 @@ const performLoanSearch = (inputElement) => {
     const dateCell = row.querySelector('.date-result');
     const statusCell = row.querySelector('.status-cell');
 
-    // Clear previous results
     principalCell.textContent = '';
     dateCell.textContent = '';
     statusCell.textContent = '';
@@ -840,16 +865,10 @@ const performLoanSearch = (inputElement) => {
     }
 };
 
-
-/**
- * Handles the new "Scan for Numbers" feature.
- */
 const handleNumberScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     showConfirm('Scanning for Numbers...', 'Please wait while the document is being analyzed.', false);
-    
     try {
         const reader = new FileReader();
         reader.onload = async () => {
@@ -858,20 +877,15 @@ const handleNumberScan = async (event) => {
                 const response = await fetch('/.netlify/functions/scanImage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // Send the new 'scanType' parameter
                     body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
                 });
-
                 closeConfirm();
-
                 if (!response.ok) {
                     const errorInfo = await response.json();
                     throw new Error(errorInfo.error || 'The scan failed.');
                 }
-
                 const result = await response.json();
                 fillSearchTableFromScan(result.loanNumbers);
-
             } catch (fetchError) {
                 closeConfirm();
                 await showConfirm('Scan Error', fetchError.message, false);
@@ -882,45 +896,32 @@ const handleNumberScan = async (event) => {
         closeConfirm();
         await showConfirm('File Error', 'Could not read the selected image file.', false);
     }
-    numberImageUploadInput.value = ''; // Reset input
+    numberImageUploadInput.value = '';
 };
 
-/**
- * Fills the search table with loan numbers extracted from the scan.
- */
 const fillSearchTableFromScan = (loanNumbers) => {
     if (!loanNumbers || loanNumbers.length === 0) {
         showConfirm('Scan Results', 'Could not find any loan numbers in the image.', false);
         return;
     }
-
-    // Clear any existing empty rows before adding new ones
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) {
             input.closest('tr').remove();
         }
     });
-
     loanNumbers.forEach(no => addSearchRow(no));
-
-    // Perform search for all the newly added rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (input.value) performLoanSearch(input);
     });
-
     renumberSearchRows();
     showConfirm('Scan Complete', `${loanNumbers.length} loan number(s) were found and added to the search list.`, false);
 };
 
-/**
- * Filters the search results based on the selected filter button.
- */
 const filterSearchResults = (filter) => {
     const rows = document.querySelectorAll('#loanSearchTable tbody tr');
     rows.forEach(row => {
         const statusCell = row.querySelector('.status-cell');
         let isVisible = false;
-
         if (filter === 'all') {
             isVisible = true;
         } else if (filter === 'available' && statusCell.classList.contains('status-available')) {
@@ -928,14 +929,10 @@ const filterSearchResults = (filter) => {
         } else if (filter === 'not-available' && statusCell.classList.contains('status-not-available')) {
             isVisible = true;
         }
-
         row.style.display = isVisible ? '' : 'none';
     });
 };
 
-/**
- * Clears all rows from the search sheet and adds 5 new empty ones.
- */
 const clearSearchSheet = async () => {
     const confirmed = await showConfirm("Clear Search Sheet", "Are you sure you want to clear all search rows?");
     if (confirmed) {
@@ -1000,7 +997,7 @@ const renderDashboard = async () => {
     });
 
     const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recentReports = filteredReports.slice(0, 7).reverse(); // Show latest 7 from the filtered range
+    const recentReports = filteredReports.slice(0, 7).reverse();
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
         data: { 
@@ -1057,6 +1054,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } else {
             user = null;
+            currentlyEditingReportId = null; // Reset editing state on sign out
             reportsCollection = null;
             cachedReports = [];
             loginOverlay.style.display = 'flex';
