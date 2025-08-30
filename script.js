@@ -17,6 +17,8 @@ let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
 let cachedFinalisedReports = [];
+// NEW: Cache for fast loan number lookups
+let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
@@ -60,6 +62,13 @@ const last30DaysBtn = document.getElementById('last30DaysBtn');
 const currentFyBtn = document.getElementById('currentFyBtn');
 const prevFyBtn = document.getElementById('prevFyBtn');
 const applyDateFilterBtn = document.getElementById('applyDateFilterBtn');
+// --- NEW: DOM Elements for Loan Search ---
+const addSearchRowBtn = document.getElementById('addSearchRowBtn');
+const loanSearchTableBody = document.querySelector('#loanSearchTable tbody');
+const scanNumbersBtn = document.getElementById('scanNumbersBtn');
+const numberImageUploadInput = document.getElementById('numberImageUploadInput');
+const loanSearchLoader = document.getElementById('loanSearchLoader');
+const searchFiltersContainer = document.querySelector('.search-filters');
 
 
 // --- Offline Database (IndexedDB) Setup ---
@@ -352,13 +361,23 @@ const showTab = (tabId) => {
             loadFinalisedTransactions();
         }
         if (tabId === 'dashboardTab') {
-            // Set default dates to current FY if they are empty
             if (!dashboardStartDateEl.value || !dashboardEndDateEl.value) {
                 const { startDate, endDate } = getFinancialYear();
                 dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
                 dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
             }
             renderDashboard();
+        }
+        // --- NEW: Logic for the Loan Search Tab ---
+        if (tabId === 'loanSearchTab') {
+            if (loanSearchTableBody.rows.length === 0) {
+                for (let i = 0; i < 5; i++) addSearchRow();
+            }
+            if (cachedFinalisedReports.length === 0) {
+                loadFinalisedTransactions().then(buildLoanSearchCache);
+            } else {
+                buildLoanSearchCache();
+            }
         }
     }
 };
@@ -437,16 +456,13 @@ const generatePDF = async (action = 'save') => {
         doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
     }
 };
-
-// A helper function to check if an identical report already exists
 const isDuplicateReport = (newReport, reportList) => {
-    // This helper standardizes the loan array for a reliable comparison
     const normalizeLoansForComparison = (loans) => {
         return loans.map(l => ({
-            no: l.no.trim().toUpperCase(), // Standardize 'no' field
-            principal: parseFloat(l.principal) || 0, // Ensure principal is a number
+            no: l.no.trim().toUpperCase(),
+            principal: parseFloat(l.principal) || 0,
             date: l.date
-        })).sort((a, b) => a.no.localeCompare(b.no)); // Sort to ignore order differences
+        })).sort((a, b) => a.no.localeCompare(b.no));
     };
 
     const newReportLoansString = JSON.stringify(normalizeLoansForComparison(newReport.loans));
@@ -454,22 +470,14 @@ const isDuplicateReport = (newReport, reportList) => {
 
     return reportList.some(existingReport => {
         const existingInterestRate = parseFloat(existingReport.interestRate) || 0;
-
-        // Compare date and the numeric interest rate
-        if (newReport.reportDate !== existingReport.reportDate ||
-            newInterestRate !== existingInterestRate) {
+        if (newReport.reportDate !== existingReport.reportDate || newInterestRate !== existingInterestRate) {
             return false;
         }
-
-        // If the basics match, compare the standardized loan data
         const existingReportLoansString = JSON.stringify(normalizeLoansForComparison(existingReport.loans));
         return newReportLoansString === existingReportLoansString;
     });
 };
-
-// The new, primary function for saving a report
 const saveReport = async () => {
-    // **FIX**: Load the most recent reports to ensure the duplicate check is accurate
     await loadRecentTransactions(); 
 
     cleanAndSortTable();
@@ -477,7 +485,7 @@ const saveReport = async () => {
     const loans = getCurrentLoans().map(({ no, principal, date }) => ({ no, principal, date }));
     if (loans.length === 0) {
         showConfirm("Cannot Save", "Please add at least one loan with a principal amount.", false);
-        return false; // Indicate failure
+        return false;
     }
 
     const reportDate = todayDateEl.value;
@@ -490,13 +498,10 @@ const saveReport = async () => {
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
-    // Check for duplicates before saving
     if (isDuplicateReport(report, cachedReports)) {
         await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
-        return false; // Indicate failure
+        return false;
     }
-
-    // Proceed with saving if it's not a duplicate
     if (navigator.onLine && reportsCollection) {
         const baseName = `Summary of ${reportDate}`;
         const querySnapshot = await reportsCollection.where("reportDate", "==", reportDate).get();
@@ -512,18 +517,14 @@ const saveReport = async () => {
         await localDb.put('unsyncedReports', report);
         await showConfirm("Offline", "Report saved locally. It will sync when you're back online.", false);
     }
-
-    loadRecentTransactions(); // Refresh the list again after saving
-    return true; // Indicate success
+    loadRecentTransactions();
+    return true;
 };
 
-
-// Updated export function that now saves before exporting
 const exportToPDF = async () => {
     await saveReport();
     generatePDF('save');
 };
-
 
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
@@ -637,19 +638,8 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        const snapshot = await reportsCollection.where("status", "==", "finalised").get();
-        let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
-        
-        reports.sort((a, b) => {
-            const dateA = parseDate(a.reportDate);
-            const dateB = parseDate(b.reportDate);
-            if (!dateA) return 1;
-            if (!dateB) return -1;
-            return dateB - dateA;
-        });
-
-        cachedFinalisedReports = reports;
-
+        const snapshot = await reportsCollection.where("status", "==", "finalised").orderBy("reportDate", "desc").get();
+        cachedFinalisedReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
     } catch (error) {
         console.error("Error loading finalised reports:", error);
     }
@@ -687,22 +677,13 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
 const finaliseReport = async (docId) => {
     const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
     if (!confirmed) return;
-
     if (navigator.onLine && reportsCollection) {
         try {
             const reportDoc = await reportsCollection.doc(docId).get();
-            if (!reportDoc.exists) {
-                throw new Error("Report not found.");
-            }
+            if (!reportDoc.exists) throw new Error("Report not found.");
             const reportData = reportDoc.data();
-            
             const newName = `Final Hisab of ${reportData.reportDate}`;
-
-            await reportsCollection.doc(docId).update({ 
-                status: 'finalised',
-                reportName: newName 
-            });
-
+            await reportsCollection.doc(docId).update({ status: 'finalised', reportName: newName });
             await showConfirm("Success", "The report has been finalised.", false);
             loadRecentTransactions();
             loadFinalisedTransactions();
@@ -728,7 +709,6 @@ const deleteReport = async (docId, isFinalised = false) => {
 
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
     if (!confirmed) return;
-
     if (navigator.onLine && reportsCollection) {
         try {
             await reportsCollection.doc(docId).delete();
@@ -748,6 +728,198 @@ const deleteReport = async (docId, isFinalised = false) => {
         loadRecentTransactions();
     }
 };
+
+
+// --- NEW: Loan Search Feature Functions ---
+
+/**
+ * Builds a fast-lookup map from the cached finalised reports.
+ * Maps each loan number to its details for instant searching.
+ */
+const buildLoanSearchCache = () => {
+    loanSearchCache.clear();
+    if (cachedFinalisedReports.length === 0) return;
+
+    cachedFinalisedReports.forEach(report => {
+        if (report.loans && Array.isArray(report.loans)) {
+            report.loans.forEach(loan => {
+                const loanNo = loan.no?.trim().toUpperCase();
+                if (loanNo && !loanSearchCache.has(loanNo)) {
+                    loanSearchCache.set(loanNo, {
+                        principal: loan.principal,
+                        reportDate: report.reportDate
+                    });
+                }
+            });
+        }
+    });
+    // After building the cache, re-run search on all visible rows
+    document.querySelectorAll('#loanSearchTable tbody tr').forEach(row => {
+        performLoanSearch(row.querySelector('.search-no'));
+    });
+};
+
+/**
+ * Adds a new, empty row to the loan search table.
+ */
+const addSearchRow = (loanNo = '') => {
+    const rowCount = loanSearchTableBody.rows.length;
+    const row = loanSearchTableBody.insertRow();
+    row.innerHTML = `
+        <td>${rowCount + 1}</td>
+        <td><input type="text" class="search-no" placeholder="Enter Loan No..." value="${loanNo}"></td>
+        <td class="read-only principal-result"></td>
+        <td class="read-only date-result"></td>
+        <td class="read-only status-cell"></td>
+        <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeSearchRow(this)">X</button></td>`;
+    renumberSearchRows();
+};
+
+/**
+ * Removes a row from the loan search table.
+ */
+const removeSearchRow = (button) => {
+    const row = button.closest('tr');
+    if (loanSearchTableBody.rows.length > 0) {
+        row.remove();
+        renumberSearchRows();
+    }
+};
+
+/**
+ * Renumbers the rows in the search table after a row is added or removed.
+ */
+const renumberSearchRows = () => {
+    document.querySelectorAll('#loanSearchTable tbody tr').forEach((r, index) => {
+        r.cells[0].textContent = index + 1;
+    });
+};
+
+/**
+ * Performs the search for a single loan number and updates its row.
+ */
+const performLoanSearch = (inputElement) => {
+    if (!inputElement) return;
+    
+    const row = inputElement.closest('tr');
+    const loanNo = inputElement.value.trim().toUpperCase();
+    const principalCell = row.querySelector('.principal-result');
+    const dateCell = row.querySelector('.date-result');
+    const statusCell = row.querySelector('.status-cell');
+
+    // Clear previous results
+    principalCell.textContent = '';
+    dateCell.textContent = '';
+    statusCell.textContent = '';
+    statusCell.className = 'read-only status-cell';
+
+    if (!loanNo) return;
+
+    if (loanSearchCache.has(loanNo)) {
+        const data = loanSearchCache.get(loanNo);
+        principalCell.textContent = data.principal;
+        dateCell.textContent = data.reportDate;
+        statusCell.textContent = 'Not Available';
+        statusCell.classList.add('status-not-available');
+    } else {
+        statusCell.textContent = 'Available';
+        statusCell.classList.add('status-available');
+    }
+};
+
+
+/**
+ * Handles the new "Scan for Numbers" feature.
+ */
+const handleNumberScan = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    showConfirm('Scanning for Numbers...', 'Please wait while the document is being analyzed.', false);
+    
+    try {
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const base64Image = reader.result.split(',')[1];
+                const response = await fetch('/.netlify/functions/scanImage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // Send the new 'scanType' parameter
+                    body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
+                });
+
+                closeConfirm();
+
+                if (!response.ok) {
+                    const errorInfo = await response.json();
+                    throw new Error(errorInfo.error || 'The scan failed.');
+                }
+
+                const result = await response.json();
+                fillSearchTableFromScan(result.loanNumbers);
+
+            } catch (fetchError) {
+                closeConfirm();
+                await showConfirm('Scan Error', fetchError.message, false);
+            }
+        };
+        reader.readAsDataURL(file);
+    } catch (error) {
+        closeConfirm();
+        await showConfirm('File Error', 'Could not read the selected image file.', false);
+    }
+    numberImageUploadInput.value = ''; // Reset input
+};
+
+/**
+ * Fills the search table with loan numbers extracted from the scan.
+ */
+const fillSearchTableFromScan = (loanNumbers) => {
+    if (!loanNumbers || loanNumbers.length === 0) {
+        showConfirm('Scan Results', 'Could not find any loan numbers in the image.', false);
+        return;
+    }
+
+    // Clear any existing empty rows before adding new ones
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (!input.value.trim()) {
+            input.closest('tr').remove();
+        }
+    });
+
+    loanNumbers.forEach(no => addSearchRow(no));
+
+    // Perform search for all the newly added rows
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (input.value) performLoanSearch(input);
+    });
+
+    renumberSearchRows();
+    showConfirm('Scan Complete', `${loanNumbers.length} loan number(s) were found and added to the search list.`, false);
+};
+
+/**
+ * Filters the search results based on the selected filter button.
+ */
+const filterSearchResults = (filter) => {
+    const rows = document.querySelectorAll('#loanSearchTable tbody tr');
+    rows.forEach(row => {
+        const statusCell = row.querySelector('.status-cell');
+        let isVisible = false;
+
+        if (filter === 'all') {
+            isVisible = true;
+        } else if (filter === 'available' && statusCell.classList.contains('status-available')) {
+            isVisible = true;
+        } else if (filter === 'not-available' && statusCell.classList.contains('status-not-available')) {
+            isVisible = true;
+        }
+
+        row.style.display = isVisible ? '' : 'none';
+    });
+};
+
 
 // --- Dashboard ---
 const renderDashboard = async () => {
@@ -836,11 +1008,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (firebaseUser) {
             const userEmail = firebaseUser.email;
             const userRef = db.collection('allowedUsers').doc(userEmail);
-
             try {
                 const doc = await userRef.get();
                 if (doc.exists) {
-                    console.log("User is authorized. Access granted.");
                     user = firebaseUser;
                     reportsCollection = db.collection('sharedReports');
                     authStatusEl.textContent = user.displayName || user.email;
@@ -852,7 +1022,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         loadRecentTransactions();
                     }
                 } else {
-                    console.warn("Unauthorized user attempted to sign in:", userEmail);
                     await showConfirm("Access Denied", "You are not authorized to use this application.", false);
                     auth.signOut();
                 }
@@ -861,7 +1030,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await showConfirm("Error", "An error occurred during authorization. Please try again.", false);
                 auth.signOut();
             }
-
         } else {
             user = null;
             reportsCollection = null;
@@ -923,27 +1091,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         startDate.setDate(endDate.getDate() - 30);
         dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
         dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
-        renderDashboard(); // Apply immediately
+        renderDashboard();
     });
-
     currentFyBtn.addEventListener('click', () => {
         const { startDate, endDate } = getFinancialYear();
         dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
         dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
-        renderDashboard(); // Apply immediately
+        renderDashboard();
     });
-
     prevFyBtn.addEventListener('click', () => {
         const today = new Date();
         const prevYearDate = new Date(new Date().setFullYear(today.getFullYear() - 1));
         const { startDate, endDate } = getFinancialYear(prevYearDate);
         dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
         dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
-        renderDashboard(); // Apply immediately
+        renderDashboard();
     });
-    
     applyDateFilterBtn.addEventListener('click', renderDashboard);
-
     dashboardStartDateEl.addEventListener('blur', (e) => {
         const parsed = parseDate(e.target.value);
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
@@ -951,5 +1115,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     dashboardEndDateEl.addEventListener('blur', (e) => {
         const parsed = parseDate(e.target.value);
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
+    });
+
+    // --- NEW: Event Listeners for Loan Search Tab ---
+    addSearchRowBtn.addEventListener('click', () => addSearchRow());
+    scanNumbersBtn.addEventListener('click', () => numberImageUploadInput.click());
+    numberImageUploadInput.addEventListener('change', handleNumberScan);
+    
+    // Live searching as the user types
+    loanSearchTableBody.addEventListener('input', (e) => {
+        if (e.target.matches('.search-no')) {
+            performLoanSearch(e.target);
+        }
+    });
+
+    // Filter button logic
+    searchFiltersContainer.addEventListener('click', (e) => {
+        if (e.target.matches('.btn')) {
+            searchFiltersContainer.querySelector('.active-filter').classList.remove('active-filter');
+            e.target.classList.add('active-filter');
+            filterSearchResults(e.target.dataset.filter);
+        }
     });
 });
