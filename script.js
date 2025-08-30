@@ -1334,4 +1334,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
+
+    // Automatically check clipboard when the app tab becomes visible
+    document.addEventListener('visibilitychange', () => {
+        // Check if the page is now visible and if the calculator tab is the active one
+        if (document.visibilityState === 'visible' && document.getElementById('calculatorTab').classList.contains('active')) {
+            checkClipboardForImage();
+        }
+    });
 });
