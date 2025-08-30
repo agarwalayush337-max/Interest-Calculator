@@ -1,3 +1,14 @@
+// Register the Service Worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+        .then(registration => {
+            console.log('Service Worker registered with scope:', registration.scope);
+        })
+        .catch(error => {
+            console.error('Service Worker registration failed:', error);
+        });
+}
+
 // --- Firebase Configuration ---
 const firebaseConfig = {
     apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
@@ -295,10 +306,13 @@ const fillTableFromScan = (loans) => {
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
 
-const handleImageScan = async (event) => {
-    const file = event.target.files[0];
+const handleImageScan = async (fileOrEvent) => {
+    // Determine if we received a File object directly or an event from the input
+    const file = fileOrEvent.target ? fileOrEvent.target.files[0] : fileOrEvent;
+
     if (!file) return;
     showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
+    
     try {
         const reader = new FileReader();
         reader.onload = async () => {
@@ -333,7 +347,11 @@ const handleImageScan = async (event) => {
         closeConfirm();
         await showConfirm('Error', error.message, false);
     }
-    imageUploadInput.value = '';
+    
+    // Reset the input field if the source was the input element
+    if (fileOrEvent.target) {
+        imageUploadInput.value = '';
+    }
 };
 
 // --- Tabs ---
@@ -1162,9 +1180,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (liveStateUnsubscribe) {
                 liveStateUnsubscribe();
                 liveStateUnsubscribe = null;
-            }
-        }
-    });
+        navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.action === 'scan-image') {
+            // Received an image file from the share action
+            showTab('calculatorTab'); // Switch to the calculator tab
+            handleImageScan(event.data.file); // Process the shared file
+         }
+     }
+   });
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
