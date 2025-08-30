@@ -19,7 +19,6 @@ let cachedReports = [];
 let cachedFinalisedReports = [];
 let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
-// NEW: Variable to track the report being edited
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
@@ -64,6 +63,8 @@ const currentFyBtn = document.getElementById('currentFyBtn');
 const prevFyBtn = document.getElementById('prevFyBtn');
 const applyDateFilterBtn = document.getElementById('applyDateFilterBtn');
 const clearSearchSheetBtn = document.getElementById('clearSearchSheetBtn');
+// NEW: Resort button element
+const resortBtn = document.getElementById('resortBtn');
 // --- DOM Elements for Loan Search ---
 const addSearchRowBtn = document.getElementById('addSearchRowBtn');
 const loanSearchTableBody = document.querySelector('#loanSearchTable tbody');
@@ -219,6 +220,8 @@ const updateAllCalculations = () => {
 const addRow = (loan = { no: '', principal: '', date: '' }) => {
     const rowCount = loanTableBody.rows.length;
     const row = loanTableBody.insertRow();
+    // NEW: Add a data attribute to store the original entry order
+    row.dataset.entryOrder = Date.now() + Math.random();
     row.innerHTML = `
         <td>${rowCount + 1}</td>
         <td><input type="text" class="no" value="${loan.no}"></td>
@@ -247,6 +250,24 @@ const cleanAndSortTable = () => {
     sortedRows.forEach(row => loanTableBody.appendChild(row));
     renumberRows();
 };
+
+// NEW: Function to resort the table to its original entry order
+const resortTable = () => {
+    const rows = Array.from(loanTableBody.querySelectorAll('tr'));
+    if (rows.length === 0) return;
+
+    // Sort rows based on the data-entry-order attribute
+    rows.sort((a, b) => {
+        const orderA = parseFloat(a.dataset.entryOrder || 0);
+        const orderB = parseFloat(b.dataset.entryOrder || 0);
+        return orderA - orderB;
+    });
+
+    // Re-append rows in the original order
+    rows.forEach(row => loanTableBody.appendChild(row));
+    renumberRows();
+};
+
 
 // --- Image Scanning ---
 const fillTableFromScan = (loans) => {
@@ -501,14 +522,12 @@ const saveReport = async () => {
         totals: { principal: totalPrincipalEl.textContent, interest: totalInterestEl.textContent, final: finalTotalEl.textContent }
     };
 
-    // --- SMART SAVE LOGIC ---
     if (currentlyEditingReportId) {
-        // --- UPDATE existing report ---
         if (navigator.onLine && reportsCollection) {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
                 await showConfirm("Success", "Report updated successfully.", false);
-                currentlyEditingReportId = null; // Reset after successful update
+                currentlyEditingReportId = null; 
             } catch (error) {
                 console.error("Error updating report:", error);
                 await showConfirm("Error", "Failed to update the report.", false);
@@ -518,7 +537,6 @@ const saveReport = async () => {
             return false;
         }
     } else {
-        // --- CREATE new report (original logic) ---
         if (isDuplicateReport(report, cachedReports)) {
             await showConfirm("Already Saved", "This exact report already exists and will not be saved again.", false);
             return false;
@@ -549,7 +567,6 @@ const saveReport = async () => {
     return true;
 };
 
-
 const exportToPDF = async () => {
     await saveReport();
     generatePDF('save');
@@ -561,7 +578,7 @@ const clearSheet = async () => {
         loanTableBody.innerHTML = '';
         while (loanTableBody.rows.length < 5) addRow({ no: '', principal: '', date: '' });
         updateAllCalculations();
-        currentlyEditingReportId = null; // Reset editing state
+        currentlyEditingReportId = null;
     }
 };
 
@@ -668,17 +685,15 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        // Query without server-side sorting
         const snapshot = await reportsCollection.where("status", "==", "finalised").get();
         let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         
-        // Correctly sort reports on the client-side after parsing dates
         reports.sort((a, b) => {
             const dateA = parseDate(a.reportDate);
             const dateB = parseDate(b.reportDate);
             if (!dateA) return 1;
             if (!dateB) return -1;
-            return dateB - dateA; // Sorts from newest to oldest
+            return dateB - dateA; 
         });
 
         cachedFinalisedReports = reports;
@@ -689,7 +704,6 @@ const loadFinalisedTransactions = async () => {
     document.getElementById('finalisedTransactionsLoader').style.display = 'none';
     renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
 };
-
 
 const setViewMode = (isViewOnly) => {
     const isEditable = !isViewOnly;
@@ -707,7 +721,7 @@ const setViewMode = (isViewOnly) => {
 const exitViewMode = () => {
     setViewMode(false);
     loadCurrentState();
-    currentlyEditingReportId = null; // Reset editing state
+    currentlyEditingReportId = null;
 };
 
 const viewReport = (reportId, isEditable, isFinalised = false) => {
@@ -721,11 +735,11 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
     if (report.loans) report.loans.forEach(loan => addRow(loan));
     
     if (isEditable) {
-        currentlyEditingReportId = reportId; // Set the ID for editing
+        currentlyEditingReportId = reportId;
         addRow({ no: '', principal: '', date: '' });
         setViewMode(false);
     } else {
-        currentlyEditingReportId = null; // Not editing, so ensure it's null
+        currentlyEditingReportId = null;
         setViewMode(true);
     }
     updateAllCalculations();
@@ -1054,7 +1068,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } else {
             user = null;
-            currentlyEditingReportId = null; // Reset editing state on sign out
+            currentlyEditingReportId = null;
             reportsCollection = null;
             cachedReports = [];
             loginOverlay.style.display = 'flex';
@@ -1066,6 +1080,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
     saveBtn.addEventListener('click', saveReport);
     clearSheetBtn.addEventListener('click', clearSheet);
+    // NEW: Add listener for the resort button
+    resortBtn.addEventListener('click', resortTable);
     exitViewModeBtn.addEventListener('click', exitViewMode);
     exportPdfBtn.addEventListener('click', exportToPDF);
     exportViewPdfBtn.addEventListener('click', exportToPDF);
@@ -1146,14 +1162,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     numberImageUploadInput.addEventListener('change', handleNumberScan);
     clearSearchSheetBtn.addEventListener('click', clearSearchSheet);
     
-    // Live searching as the user types
     loanSearchTableBody.addEventListener('input', (e) => {
         if (e.target.matches('.search-no')) {
             performLoanSearch(e.target);
         }
     });
 
-    // Filter button logic
     searchFiltersContainer.addEventListener('click', (e) => {
         if (e.target.matches('.btn')) {
             searchFiltersContainer.querySelector('.active-filter').classList.remove('active-filter');
