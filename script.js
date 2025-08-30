@@ -17,8 +17,7 @@ let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
 let cachedFinalisedReports = [];
-// NEW: Cache for fast loan number lookups
-let loanSearchCache = new Map();
+let loanSearchCache = new Map(); // For fast loan number lookups
 let pieChartInstance, barChartInstance;
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
@@ -62,7 +61,8 @@ const last30DaysBtn = document.getElementById('last30DaysBtn');
 const currentFyBtn = document.getElementById('currentFyBtn');
 const prevFyBtn = document.getElementById('prevFyBtn');
 const applyDateFilterBtn = document.getElementById('applyDateFilterBtn');
-// --- NEW: DOM Elements for Loan Search ---
+const clearSearchSheetBtn = document.getElementById('clearSearchSheetBtn');
+// --- DOM Elements for Loan Search ---
 const addSearchRowBtn = document.getElementById('addSearchRowBtn');
 const loanSearchTableBody = document.querySelector('#loanSearchTable tbody');
 const scanNumbersBtn = document.getElementById('scanNumbersBtn');
@@ -368,7 +368,6 @@ const showTab = (tabId) => {
             }
             renderDashboard();
         }
-        // --- NEW: Logic for the Loan Search Tab ---
         if (tabId === 'loanSearchTab') {
             if (loanSearchTableBody.rows.length === 0) {
                 for (let i = 0; i < 5; i++) addSearchRow();
@@ -638,8 +637,22 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        const snapshot = await reportsCollection.where("status", "==", "finalised").orderBy("reportDate", "desc").get();
-        cachedFinalisedReports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
+        // Query without server-side sorting to allow for correct client-side sorting
+        const snapshot = await reportsCollection.where("status", "==", "finalised").get();
+        let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
+        
+        // Correctly sort reports on the client-side after parsing dates
+        reports.sort((a, b) => {
+            const dateA = parseDate(a.reportDate);
+            const dateB = parseDate(b.reportDate);
+            // Handle cases where a date might be invalid or missing
+            if (!dateA) return 1;
+            if (!dateB) return -1;
+            return dateB - dateA; // Sorts from newest to oldest
+        });
+
+        cachedFinalisedReports = reports;
+
     } catch (error) {
         console.error("Error loading finalised reports:", error);
     }
@@ -730,7 +743,7 @@ const deleteReport = async (docId, isFinalised = false) => {
 };
 
 
-// --- NEW: Loan Search Feature Functions ---
+// --- Loan Search Feature Functions ---
 
 /**
  * Builds a fast-lookup map from the cached finalised reports.
@@ -920,6 +933,18 @@ const filterSearchResults = (filter) => {
     });
 };
 
+/**
+ * Clears all rows from the search sheet and adds 5 new empty ones.
+ */
+const clearSearchSheet = async () => {
+    const confirmed = await showConfirm("Clear Search Sheet", "Are you sure you want to clear all search rows?");
+    if (confirmed) {
+        loanSearchTableBody.innerHTML = '';
+        for (let i = 0; i < 5; i++) {
+            addSearchRow();
+        }
+    }
+};
 
 // --- Dashboard ---
 const renderDashboard = async () => {
@@ -1117,10 +1142,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
     });
 
-    // --- NEW: Event Listeners for Loan Search Tab ---
+    // --- Event Listeners for Loan Search Tab ---
     addSearchRowBtn.addEventListener('click', () => addSearchRow());
     scanNumbersBtn.addEventListener('click', () => numberImageUploadInput.click());
     numberImageUploadInput.addEventListener('change', handleNumberScan);
+    clearSearchSheetBtn.addEventListener('click', clearSearchSheet);
     
     // Live searching as the user types
     loanSearchTableBody.addEventListener('input', (e) => {
