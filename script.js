@@ -243,7 +243,10 @@ const addRow = (loan = { no: '', principal: '', date: '' }) => {
         <td class="read-only interest"></td>
         <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeRow(this)">X</button></td>`;
     renumberRows();
-    updateAllCalculations();
+    // Do not call updateAllCalculations here if we are in a bulk update from the listener
+    if (!isUpdatingFromListener) {
+        updateAllCalculations();
+    }
 };
 const removeRow = (button) => {
     const row = button.closest('tr');
@@ -369,8 +372,9 @@ const showTab = (tabId) => {
     }
 };
 
-// --- NEW: Helper function to reset the calculator to a default state ---
+// --- New helper function to reset the calculator state ---
 const resetCalculatorState = () => {
+    if (!user) return;
     const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
 
@@ -378,7 +382,7 @@ const resetCalculatorState = () => {
         todayDate: formatDateToDDMMYYYY(new Date()),
         interestRate: '1.75',
         loans: defaultLoans,
-        lastUpdatedBy: sessionClientId + '_reset'
+        lastUpdatedBy: sessionClientId + '_reset' // Ensures this client also updates
     });
     currentlyEditingReportId = null;
 };
@@ -480,7 +484,6 @@ const isDuplicateReport = (newReport, reportList) => {
     });
 };
 
-// MODIFIED: Accepts a 'silent' parameter and clears the sheet on success.
 const saveReport = async (silent = false) => {
     await loadRecentTransactions(); 
 
@@ -550,27 +553,38 @@ const saveReport = async (silent = false) => {
     if (success) {
         resetCalculatorState();
         loadRecentTransactions();
-        listenForLiveStateChanges(); // Reconnects the live listener
+        listenForLiveStateChanges();
     }
     return success;
 };
-// MODIFIED: Saves silently and checks for success before generating PDF.
+
 const exportToPDF = async () => {
-    const wasSaved = await saveReport(true); // Pass true for silent save
+    const wasSaved = await saveReport(true); 
     if (wasSaved) {
         generatePDF('save');
     }
 };
 
-
-// --- Recent & Finalised Transactions ---
 const clearSheet = async () => {
     const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
     if (confirmed) {
         resetCalculatorState();
-        listenForLiveStateChanges(); // Reconnects the live listener
+        listenForLiveStateChanges();
     }
 };
+
+// --- Recent & Finalised Transactions ---
+const renderRecentTransactions = (filter = '') => {
+    recentTransactionsListEl.innerHTML = '';
+    const searchTerm = filter.toLowerCase();
+    const filteredReports = cachedReports.filter(report => {
+        if (!searchTerm) return true;
+        if (report.reportName?.toLowerCase().includes(searchTerm)) return true;
+        return report.loans?.some(loan =>
+            loan.no?.toLowerCase().includes(searchTerm) ||
+            loan.principal?.toLowerCase().includes(searchTerm)
+        );
+    });
 
     if (filteredReports.length === 0) {
         recentTransactionsListEl.innerHTML = '<li>No matching transactions found.</li>';
@@ -703,10 +717,9 @@ const setViewMode = (isViewOnly) => {
     });
 };
 
-// MODIFIED: "Back to Calculator" now resets the state and re-enables live sync.
 const exitViewMode = () => {
-    resetCalculatorState();
     setViewMode(false);
+    resetCalculatorState();
     listenForLiveStateChanges();
 };
 
@@ -724,7 +737,6 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
     
-    // Prevent writes while loading the report data
     isUpdatingFromListener = true;
     if (report.loans) report.loans.forEach(loan => addRow(loan));
     isUpdatingFromListener = false;
@@ -737,6 +749,7 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
         currentlyEditingReportId = null;
         setViewMode(true);
     }
+    // Manually trigger final calculation after bulk-adding rows
     updateAllCalculations();
 };
 
@@ -950,6 +963,7 @@ const clearSearchSheet = async () => {
     const confirmed = await showConfirm("Clear Search Sheet", "Are you sure you want to clear all search rows?");
     if (confirmed) {
         resetCalculatorState();
+        listenForLiveStateChanges();
     }
 };
 
