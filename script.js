@@ -528,7 +528,6 @@ const saveReport = async () => {
             delete report.lastUpdatedAt;
             
             try {
-                // MODIFIED: Add isDeleted flag on creation
                 report.isDeleted = false;
                 await reportsCollection.add(report);
                 await showConfirm("Success", "Report saved to the cloud.", false);
@@ -537,7 +536,6 @@ const saveReport = async () => {
             report.localId = `local_${Date.now()}`;
             report.reportName = `(Unsynced) Summary of ${reportDate}`;
             report.createdAt = new Date();
-            // MODIFIED: Add isDeleted flag for offline reports
             report.isDeleted = false;
             delete report.lastUpdatedAt;
             await localDb.put('unsyncedReports', report);
@@ -607,7 +605,6 @@ const loadRecentTransactions = async () => {
     let onlineReports = [], localReports = [];
     if (navigator.onLine) {
         try {
-            // MODIFIED: Query now filters for isDeleted != true
             const snapshot = await reportsCollection
                 .where("isDeleted", "!=", true)
                 .where("status", "!=", "finalised")
@@ -673,7 +670,6 @@ const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
     document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
     try {
-        // MODIFIED: Query now filters for isDeleted != true
         const snapshot = await reportsCollection
             .where("isDeleted", "!=", true)
             .where("status", "==", "finalised")
@@ -759,7 +755,6 @@ const finaliseReport = async (docId) => {
     }
 };
 
-// MODIFIED: This function now performs a "soft delete" (archive)
 const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
         const key = prompt("This is a finalised transaction. Please enter the security key to archive.");
@@ -776,7 +771,6 @@ const deleteReport = async (docId, isFinalised = false) => {
 
     if (navigator.onLine && reportsCollection) {
         try {
-            // This is the core change: update instead of delete
             await reportsCollection.doc(docId).update({
                 isDeleted: true,
                 deletedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -791,7 +785,6 @@ const deleteReport = async (docId, isFinalised = false) => {
         return;
     }
     
-    // Refresh the correct list after archiving
     if (isFinalised) {
         loadFinalisedTransactions();
     } else {
