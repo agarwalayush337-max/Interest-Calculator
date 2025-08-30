@@ -562,13 +562,6 @@ const exportToPDF = async () => {
     }
 };
 
-// MODIFIED: Uses the new resetCalculatorState helper function.
-const clearSheet = async () => {
-    const confirmed = await showConfirm("Clear Sheet", "Are you sure? This action cannot be undone.");
-    if (confirmed) {
-        resetCalculatorState();
-    }
-};
 
 // --- Recent & Finalised Transactions ---
 const clearSheet = async () => {
