@@ -114,21 +114,17 @@ async function fetchLoanDateMap() {
 // --- Function to handle auto-filling the date ---
 const handleLoanNoInput = (event) => {
     const input = event.target;
-    // Only act on 'no' inputs in the main calculator table
-    if (!input.classList.contains('no') || !input.closest('#loanTable')) return;
-
     const loanNo = input.value.trim().toUpperCase();
+
     if (loanDateCache.has(loanNo)) {
         const date = loanDateCache.get(loanNo);
         const row = input.closest('tr');
         const dateInput = row.querySelector('.date');
-        // Only fill the date if the date field is currently empty
-        if (dateInput && !dateInput.value) { 
+        
+        // This now allows the date to be updated even if it's already filled.
+        if (dateInput) {
             dateInput.value = date;
-            // Trigger calculations after auto-filling, but not another full update cycle
-            isUpdatingFromListener = true;
-            updateAllCalculations();
-            isUpdatingFromListener = false;
+            updateAllCalculations(); // Recalculate everything with the new date
         }
     }
 };
@@ -1266,18 +1262,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
     
+    // This listener now ONLY handles auto-adding new rows and calculations
     loanTableBody.addEventListener('input', e => {
         if (e.target.matches('input')) {
             const currentRow = e.target.closest('tr');
             if (currentRow && currentRow.isSameNode(loanTableBody.lastChild) && (e.target.classList.contains('principal') || e.target.classList.contains('no'))) {
                 addRow({ no: '', principal: '', date: '' });
             }
-            handleLoanNoInput(e);
             updateAllCalculations();
         }
     });
 
+    // This listener now handles date formatting AND auto-filling loan dates
     loanTableBody.addEventListener('blur', e => {
+        // Auto-fill date when user leaves a loan number field
+        if (e.target.matches('input.no')) {
+            handleLoanNoInput(e);
+        }
+
+        // Format date when user leaves a date field
         if (e.target.matches('input.date')) {
             const parsed = parseDate(e.target.value);
             if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
