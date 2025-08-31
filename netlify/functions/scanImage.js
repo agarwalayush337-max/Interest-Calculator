@@ -30,7 +30,7 @@ exports.handler = async function(event) {
         promptText = `From the provided image, extract only the loan numbers (values similar to 'A/123', 'B456', etc.). Return the data as a clean JSON array of strings. Format the 'no' field by replacing any '.',' ','-' with a '/',And if there is nothing between Alphabet And number in 'no' field then add '/'.For any loan number that starts with a letter, the digit '1', and three other digits (e.g., A1531), you must **replace** the '1' with a '/' to get a result like 'A/531'. Do not just add a slash. Provide only the raw JSON array in your response.`;
     } else {
         // Original prompt for the calculator
-        promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 3-digit numbers starting with it (A166->A/66) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." }
+        promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 3-digit numbers starting with it (A166->A/66) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." }
 
     const requestBody = {
       contents: [{
