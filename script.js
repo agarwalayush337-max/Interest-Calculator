@@ -327,6 +327,8 @@ const fillTableFromScan = (loans) => {
         !r.querySelector('.principal').value && !r.querySelector('.no').value
     );
     let emptyRowIndex = 0;
+    
+    // First, populate the table with data from the scan
     loans.forEach((loan) => {
         const formattedLoan = {
             no: loan.no,
@@ -343,10 +345,26 @@ const fillTableFromScan = (loans) => {
             addRow(formattedLoan);
         }
     });
+
+    // NEW: After scanning, check each loan number against the pre-defined date list
+    document.querySelectorAll('#loanTable .no').forEach(loanNoInput => {
+        if (loanNoInput.value) {
+            const loanNo = loanNoInput.value.trim().toUpperCase();
+            if (loanDateCache.has(loanNo)) {
+                const preDefinedDate = loanDateCache.get(loanNo);
+                const row = loanNoInput.closest('tr');
+                const dateInput = row.querySelector('.date');
+                if (dateInput) {
+                    // Overwrite the scanned date with the one from your Google Sheet
+                    dateInput.value = preDefinedDate;
+                }
+            }
+        }
+    });
+
     updateAllCalculations();
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
-
 const handleImageScan = async (fileOrEvent) => {
     const file = fileOrEvent.target ? fileOrEvent.target.files[0] : fileOrEvent;
 
