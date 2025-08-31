@@ -307,8 +307,8 @@ const fillTableFromScan = (loans) => {
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
 
-const handleImageScan = async (event) => {
-    const file = event.target.files[0];
+const handleImageScan = async (fileOrEvent) => {
+    const file = fileOrEvent.target ? fileOrEvent.target.files[0] : fileOrEvent;
 
     if (!file) return;
     showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
@@ -348,7 +348,7 @@ const handleImageScan = async (event) => {
         await showConfirm('Error', error.message, false);
     }
     
-    if (event.target) {
+    if (fileOrEvent.target) {
         imageUploadInput.value = '';
     }
 };
@@ -847,6 +847,19 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 
 // --- Loan Search Feature Functions ---
+// NEW: Helper function to normalize loan numbers (e.g., A/052 -> A/52)
+const normalizeLoanNo = (loanNo) => {
+    if (!loanNo) return '';
+    // This regex finds a non-digit prefix and a digit suffix.
+    const match = loanNo.match(/^(\D*)(\d+)$/);
+    if (match) {
+        const prefix = match[1]; // e.g., "A/"
+        const numericPart = parseInt(match[2], 10).toString(); // e.g., "052" -> 52 -> "52"
+        return prefix + numericPart;
+    }
+    return loanNo; // Return original if it doesn't match the pattern
+};
+
 const buildLoanSearchCache = () => {
     loanSearchCache.clear();
     if (cachedFinalisedReports.length === 0) return;
@@ -854,12 +867,17 @@ const buildLoanSearchCache = () => {
     cachedFinalisedReports.forEach(report => {
         if (report.loans && Array.isArray(report.loans)) {
             report.loans.forEach(loan => {
-                const loanNo = loan.no?.trim().toUpperCase();
-                if (loanNo && !loanSearchCache.has(loanNo)) {
-                    loanSearchCache.set(loanNo, {
-                        principal: loan.principal,
-                        reportDate: report.reportDate
-                    });
+                const originalLoanNo = loan.no?.trim().toUpperCase();
+                if (originalLoanNo) {
+                    // MODIFIED: Use the normalized version as the key
+                    const normalizedKey = normalizeLoanNo(originalLoanNo);
+                    if (!loanSearchCache.has(normalizedKey)) {
+                        loanSearchCache.set(normalizedKey, {
+                            principal: loan.principal,
+                            reportDate: report.reportDate,
+                            originalNo: originalLoanNo // Keep the original for display if needed
+                        });
+                    }
                 }
             });
         }
@@ -900,7 +918,7 @@ const performLoanSearch = (inputElement) => {
     if (!inputElement) return;
     
     const row = inputElement.closest('tr');
-    const loanNo = inputElement.value.trim().toUpperCase();
+    const userInput = inputElement.value.trim().toUpperCase();
     const principalCell = row.querySelector('.principal-result');
     const dateCell = row.querySelector('.date-result');
     const statusCell = row.querySelector('.status-cell');
@@ -910,10 +928,13 @@ const performLoanSearch = (inputElement) => {
     statusCell.textContent = '';
     statusCell.className = 'read-only status-cell';
 
-    if (!loanNo) return;
+    if (!userInput) return;
 
-    if (loanSearchCache.has(loanNo)) {
-        const data = loanSearchCache.get(loanNo);
+    // MODIFIED: Normalize the user's search term before lookup
+    const normalizedSearchTerm = normalizeLoanNo(userInput);
+
+    if (loanSearchCache.has(normalizedSearchTerm)) {
+        const data = loanSearchCache.get(normalizedSearchTerm);
         principalCell.textContent = data.principal;
         dateCell.textContent = data.reportDate;
         statusCell.textContent = 'Not Available';
@@ -1152,26 +1173,6 @@ const listenForLiveStateChanges = () => {
     });
 };
 
-// --- NEW: Function to handle paste events ---
-const handlePaste = (event) => {
-    // Only act if the user is on the calculator tab
-    if (!document.getElementById('calculatorTab').classList.contains('active')) {
-        return;
-    }
-
-    const items = event.clipboardData.items;
-    for (const item of items) {
-        if (item.type.indexOf('image') !== -1) {
-            const file = item.getAsFile();
-            // Prevent the browser's default paste behavior (like showing the image)
-            event.preventDefault();
-            // Pass the file to our existing scan function
-            handleImageScan(file);
-            return; // Stop after handling the first image
-        }
-    }
-};
-
 // --- Initial Load & Event Listeners ---
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
@@ -1302,7 +1303,4 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
-
-    // Listen for standard paste events
-    document.addEventListener('paste', handlePaste);
 });
