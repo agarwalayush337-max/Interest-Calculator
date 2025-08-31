@@ -42,6 +42,8 @@ Here are two examples of the correct output format:
 {"no": "B/766", "principal": 6000, "date": "03/03/2024"}
 - For a line like "D118 -> (4000) = 10/5/24", the JSON object is:
 {"no": "D/18", "principal": 4000, "date": "10/05/2024"}
+- For the line "B/1680 -> (6000) = 3/3/24", the JSON object is:
+{"no": "B/680", "principal": 6000, "date": "03/03/2024"}
 
 **CRITICAL**: Transcribe the numbers from the image with perfect accuracy before applying formatting rules. Do not hallucinate digits. The final output should be only the raw JSON array, without any other text or explanations.`;
     }
