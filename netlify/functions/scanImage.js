@@ -44,7 +44,7 @@ Here are two examples of the correct output format:
 {"no": "D/18", "principal": 4000, "date": "10/05/2024"}
 - For the line "B/1680 -> (6000) = 3/3/24", the JSON object is:
 {"no": "B/680", "principal": 6000, "date": "03/03/2024"}
-- For the line "D/1415 -> (6000) = 3/3/24", the JSON object is:
+- For the line "D1415 -> (6000) = 3/3/24", the JSON object is:
 {"no": "D/415", "principal": 6000, "date": "03/03/2024"}
 
 
