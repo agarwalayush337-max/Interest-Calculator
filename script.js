@@ -1,5 +1,4 @@
-// --- At the top of the file, BEFORE any other code ---
-// Register the Service Worker
+// Register the Service Worker for the PWA Share Target feature
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
         .then(registration => {
@@ -34,13 +33,13 @@ let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
-// --- NEW: Map to store pre-defined loan dates from your Google Sheet ---
-const loanDateMap = new Map();
-
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
 let isUpdatingFromListener = false;
 const sessionClientId = Date.now().toString() + Math.random().toString();
+
+// --- Cache for Loan Date Auto-fill ---
+let loanDateCache = new Map();
 
 // --- DOM Elements ---
 const loginOverlay = document.getElementById('loginOverlay');
@@ -83,7 +82,6 @@ const currentFyBtn = document.getElementById('currentFyBtn');
 const prevFyBtn = document.getElementById('prevFyBtn');
 const applyDateFilterBtn = document.getElementById('applyDateFilterBtn');
 const clearSearchSheetBtn = document.getElementById('clearSearchSheetBtn');
-// --- DOM Elements for Loan Search ---
 const addSearchRowBtn = document.getElementById('addSearchRowBtn');
 const loanSearchTableBody = document.querySelector('#loanSearchTable tbody');
 const scanNumbersBtn = document.getElementById('scanNumbersBtn');
@@ -91,6 +89,49 @@ const numberImageUploadInput = document.getElementById('numberImageUploadInput')
 const loanSearchLoader = document.getElementById('loanSearchLoader');
 const searchFiltersContainer = document.querySelector('.search-filters');
 
+
+// --- Function to fetch the loan date map from your Cloud Function ---
+async function fetchLoanDateMap() {
+    try {
+        // --- IMPORTANT: PASTE YOUR CLOUD FUNCTION URL HERE ---
+        const functionUrl = "https://getloandates-vs32cjrjha-uc.a.run.app"; 
+        
+        const response = await fetch(functionUrl);
+        if (!response.ok) {
+            throw new Error("Failed to fetch loan dates. Check URL and function logs.");
+        }
+        const data = await response.json();
+        
+        // Convert the returned object to a Map for easier lookup
+        loanDateCache = new Map(Object.entries(data));
+        console.log(`Loan date map loaded with ${loanDateCache.size} entries.`);
+
+    } catch (error) {
+        console.error("Could not fetch or process loan date map:", error);
+    }
+}
+
+// --- Function to handle auto-filling the date ---
+const handleLoanNoInput = (event) => {
+    const input = event.target;
+    // Only act on 'no' inputs in the main calculator table
+    if (!input.classList.contains('no') || !input.closest('#loanTable')) return;
+
+    const loanNo = input.value.trim().toUpperCase();
+    if (loanDateCache.has(loanNo)) {
+        const date = loanDateCache.get(loanNo);
+        const row = input.closest('tr');
+        const dateInput = row.querySelector('.date');
+        // Only fill the date if the date field is currently empty
+        if (dateInput && !dateInput.value) { 
+            dateInput.value = date;
+            // Trigger calculations after auto-filling, but not another full update cycle
+            isUpdatingFromListener = true;
+            updateAllCalculations();
+            isUpdatingFromListener = false;
+        }
+    }
+};
 
 // --- Debounce function ---
 const debounce = (func, delay) => {
@@ -100,28 +141,6 @@ const debounce = (func, delay) => {
         timeout = setTimeout(() => func.apply(this, args), delay);
     };
 };
-
-// --- NEW: Function to fetch the loan date map from our Cloud Function ---
-const fetchLoanDateMap = async () => {
-    // --- IMPORTANT: PASTE YOUR CLOUD FUNCTION URL HERE ---
-    const GET_LOAN_DATES_URL = "YOUR_CLOUD_FUNCTION_URL_HERE";
-
-    try {
-        const response = await fetch(GET_LOAN_DATES_URL);
-        if (!response.ok) {
-            throw new Error('Failed to fetch loan dates.');
-        }
-        const data = await response.json();
-        loanDateMap.clear();
-        for (const [loanNo, date] of Object.entries(data)) {
-            loanDateMap.set(loanNo, date);
-        }
-        console.log(`Successfully loaded ${loanDateMap.size} pre-defined loan dates.`);
-    } catch (error) {
-        console.error("Could not fetch or process loan date map:", error);
-    }
-};
-
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -225,8 +244,8 @@ const getFinancialYear = (refDate = new Date()) => {
     const month = refDate.getMonth(); // 0-11
     const startYear = month >= 3 ? year : year - 1; // FY starts in April (month 3)
     return {
-        startDate: new Date(startYear, 3, 1), // April 1st
-        endDate: new Date(startYear + 1, 2, 31) // March 31st
+        startDate: new Date(startYear, 3, 1),
+        endDate: new Date(startYear + 1, 2, 31)
     };
 };
 
@@ -414,7 +433,7 @@ const showTab = (tabId) => {
     }
 };
 
-// --- New helper function to reset the calculator state ---
+// --- Helper function to reset the calculator state ---
 const resetCalculatorState = () => {
     if (!user) return;
     const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
@@ -551,9 +570,6 @@ const saveReport = async (silent = false) => {
         if (navigator.onLine && reportsCollection) {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
-                if (!silent) {
-                    // Success message is part of the confirmation to clear
-                }
                 success = true;
             } catch (error) {
                 console.error("Error updating report:", error);
@@ -578,9 +594,6 @@ const saveReport = async (silent = false) => {
             try {
                 report.isDeleted = false;
                 await reportsCollection.add(report);
-                if (!silent) {
-                    // Success message is part of the confirmation to clear
-                }
                 success = true;
             } catch (error) { console.error("Error saving online:", error); }
         } else {
@@ -1207,8 +1220,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             appContainer.style.display = 'block';
             
             listenForLiveStateChanges(); 
-            fetchLoanDateMap(); // Fetch the pre-defined dates
             syncData();
+            fetchLoanDateMap();
 
         } else {
             user = null;
@@ -1252,22 +1265,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
+    
     loanTableBody.addEventListener('input', e => {
         if (e.target.matches('input')) {
+            const currentRow = e.target.closest('tr');
+            if (currentRow && currentRow.isSameNode(loanTableBody.lastChild) && (e.target.classList.contains('principal') || e.target.classList.contains('no'))) {
+                addRow({ no: '', principal: '', date: '' });
+            }
+            handleLoanNoInput(e);
             updateAllCalculations();
         }
-        // NEW: Check for loan number input to auto-fill the date
-        if (e.target.matches('input.no')) {
-            const loanNo = e.target.value.trim().toUpperCase();
-            if (loanDateMap.has(loanNo)) {
-                const dateInput = e.target.closest('tr').querySelector('.date');
-                if (dateInput) {
-                    dateInput.value = loanDateMap.get(loanNo);
-                    updateAllCalculations(); // Recalculate after filling date
-                }
-            }
-        }
     });
+
     loanTableBody.addEventListener('blur', e => {
         if (e.target.matches('input.date')) {
             const parsed = parseDate(e.target.value);
