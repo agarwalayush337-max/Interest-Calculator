@@ -34,6 +34,9 @@ let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
+// --- NEW: Map to store pre-defined loan dates from your Google Sheet ---
+const loanDateMap = new Map();
+
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
 let isUpdatingFromListener = false;
@@ -97,6 +100,28 @@ const debounce = (func, delay) => {
         timeout = setTimeout(() => func.apply(this, args), delay);
     };
 };
+
+// --- NEW: Function to fetch the loan date map from our Cloud Function ---
+const fetchLoanDateMap = async () => {
+    // --- IMPORTANT: PASTE YOUR CLOUD FUNCTION URL HERE ---
+    const GET_LOAN_DATES_URL = "YOUR_CLOUD_FUNCTION_URL_HERE";
+
+    try {
+        const response = await fetch(GET_LOAN_DATES_URL);
+        if (!response.ok) {
+            throw new Error('Failed to fetch loan dates.');
+        }
+        const data = await response.json();
+        loanDateMap.clear();
+        for (const [loanNo, date] of Object.entries(data)) {
+            loanDateMap.set(loanNo, date);
+        }
+        console.log(`Successfully loaded ${loanDateMap.size} pre-defined loan dates.`);
+    } catch (error) {
+        console.error("Could not fetch or process loan date map:", error);
+    }
+};
+
 
 // --- Offline Database (IndexedDB) Setup ---
 async function initLocalDb() {
@@ -847,17 +872,15 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 
 // --- Loan Search Feature Functions ---
-// NEW: Helper function to normalize loan numbers (e.g., A/052 -> A/52)
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
-    // This regex finds a non-digit prefix and a digit suffix.
     const match = loanNo.match(/^(\D*)(\d+)$/);
     if (match) {
-        const prefix = match[1]; // e.g., "A/"
-        const numericPart = parseInt(match[2], 10).toString(); // e.g., "052" -> 52 -> "52"
+        const prefix = match[1];
+        const numericPart = parseInt(match[2], 10).toString();
         return prefix + numericPart;
     }
-    return loanNo; // Return original if it doesn't match the pattern
+    return loanNo;
 };
 
 const buildLoanSearchCache = () => {
@@ -869,13 +892,12 @@ const buildLoanSearchCache = () => {
             report.loans.forEach(loan => {
                 const originalLoanNo = loan.no?.trim().toUpperCase();
                 if (originalLoanNo) {
-                    // MODIFIED: Use the normalized version as the key
                     const normalizedKey = normalizeLoanNo(originalLoanNo);
                     if (!loanSearchCache.has(normalizedKey)) {
                         loanSearchCache.set(normalizedKey, {
                             principal: loan.principal,
                             reportDate: report.reportDate,
-                            originalNo: originalLoanNo // Keep the original for display if needed
+                            originalNo: originalLoanNo
                         });
                     }
                 }
@@ -930,7 +952,6 @@ const performLoanSearch = (inputElement) => {
 
     if (!userInput) return;
 
-    // MODIFIED: Normalize the user's search term before lookup
     const normalizedSearchTerm = normalizeLoanNo(userInput);
 
     if (loanSearchCache.has(normalizedSearchTerm)) {
@@ -1186,6 +1207,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             appContainer.style.display = 'block';
             
             listenForLiveStateChanges(); 
+            fetchLoanDateMap(); // Fetch the pre-defined dates
             syncData();
 
         } else {
@@ -1233,6 +1255,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     loanTableBody.addEventListener('input', e => {
         if (e.target.matches('input')) {
             updateAllCalculations();
+        }
+        // NEW: Check for loan number input to auto-fill the date
+        if (e.target.matches('input.no')) {
+            const loanNo = e.target.value.trim().toUpperCase();
+            if (loanDateMap.has(loanNo)) {
+                const dateInput = e.target.closest('tr').querySelector('.date');
+                if (dateInput) {
+                    dateInput.value = loanDateMap.get(loanNo);
+                    updateAllCalculations(); // Recalculate after filling date
+                }
+            }
         }
     });
     loanTableBody.addEventListener('blur', e => {
