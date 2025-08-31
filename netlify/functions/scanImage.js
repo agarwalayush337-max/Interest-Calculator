@@ -30,26 +30,7 @@ exports.handler = async function(event) {
         promptText = `From the provided image, extract only the loan numbers (values similar to 'A/123', 'B456', etc.). Return the data as a clean JSON array of strings. Format the 'no' field by replacing any '.',' ','-' with a '/',And if there is nothing between Alphabet And number in 'no' field then add '/'.For any loan number that starts with a letter, the digit '1', and three other digits (e.g., A1531), you must **replace** the '1' with a '/' to get a result like 'A/531'. Do not just add a slash. Provide only the raw JSON array in your response.`;
     } else {
         // Original prompt for the calculator
-        promptText = `From the provided image, identify all loan entries. For each entry, extract the 'LoanNo', 'Principal', and 'Date' and return the result as a clean JSON array of objects.
-
-Follow these rules precisely:
-1.  Each object must have the keys "no", "principal", and "date".
-2.  The 'date' field must be in 'DD/MM/YYYY' format.
-3.  For the 'no' field, if the number starts with a letter followed by the digit '1' and two other digits (e.g., D118), you MUST replace the '1' with a '/'. For all other numbers, add a '/' between the letter and the number.
-
-Here are two examples of the correct output format:
-- For the line "B/766 -> (6000) = 3/3/24", the JSON object is:
-{"no": "B/766", "principal": 6000, "date": "03/03/2024"}
-- For a line like "D118 -> (4000) = 10/5/24", the JSON object is:
-{"no": "D/18", "principal": 4000, "date": "10/05/2024"}
-- For the line "B/1680 -> (6000) = 3/3/24", the JSON object is:
-{"no": "B/680", "principal": 6000, "date": "03/03/2024"}
-- For the line "D1415 -> (6000) = 3/3/24", the JSON object is:
-{"no": "D/415", "principal": 6000, "date": "03/03/2024"}
-
-
-**CRITICAL**: Transcribe the numbers from the image with perfect accuracy before applying formatting rules. Do not hallucinate digits. The final output should be only the raw JSON array, without any other text or explanations.`;
-    }
+        promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 3-digit numbers starting with it (A166->A/66) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." }
 
     const requestBody = {
       contents: [{
