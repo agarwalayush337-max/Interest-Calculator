@@ -18,7 +18,7 @@ exports.handler = async function(event) {
     const client = await auth.getClient();
     const accessToken = (await client.getAccessToken()).token;
 
-    const MODEL_ID = 'gemini-2.5-flash-lite'; // Using the latest flash model
+    const MODEL_ID = 'gemini-2.5-pro'; // Using the latest flash model
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
     // --- NEW: Check for the type of scan requested ---
