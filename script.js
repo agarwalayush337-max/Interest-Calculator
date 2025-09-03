@@ -878,13 +878,13 @@ const buildLoanSearchCache = () => {
             report.loans.forEach(loan => {
                 const originalLoanNo = loan.no?.trim().toUpperCase();
                 if (originalLoanNo) {
-                    // MODIFIED: Use the normalized version as the key
                     const normalizedKey = normalizeLoanNo(originalLoanNo);
                     if (!loanSearchCache.has(normalizedKey)) {
                         loanSearchCache.set(normalizedKey, {
                             principal: loan.principal,
                             reportDate: report.reportDate,
-                            originalNo: originalLoanNo // Keep the original for display if needed
+                            originalNo: originalLoanNo,
+                            reportId: report.id // Add the report ID to the cache
                         });
                     }
                 }
@@ -905,7 +905,7 @@ const addSearchRow = (loanNo = '') => {
         <td class="read-only principal-result"></td>
         <td class="read-only date-result"></td>
         <td class="read-only status-cell"></td>
-        <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeSearchRow(this)">X</button></td>`;
+        <td class="action-cell"></td> <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeSearchRow(this)">X</button></td>`;
     renumberSearchRows();
 };
 
@@ -931,15 +931,17 @@ const performLoanSearch = (inputElement) => {
     const principalCell = row.querySelector('.principal-result');
     const dateCell = row.querySelector('.date-result');
     const statusCell = row.querySelector('.status-cell');
+    const actionCell = row.querySelector('.action-cell'); // Get the new cell
 
+    // Clear all result cells first
     principalCell.textContent = '';
     dateCell.textContent = '';
     statusCell.textContent = '';
     statusCell.className = 'read-only status-cell';
+    actionCell.innerHTML = '';
 
     if (!userInput) return;
 
-    // MODIFIED: Normalize the user's search term before lookup
     const normalizedSearchTerm = normalizeLoanNo(userInput);
 
     if (loanSearchCache.has(normalizedSearchTerm)) {
@@ -948,6 +950,8 @@ const performLoanSearch = (inputElement) => {
         dateCell.textContent = data.reportDate;
         statusCell.textContent = 'Not Available';
         statusCell.classList.add('status-not-available');
+        // Create the "View Report" button and add it to the action cell
+        actionCell.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="viewReport('${data.reportId}', false, true)">View Report</button>`;
     } else {
         statusCell.textContent = 'Available';
         statusCell.classList.add('status-available');
