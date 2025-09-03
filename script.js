@@ -962,10 +962,10 @@ const performLoanSearch = (inputElement) => {
         principalCell.textContent = data.principal;
         dateCell.textContent = data.reportDate;
         statusCell.classList.add('status-not-available');
-        // Add both the status text and the button inside the same cell
+        // Now adding a <br> tag to put the button on a new line and using btn-flat-sm
         statusCell.innerHTML = `
-            <span>Not Available</span>
-            <button class="btn btn-secondary btn-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
+            <span>Not Available</span><br>
+            <button class="btn btn-secondary btn-sm btn-flat-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
                 View Report
             </button>`;
     } else {
