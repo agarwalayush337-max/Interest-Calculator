@@ -479,25 +479,30 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     font-size: 0.8rem;
 }
 /* Styling for status cell content */
-.status-not-available {
-    display: flex;
-    flex-direction: column; /* Stack items vertically */
-    align-items: center;    /* Center them horizontally */
-    justify-content: center; /* Center them vertically */
-    gap: 5px; /* Space between text and button */
+/* Aligns content in the status column cells to the middle */
+#loanSearchTable .status-cell {
+    text-align: center;
+    vertical-align: middle;
 }
 
-/* For small, flat buttons, specifically for "View Report" */
+/* This no longer needs flexbox for alignment */
+.status-not-available span {
+    display: block; /* Ensures the text and button are on separate lines */
+    margin-bottom: 5px;
+}
+
+/* Updated style for the "View Report" button */
 .btn-flat-sm {
-    box-shadow: none; /* Remove shadow */
-    background-color: var(--secondary-color); /* Use secondary color */
-    color: var(--button-text-color); /* Ensure text is visible */
-    border: 1px solid var(--secondary-color-dark); /* Subtle border for definition */
-    font-size: 0.75rem; /* Slightly smaller text for the button */
-    padding: 0.2em 0.5em; /* Adjust padding to make it smaller */
+    box-shadow: none !important; /* Remove shadow */
+    background-color: #ffffff; /* White background */
+    color: var(--primary-color); /* Blue text for contrast */
+    border: 1px solid #e0e0e0; /* A very light border */
+    font-size: 0.75rem;
+    padding: 0.2em 0.5em;
+    font-weight: 600;
 }
 
 .btn-flat-sm:hover {
-    background-color: var(--secondary-color-dark); /* Darken on hover */
-    box-shadow: none; /* Ensure no shadow on hover either */
+    background-color: #f5f5f5; /* A light grey for hover */
+    box-shadow: none !important;
 }
