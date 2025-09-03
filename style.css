@@ -494,8 +494,8 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 /* Updated style for the "View Report" button */
 .btn-flat-sm {
     box-shadow: none !important; /* Remove shadow */
-    background-color: black; /* White background */
-    color: var(--primary-color); /* Blue text for contrast */
+    background-color: #ffffff; /* White background */
+    color: #3d3d3d; /* Blue text for contrast */
     border: 1px solid #e0e0e0; /* A very light border */
     font-size: 0.75rem;
     padding: 0.2em 0.5em;
