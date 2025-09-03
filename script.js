@@ -641,8 +641,8 @@ const renderRecentTransactions = (filter = '') => {
         li.innerHTML = `
             <span>${report.reportName || `Report from ${report.reportDate}`}</span>
             <div class="button-group">
-                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false)">View</button>
-                <button class="btn btn-primary" onclick="viewReport('${report.id}', true)">Edit</button>
+                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, false, 'recentTransactionsTab')">View</button>
+                <button class="btn btn-primary" onclick="viewReport('${report.id}', true, false, 'recentTransactionsTab')">Edit</button>
                 <button class="btn btn-success" onclick="finaliseReport('${report.id}')">Finalise</button>
                 <button class="btn btn-danger" onclick="deleteReport('${report.id}')">Delete</button>
             </div>`;
@@ -713,7 +713,7 @@ const renderFinalisedTransactions = (filter = '') => {
                 <div style="font-size: 0.8rem; color: var(--subtle-text-color);">${creationDate}</div>
             </div>
             <div class="button-group">
-                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true)">View</button>
+                <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true, 'finalisedTransactionsTab')">View</button>
                 <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Delete</button>
             </div>`;
         listEl.appendChild(li);
@@ -765,6 +765,10 @@ const exitViewMode = () => {
     resetCalculatorState();
     listenForLiveStateChanges();
 };
+const restoreDefaultBackButton = () => {
+    exitViewModeBtn.textContent = 'Back to Calculator';
+    exitViewModeBtn.onclick = exitViewMode;
+};
 
 const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calculatorTab') => {
     const report = (isFinalised ? cachedFinalisedReports : cachedReports).find(r => r.id === reportId);
@@ -775,20 +779,27 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
         liveStateUnsubscribe = null;
     }
 
-    // --- NEW: Smart "Back" button logic ---
+    // Smart "Back" button logic
     if (originTab === 'loanSearchTab') {
         exitViewModeBtn.textContent = 'Back to Loan Search';
-        // Temporarily change the button's action to go back to the search tab
         exitViewModeBtn.onclick = () => {
             showTab('loanSearchTab');
-            // Restore the original "Back to Calculator" functionality for next time
-            exitViewModeBtn.textContent = 'Back to Calculator';
-            exitViewModeBtn.onclick = exitViewMode;
+            restoreDefaultBackButton();
+        };
+    } else if (originTab === 'recentTransactionsTab') {
+        exitViewModeBtn.textContent = 'Back to Recent';
+        exitViewModeBtn.onclick = () => {
+            showTab('recentTransactionsTab');
+            restoreDefaultBackButton();
+        };
+    } else if (originTab === 'finalisedTransactionsTab') {
+        exitViewModeBtn.textContent = 'Back to Finalised';
+        exitViewModeBtn.onclick = () => {
+            showTab('finalisedTransactionsTab');
+            restoreDefaultBackButton();
         };
     } else {
-        // Ensure the button has its default text and action
-        exitViewModeBtn.textContent = 'Back to Calculator';
-        exitViewModeBtn.onclick = exitViewMode;
+        restoreDefaultBackButton();
     }
 
     showTab('calculatorTab');
@@ -810,6 +821,7 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
     }
     updateAllCalculations();
 };
+
 const finaliseReport = async (docId) => {
     const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
     if (!confirmed) return;
@@ -947,10 +959,9 @@ const performLoanSearch = (inputElement) => {
     const dateCell = row.querySelector('.date-result');
     const statusCell = row.querySelector('.status-cell');
 
-    // Clear all result cells first
     principalCell.textContent = '';
     dateCell.textContent = '';
-    statusCell.innerHTML = ''; // Use innerHTML to clear any buttons
+    statusCell.innerHTML = '';
     statusCell.className = 'read-only status-cell';
 
     if (!userInput) return;
@@ -962,9 +973,8 @@ const performLoanSearch = (inputElement) => {
         principalCell.textContent = data.principal;
         dateCell.textContent = data.reportDate;
         statusCell.classList.add('status-not-available');
-        // Now adding a <br> tag to put the button on a new line and using btn-flat-sm
         statusCell.innerHTML = `
-            <span>Not Available</span><br>
+            <span>Not Available</span>
             <button class="btn btn-secondary btn-sm btn-flat-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
                 View Report
             </button>`;
