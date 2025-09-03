@@ -473,3 +473,8 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 #loanSearchTable input.search-no {
     text-transform: uppercase;
 }
+/* For smaller buttons inside tables */
+.btn-sm {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+}
