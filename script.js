@@ -766,13 +766,29 @@ const exitViewMode = () => {
     listenForLiveStateChanges();
 };
 
-const viewReport = (reportId, isEditable, isFinalised = false) => {
+const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calculatorTab') => {
     const report = (isFinalised ? cachedFinalisedReports : cachedReports).find(r => r.id === reportId);
     if (!report) return showConfirm("Error", "Report not found!", false);
     
     if (liveStateUnsubscribe) {
         liveStateUnsubscribe();
         liveStateUnsubscribe = null;
+    }
+
+    // --- NEW: Smart "Back" button logic ---
+    if (originTab === 'loanSearchTab') {
+        exitViewModeBtn.textContent = 'Back to Loan Search';
+        // Temporarily change the button's action to go back to the search tab
+        exitViewModeBtn.onclick = () => {
+            showTab('loanSearchTab');
+            // Restore the original "Back to Calculator" functionality for next time
+            exitViewModeBtn.textContent = 'Back to Calculator';
+            exitViewModeBtn.onclick = exitViewMode;
+        };
+    } else {
+        // Ensure the button has its default text and action
+        exitViewModeBtn.textContent = 'Back to Calculator';
+        exitViewModeBtn.onclick = exitViewMode;
     }
 
     showTab('calculatorTab');
@@ -794,7 +810,6 @@ const viewReport = (reportId, isEditable, isFinalised = false) => {
     }
     updateAllCalculations();
 };
-
 const finaliseReport = async (docId) => {
     const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
     if (!confirmed) return;
@@ -901,11 +916,11 @@ const addSearchRow = (loanNo = '') => {
     const row = loanSearchTableBody.insertRow();
     row.innerHTML = `
         <td>${rowCount + 1}</td>
+        <td class="read-only status-cell"></td>
         <td><input type="text" class="search-no" placeholder="Enter Loan No..." value="${loanNo}"></td>
         <td class="read-only principal-result"></td>
         <td class="read-only date-result"></td>
-        <td class="read-only status-cell"></td>
-        <td class="action-cell"></td> <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeSearchRow(this)">X</button></td>`;
+        <td><button class="btn btn-danger" aria-label="Remove Row" onclick="removeSearchRow(this)">X</button></td>`;
     renumberSearchRows();
 };
 
@@ -931,14 +946,12 @@ const performLoanSearch = (inputElement) => {
     const principalCell = row.querySelector('.principal-result');
     const dateCell = row.querySelector('.date-result');
     const statusCell = row.querySelector('.status-cell');
-    const actionCell = row.querySelector('.action-cell'); // Get the new cell
 
     // Clear all result cells first
     principalCell.textContent = '';
     dateCell.textContent = '';
-    statusCell.textContent = '';
+    statusCell.innerHTML = ''; // Use innerHTML to clear any buttons
     statusCell.className = 'read-only status-cell';
-    actionCell.innerHTML = '';
 
     if (!userInput) return;
 
@@ -948,13 +961,16 @@ const performLoanSearch = (inputElement) => {
         const data = loanSearchCache.get(normalizedSearchTerm);
         principalCell.textContent = data.principal;
         dateCell.textContent = data.reportDate;
-        statusCell.textContent = 'Not Available';
         statusCell.classList.add('status-not-available');
-        // Create the "View Report" button and add it to the action cell
-        actionCell.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="viewReport('${data.reportId}', false, true)">View Report</button>`;
+        // Add both the status text and the button inside the same cell
+        statusCell.innerHTML = `
+            <span>Not Available</span>
+            <button class="btn btn-secondary btn-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
+                View Report
+            </button>`;
     } else {
-        statusCell.textContent = 'Available';
         statusCell.classList.add('status-available');
+        statusCell.textContent = 'Available';
     }
 };
 
