@@ -616,6 +616,22 @@ const clearSheet = async () => {
     }
 };
 
+// NEW function to add to script.js
+const clearSearchTable = async () => {
+    const confirmed = await showConfirm(
+        "Clear Search Sheet", 
+        "Are you sure you want to clear all search rows?"
+    );
+    if (confirmed) {
+        // Clear the existing rows
+        loanSearchTableBody.innerHTML = '';
+        // Add 5 new empty rows to start with
+        for (let i = 0; i < 5; i++) {
+            addSearchRow();
+        }
+    }
+};
+
 // --- Recent & Finalised Transactions ---
 const renderRecentTransactions = (filter = '') => {
     recentTransactionsListEl.innerHTML = '';
@@ -1319,7 +1335,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     addSearchRowBtn.addEventListener('click', () => addSearchRow());
     scanNumbersBtn.addEventListener('click', () => numberImageUploadInput.click());
     numberImageUploadInput.addEventListener('change', handleNumberScan);
-    clearSearchSheetBtn.addEventListener('click', clearSearchSheet);
+   clearSearchSheetBtn.addEventListener('click', clearSearchTable);
     
     loanSearchTableBody.addEventListener('input', (e) => {
         if (e.target.matches('.search-no')) {
