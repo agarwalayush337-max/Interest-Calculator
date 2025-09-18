@@ -469,15 +469,44 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
     doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
 
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    // ADD THIS NEW CODE IN ITS PLACE
 
-    if (action === 'print' && !isMobile) {
-        doc.autoPrint();
-        doc.output('dataurlnewwindow');
-    } else {
-        doc.save(`Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`);
+const fileName = `Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`;
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+// First, check if the browser supports the Web Share API for files
+if (isMobile && navigator.share && navigator.canShare) {
+    // Convert the jsPDF document into a blob, then a File object
+    const pdfBlob = doc.output('blob');
+    const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+    // Check if the browser can share this specific file
+    if (navigator.canShare({ files: [pdfFile] })) {
+        try {
+            // Open the native share dialog
+            await navigator.share({
+                title: 'Interest Report',
+                text: `Interest report for ${todayDateEl.value}`,
+                files: [pdfFile]
+            });
+            // The return statement exits the function so the fallback code doesn't run
+            return; 
+        } catch (error) {
+            console.error('Share API failed:', error);
+            // If sharing fails (e.g., user cancels), we'll proceed to the fallback.
+        }
     }
-};
+}
+
+// --- FALLBACK LOGIC ---
+// This code runs if the Share API isn't supported or fails.
+if (action === 'print' && !isMobile) {
+    doc.autoPrint();
+    doc.output('dataurlnewwindow');
+} else {
+    // Standard download for desktops or older mobile browsers
+    doc.save(fileName);
+}
 
 const isDuplicateReport = (newReport, reportList) => {
     const normalizeLoansForComparison = (loans) => {
