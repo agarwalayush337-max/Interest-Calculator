@@ -480,17 +480,16 @@ const generatePDF = async (action = 'save') => {
 
         // Check if the browser can share this specific file
         if (navigator.canShare({ files: [pdfFile] })) {
-            // REPLACE IT WITH THIS
             try {
-            // Open the native share dialog with only the file
+                // Open the native share dialog with only the file
                 await navigator.share({
                     files: [pdfFile]
-                 });
+                });
                 // The return statement exits the function so the fallback code doesn't run
                 return; 
             } catch (error) {
                 console.error('Share API failed:', error);
-                    // If sharing fails (e.g., user cancels), we'll proceed to the fallback.
+                // If sharing fails (e.g., user cancels), we'll proceed to the fallback.
             }
         }
     }
