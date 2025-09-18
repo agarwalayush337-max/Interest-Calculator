@@ -1,5 +1,5 @@
 // Define a name for the cache and the files that make up the app shell
-const CACHE_NAME = 'interest-calculator-cache-v2';
+const CACHE_NAME = 'interest-calculator-cache-v1';
 const APP_SHELL_URLS = [
   '/',
   'index.html',
