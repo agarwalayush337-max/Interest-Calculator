@@ -1132,6 +1132,7 @@ const fillSearchTableFromScan = (loanData) => {
 };
 
 // NEW: Function to draw white box over coordinates
+// NEW: Intelligent Erase with Background Color Matching
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas) return;
     
@@ -1139,17 +1140,31 @@ const eraseRegion = (box) => {
     const [ymin, xmin, ymax, xmax] = box;
     
     // Convert to pixel coordinates
-    const x = (xmin / 1000) * scanCanvas.width;
-    const y = (ymin / 1000) * scanCanvas.height;
-    const w = ((xmax - xmin) / 1000) * scanCanvas.width;
-    const h = ((ymax - ymin) / 1000) * scanCanvas.height;
+    const x = Math.floor((xmin / 1000) * scanCanvas.width);
+    const y = Math.floor((ymin / 1000) * scanCanvas.height);
+    const w = Math.ceil(((xmax - xmin) / 1000) * scanCanvas.width);
+    const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
 
-    // Draw White Rectangle (Eraser)
-    scanCtx.fillStyle = "white"; 
-    // We add a tiny padding (approx 2px) to ensure full coverage
-    scanCtx.fillRect(x - 2, y - 2, w + 4, h + 4);
+    // --- COLOR MATCHING LOGIC ---
+    // We pick a pixel just outside the box to the left to sample the background color.
+    // Safety check: ensure we don't pick a pixel off-screen (x < 0)
+    const sampleX = Math.max(0, x - 10); 
+    const sampleY = Math.min(y + (h / 2), scanCanvas.height - 1); // Sample from the middle height of the row
+
+    // Get the RGBA values of that background pixel
+    const pixelData = scanCtx.getImageData(sampleX, sampleY, 1, 1).data;
+    const r = pixelData[0];
+    const g = pixelData[1];
+    const b = pixelData[2];
+
+    // Set the fill style to that sampled background color
+    scanCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+
+    // Draw the box (with a little extra padding to cover messy edges)
+    // We expand x slightly to the left to blend with the sample point
+    // We expand width (w) to ensure we cover the whole date on the right
+    scanCtx.fillRect(x - 2, y - 4, w + 20, h + 8);
 };
-
 // NEW: Download Function
 document.getElementById('downloadErasedBtn').addEventListener('click', () => {
     if (!scanCanvas) return;
