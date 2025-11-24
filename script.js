@@ -1134,66 +1134,108 @@ const fillSearchTableFromScan = (loanData) => {
 // NEW: Function to draw white box over coordinates
 // NEW: Intelligent Erase with Background Color Matching
 // NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
+// NEW: "Full Width" Paper Texture Cloner
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas) return;
-    
-    // Gemini returns [ymin, xmin, ymax, xmax] scaled to 1000
-    const [ymin, xmin, ymax, xmax] = box;
-    
-    // Convert to pixel coordinates
-    const x = Math.floor((xmin / 1000) * scanCanvas.width);
+
+    // Gemini box: [ymin, xmin, ymax, xmax] (0-1000 scale)
+    // We ONLY use the Y-coordinates to define the "Row"
+    const ymin = box[0];
+    const ymax = box[2];
+
+    // Convert Y to pixels
     const y = Math.floor((ymin / 1000) * scanCanvas.height);
-    const w = Math.ceil(((xmax - xmin) / 1000) * scanCanvas.width);
     const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
 
-    // Add padding to cover the text fully
-    const padX = 5;
-    const padY = 5;
-    const targetX = Math.max(0, x - padX);
-    const targetY = Math.max(0, y - padY);
-    const targetW = w + (padX * 2);
-    const targetH = h + (padY * 2);
-
-    // --- CLONE STAMP LOGIC ---
-    // Instead of a solid color, we copy a piece of the "empty" paper next to the text.
+    // --- TEXTURE STRATEGY: RIGHT MARGIN CLONING ---
+    // We assume the far right edge of the page (last 5%) is empty paper.
+    // We copy that vertical slice and repeat it horizontally across the whole line.
     
-    // Attempt 1: Try to clone from the RIGHT side of the text (usually empty in lists)
-    // We look at the area starting at (x + w)
-    let sourceX = targetX + targetW + 10; 
-    let sourceY = targetY; // Keep same height to align paper lines
-
-    // Safety check: If copying from right goes off-screen, copy from the LEFT instead
-    if (sourceX + targetW > scanCanvas.width) {
-        sourceX = targetX - targetW - 10;
-    }
-
-    // Double Safety: If left is also invalid, just clamp it
-    if (sourceX < 0) sourceX = 0;
+    const sampleWidth = Math.floor(scanCanvas.width * 0.05); // Grab 5% form right edge
+    const sampleX = scanCanvas.width - sampleWidth;
 
     try {
-        // 1. Capture the "Clean" patch of paper
-        const paperTexture = scanCtx.getImageData(sourceX, sourceY, targetW, targetH);
-        
-        // 2. Paste it over the "Dirty" text
-        // We use a temporary canvas to blend it slightly so edges aren't sharp
+        // 1. Capture the "Clean" paper texture from the right margin
+        // We grab it at the SAME Y-level to keep horizontal lines aligned.
+        const marginTexture = scanCtx.getImageData(sampleX, y, sampleWidth, h);
+
+        // 2. Create a temporary canvas to hold this texture pattern
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = targetW;
-        tempCanvas.height = targetH;
+        tempCanvas.width = sampleWidth;
+        tempCanvas.height = h;
         const tempCtx = tempCanvas.getContext('2d');
-        
-        tempCtx.putImageData(paperTexture, 0, 0);
-        
-        // Draw the cloned patch onto the main canvas
-        scanCtx.drawImage(tempCanvas, targetX, targetY);
-        
+        tempCtx.putImageData(marginTexture, 0, 0);
+
+        // 3. Create a repeating pattern from that slice
+        const pattern = scanCtx.createPattern(tempCanvas, 'repeat-x');
+        scanCtx.fillStyle = pattern;
+
+        // 4. Fill the FULL WIDTH of the row with the paper pattern
+        // We add padding (y-5, h+10) to ensure we cover tall handwriting
+        scanCtx.fillRect(0, y - 5, scanCanvas.width, h + 10);
+
     } catch (e) {
-        // Fallback: If cloning fails (e.g., edge of image), use the Blur/Solid Color method
-        console.warn("Cloning failed, using solid fill fallback");
-        const pixelData = scanCtx.getImageData(targetX - 5, targetY + (targetH/2), 1, 1).data;
-        scanCtx.fillStyle = `rgb(${pixelData[0]}, ${pixelData[1]}, ${pixelData[2]})`;
-        scanCtx.fillRect(targetX, targetY, targetW, targetH);
+        console.error("Texture clone failed, using fallback", e);
+        // Fallback: Average color from right edge
+        const p = scanCtx.getImageData(scanCanvas.width - 10, y + h/2, 1, 1).data;
+        scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+        scanCtx.fillRect(0, y - 5, scanCanvas.width, h + 10);
     }
 };
+
+// NEW: Strict Mobile vs PC Download Logic
+document.getElementById('downloadErasedBtn').addEventListener('click', async () => {
+    if (!scanCanvas) {
+        showConfirm("Error", "No image to download.", false);
+        return;
+    }
+
+    scanCanvas.toBlob(async (blob) => {
+        if (!blob) return;
+
+        const fileName = `Erased_List_${Date.now()}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+        
+        // Robust Mobile Detection
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        // --- 1. PC LOGIC (Force Direct Download) ---
+        if (!isMobile) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            return; // STOP HERE
+        }
+
+        // --- 2. MOBILE LOGIC (Try Share Sheet first) ---
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: 'Filtered Loan List',
+                });
+            } catch (error) {
+                console.log('Share cancelled');
+            }
+            return;
+        }
+
+        // --- 3. MOBILE FALLBACK (If Share fails/unsupported) ---
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+    }, 'image/png', 1.0);
+});
 // NEW: Download Function
 // NEW: Specific Logic for Mobile (Share) vs PC (Download)
 document.getElementById('downloadErasedBtn').addEventListener('click', async () => {
