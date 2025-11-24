@@ -1166,15 +1166,61 @@ const eraseRegion = (box) => {
     scanCtx.fillRect(x - 2, y - 4, w + 20, h + 8);
 };
 // NEW: Download Function
-document.getElementById('downloadErasedBtn').addEventListener('click', () => {
-    if (!scanCanvas) return;
-    
-    const link = document.createElement('a');
-    link.download = `Erased_Image_${new Date().getTime()}.png`;
-    link.href = scanCanvas.toDataURL();
-    link.click();
-});
+// NEW: Robust Download/Share Function for Mobile & PC
+document.getElementById('downloadErasedBtn').addEventListener('click', async () => {
+    if (!scanCanvas) {
+        showConfirm("Error", "No image to download.", false);
+        return;
+    }
 
+    // Convert Canvas to a Blob (Binary File) instead of a long String
+    // This prevents memory crashes on mobile devices
+    scanCanvas.toBlob(async (blob) => {
+        if (!blob) {
+            showConfirm("Error", "Failed to process image.", false);
+            return;
+        }
+
+        const fileName = `Erased_List_${Date.now()}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        // STRATEGY 1: Web Share API (Best for Mobile)
+        // Checks if the browser allows sharing files directly
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: 'Filtered Loan List',
+                    text: 'Here is the filtered list with "Not Available" lines removed.'
+                });
+                return; // Stop here if sharing was successful
+            } catch (error) {
+                // If user cancelled share, or it failed, we fall through to Strategy 2
+                console.warn('Share failed or cancelled:', error);
+            }
+        }
+
+        // STRATEGY 2: Classic Download (Best for PC / Fallback)
+        try {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            
+            // Append to body is required for some mobile browsers (Firefox Android)
+            document.body.appendChild(link);
+            link.click();
+            
+            // Cleanup
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+        } catch (err) {
+            console.error(err);
+            showConfirm("Error", "Download failed. Please try a different browser.", false);
+        }
+
+    }, 'image/png', 1.0); // 1.0 = High Quality
+});
 const filterSearchResults = (filter) => {
     const rows = document.querySelectorAll('#loanSearchTable tbody tr');
     rows.forEach(row => {
