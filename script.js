@@ -1186,62 +1186,76 @@ const fillSearchTableFromScan = (loanData) => {
 // NEW: "Full Width" Paper Texture Cloner
 // Updated: "Full Width" Texture Cloner with Safety Checks
 // FIXED: Robust "Full Width" Eraser (Uses Image Stretching)
+// FIXED: "Smart Edge" Eraser (Avoids black borders)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
-    // 1. Get Coordinates (Y-axis only for full width)
+    // 1. Get Coordinates
     const ymin = Math.max(0, box[0]);
     const ymax = Math.min(1000, box[2]);
-    
-    // Safety: If the box is nonsense (e.g. height 0), skip
     if (ymax <= ymin) return;
 
     // Convert to pixels
     const y = Math.floor((ymin / 1000) * scanCanvas.height);
     const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
-    
-    // Ensure the erase strip is tall enough to cover handwriting (min 20px)
     const safeH = Math.max(h, 20);
-    // Add generous padding (move up 10px, expand height by 20px) to cover tall letters
     const drawY = Math.max(0, y - 10);
     const drawH = safeH + 20;
 
     try {
-        // --- STRATEGY: STRETCH CLONE ---
-        // 1. Grab a vertical slice of "clean paper" from the far right edge (last 50px)
-        const sampleW = Math.min(50, Math.floor(scanCanvas.width * 0.1)); 
-        const sampleX = scanCanvas.width - sampleW;
+        // --- IMPROVED STRATEGY: INWARD SAMPLING ---
+        // Don't grab the absolute edge (which might be a black frame).
+        // Grab from 85% width (usually safe white space after the date).
+        const sampleW = 20; 
+        const sampleX = Math.floor(scanCanvas.width * 0.85); 
 
-        // 2. Put it on a temp canvas
+        // 1. Grab the texture
         const texture = scanCtx.getImageData(sampleX, drawY, sampleW, drawH);
+        
+        // --- NEW: DARKNESS SAFETY CHECK ---
+        // Check the center pixel of our sample. If it's too dark (black frame), abort!
+        const centerIdx = Math.floor((sampleW * drawH * 4) / 2);
+        const r = texture.data[centerIdx];
+        const g = texture.data[centerIdx + 1];
+        const b = texture.data[centerIdx + 2];
+        const brightness = (r + g + b) / 3;
+
+        // If brightness is less than 100 (Dark Grey/Black), use White Fallback
+        if (brightness < 100) {
+            throw new Error("Sample is too dark (likely a border)");
+        }
+
+        // 2. If safe, Draw Stretched Texture
         const tempC = document.createElement('canvas');
         tempC.width = sampleW;
         tempC.height = drawH;
         tempC.getContext('2d').putImageData(texture, 0, 0);
 
-        // 3. Draw it stretched across the whole width
-        // This is much safer than 'createPattern' which can fail or align wrong
         scanCtx.drawImage(
             tempC, 
-            0, 0, sampleW, drawH,   // Source (The small slice)
-            0, drawY, scanCanvas.width, drawH // Destination (The full row)
+            0, 0, sampleW, drawH,
+            0, drawY, scanCanvas.width, drawH
         );
 
     } catch (e) {
-        console.error("Eraser failed, using fallback color", e);
-        // Fallback: Just pick the color of the paper and paint a solid block
+        // Fallback: If texture was dark or failed, pick a "Safe" color
+        // We try to pick a color from the Top-Left corner (usually clean paper)
         try {
-            const p = scanCtx.getImageData(scanCanvas.width - 10, drawY + drawH/2, 1, 1).data;
-            scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            const p = scanCtx.getImageData(10, 10, 1, 1).data;
+            // Ensure fallback isn't black either
+            if ((p[0]+p[1]+p[2])/3 < 50) {
+                 scanCtx.fillStyle = '#f5f5f5'; // Force Light Grey
+            } else {
+                 scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            }
             scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
         } catch (e2) {
-            // Ultimate fallback: White box
-            scanCtx.fillStyle = 'white';
+            // Ultimate fallback
+            scanCtx.fillStyle = '#ffffff';
             scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
         }
     }
 };
-
 // Remove any old event listeners (safety)
 const downloadBtn = document.getElementById('downloadErasedBtn');
 if (downloadBtn) {
