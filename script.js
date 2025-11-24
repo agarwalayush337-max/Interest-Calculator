@@ -1113,6 +1113,7 @@ const handleNumberScan = async (event) => {
 
 // Updated: Uses row.eraseBox to find what to erase
 // Updated: Main Logic with Debugging
+// Updated: Restored original "Scan Complete" message format
 const fillSearchTableFromScan = (loanData) => {
     // 1. Force a Cache Rebuild to ensure rules match
     buildLoanSearchCache(); 
@@ -1122,62 +1123,43 @@ const fillSearchTableFromScan = (loanData) => {
         return;
     }
 
-    // CHECK: Did the backend send coordinates?
-    const hasBoxes = loanData.some(item => item.box && item.box.length === 4);
-    if (!hasBoxes) {
-        alert("CRITICAL ERROR: The backend is NOT sending erase coordinates.\nPlease deploy 'scanImage.js' to Netlify again.");
-    }
-
-    // Clear empty rows
+    // 2. Clear empty rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
-    // Add rows
+    // 3. Add new rows
     loanData.forEach(item => {
         addSearchRow(item.no, item.box);
     });
 
-    // Process Search & Erase
+    // 4. Search & Erase Logic
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
-    let debugLog = []; // To store what happened
 
     inputs.forEach((input) => {
-        const rawValue = input.value;
-        const normalizedKey = normalizeLoanNo(rawValue);
-        
-        // Check availability
+        // Run Search
         performLoanSearch(input); 
 
         const row = input.closest('tr');
         const statusCell = row.querySelector('.status-cell');
         
-        // Logic: If Orange (Not Available) -> Erase
+        // If "Not Available" (Orange) -> Erase
         if (statusCell && statusCell.classList.contains('status-not-available')) {
             if (row.eraseBox) {
                 eraseRegion(row.eraseBox);
                 erasedCount++;
-                debugLog.push(`${normalizedKey}: MATCHED & ERASED`);
-            } else {
-                debugLog.push(`${normalizedKey}: MATCHED but NO BOX (Cannot erase)`);
             }
-        } else {
-            // Check if it SHOULD have matched
-            const existsInCache = loanSearchCache.has(normalizedKey);
-            debugLog.push(`${normalizedKey}: ${existsInCache ? "In Cache (Why is it green?)" : "Not in DB"}`);
         }
     });
 
     renumberSearchRows();
     
+    // --- RESTORED EARLIER MESSAGE FORMAT ---
     if (erasedCount > 0) {
-        showConfirm('Success', `Erased ${erasedCount} lines successfully.`, false);
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} finished loans from the image.`, false);
     } else {
-        // If nothing happened, show the user WHY
-        console.log(debugLog.join('\n'));
-        const sample = debugLog.slice(0, 5).join('\n');
-        showConfirm('Nothing Erased', `The app searched but didn't find matches to erase.\n\nDebug Info:\n${sample}`, false);
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
     }
 };
 // NEW: Function to draw white box over coordinates
