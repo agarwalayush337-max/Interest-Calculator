@@ -967,9 +967,16 @@ const buildLoanSearchCache = () => {
     });
 };
 
-const addSearchRow = (loanNo = '') => {
+// Updated: addSearchRow now accepts an optional 'box' parameter
+const addSearchRow = (loanNo = '', box = null) => {
     const rowCount = loanSearchTableBody.rows.length;
     const row = loanSearchTableBody.insertRow();
+    
+    // Store the erase coordinates directly on the row element (if provided)
+    if (box) {
+        row.dataset.eraseBox = JSON.stringify(box);
+    }
+
     row.innerHTML = `
         <td>${rowCount + 1}</td>
         <td class="read-only status-cell"></td>
@@ -1083,103 +1090,115 @@ const handleNumberScan = async (event) => {
 };
 
 // Updated: Fill Table and Auto-Erase
+// Updated: Uses dataset.eraseBox instead of text matching
 const fillSearchTableFromScan = (loanData) => {
     if (!loanData || loanData.length === 0) {
         showConfirm('Scan Results', 'No numbers found.', false);
         return;
     }
 
-    // Clear empty rows
+    // Clear empty rows first
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
-    // Add rows and check availability
+    // Add rows WITH their coordinate boxes attached
     loanData.forEach(item => {
-        // item now contains { no: "...", box: [...] }
-        addSearchRow(item.no);
+        // item contains { no: "...", box: [...] }
+        addSearchRow(item.no, item.box);
     });
 
     // Perform Search & Erase Logic
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
 
-    inputs.forEach((input, index) => {
-        // Trigger the search logic (this sets the red/green status)
+    inputs.forEach((input) => {
+        // 1. Run the search (sets the Red/Green/Orange status)
         performLoanSearch(input); 
 
-        // Check the result immediately
         const row = input.closest('tr');
         const statusCell = row.querySelector('.status-cell');
         
-        // IF "Not Available" (Already in DB) -> Erase from Image
+        // 2. Check: Is it "Not Available" (already in database)?
         if (statusCell && statusCell.classList.contains('status-not-available')) {
-            const loanItem = currentScanCoordinates.find(i => i.no === input.value.toUpperCase());
             
-            if (loanItem && loanItem.box) {
-                eraseRegion(loanItem.box);
-                erasedCount++;
+            // 3. Retrieve the coordinates directly from the row
+            if (row.dataset.eraseBox) {
+                try {
+                    const box = JSON.parse(row.dataset.eraseBox);
+                    eraseRegion(box);
+                    erasedCount++;
+                } catch (e) {
+                    console.error("Error parsing erase box coordinates", e);
+                }
             }
         }
     });
 
     renumberSearchRows();
-    if(erasedCount > 0) {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} numbers that were already finalised.`, false);
+    
+    if (erasedCount > 0) {
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} finished loans from the image.`, false);
     } else {
         showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
     }
 };
-
 // NEW: Function to draw white box over coordinates
 // NEW: Intelligent Erase with Background Color Matching
 // NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
 // NEW: "Full Width" Paper Texture Cloner
+// Updated: "Full Width" Texture Cloner with Safety Checks
 const eraseRegion = (box) => {
-    if (!scanCtx || !scanCanvas) return;
+    if (!scanCtx || !scanCanvas || !box || box.length < 4) return;
 
     // Gemini box: [ymin, xmin, ymax, xmax] (0-1000 scale)
-    // We ONLY use the Y-coordinates to define the "Row"
-    const ymin = box[0];
-    const ymax = box[2];
+    const ymin = Math.max(0, box[0]); // Prevent negative
+    const ymax = Math.min(1000, box[2]); // Prevent over 1000
 
-    // Convert Y to pixels
+    // Safety: If height is invalid, skip
+    if (ymax <= ymin) return;
+
+    // Convert to pixels
     const y = Math.floor((ymin / 1000) * scanCanvas.height);
     const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
 
+    // Safety: If pixel height is too small, make it visible (at least 10px)
+    const safeH = Math.max(h, 10);
+
     // --- TEXTURE STRATEGY: RIGHT MARGIN CLONING ---
-    // We assume the far right edge of the page (last 5%) is empty paper.
-    // We copy that vertical slice and repeat it horizontally across the whole line.
-    
     const sampleWidth = Math.floor(scanCanvas.width * 0.05); // Grab 5% form right edge
     const sampleX = scanCanvas.width - sampleWidth;
 
     try {
-        // 1. Capture the "Clean" paper texture from the right margin
-        // We grab it at the SAME Y-level to keep horizontal lines aligned.
-        const marginTexture = scanCtx.getImageData(sampleX, y, sampleWidth, h);
+        // 1. Capture "Clean" paper texture
+        const marginTexture = scanCtx.getImageData(sampleX, y, sampleWidth, safeH);
 
-        // 2. Create a temporary canvas to hold this texture pattern
+        // 2. Pattern fill
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = sampleWidth;
-        tempCanvas.height = h;
+        tempCanvas.height = safeH;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.putImageData(marginTexture, 0, 0);
 
-        // 3. Create a repeating pattern from that slice
         const pattern = scanCtx.createPattern(tempCanvas, 'repeat-x');
         scanCtx.fillStyle = pattern;
 
-        // 4. Fill the FULL WIDTH of the row with the paper pattern
-        // We add padding (y-5, h+10) to ensure we cover tall handwriting
-        scanCtx.fillRect(0, y - 5, scanCanvas.width, h + 10);
+        // 3. Fill FULL WIDTH (with padding for messy handwriting)
+        // y - 5 pixels up, height + 10 pixels down
+        scanCtx.fillRect(0, Math.max(0, y - 5), scanCanvas.width, safeH + 10);
 
     } catch (e) {
         console.error("Texture clone failed, using fallback", e);
-        // Fallback: Average color from right edge
-        const p = scanCtx.getImageData(scanCanvas.width - 10, y + h/2, 1, 1).data;
-        scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
-        scanCtx.fillRect(0, y - 5, scanCanvas.width, h + 10);
+        // Fallback: Solid color from right edge
+        try {
+            const p = scanCtx.getImageData(scanCanvas.width - 5, y + safeH/2, 1, 1).data;
+            scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            scanCtx.fillRect(0, Math.max(0, y - 5), scanCanvas.width, safeH + 10);
+        } catch (e2) {
+            // Ultimate fallback: White box
+            scanCtx.fillStyle = 'white';
+            scanCtx.fillRect(0, Math.max(0, y - 5), scanCanvas.width, safeH + 10);
+        }
     }
 };
 
