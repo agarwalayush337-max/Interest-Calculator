@@ -1187,73 +1187,86 @@ const fillSearchTableFromScan = (loanData) => {
 // Updated: "Full Width" Texture Cloner with Safety Checks
 // FIXED: Robust "Full Width" Eraser (Uses Image Stretching)
 // FIXED: "Smart Edge" Eraser (Avoids black borders)
+// NEW: "Pixel-by-Pixel" Vertical Healing (The Perfectionist Method)
+
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
-    // 1. Get Coordinates
+    const width = scanCanvas.width;
+    const height = scanCanvas.height;
+
+    // 1. Get Coordinates (Y-axis only)
     const ymin = Math.max(0, box[0]);
     const ymax = Math.min(1000, box[2]);
     if (ymax <= ymin) return;
 
     // Convert to pixels
-    const y = Math.floor((ymin / 1000) * scanCanvas.height);
-    const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
-    const safeH = Math.max(h, 20);
-    const drawY = Math.max(0, y - 10);
-    const drawH = safeH + 20;
+    const y = Math.floor((ymin / 1000) * height);
+    const h = Math.ceil(((ymax - ymin) / 1000) * height);
+
+    // Add padding to ensure we cover the text completely
+    // We go 8 pixels above and 8 pixels below the detected text box
+    const startY = Math.max(0, y - 8); 
+    const endY = Math.min(height - 1, y + h + 8);
+    const regionHeight = endY - startY;
+
+    if (regionHeight <= 0) return;
 
     try {
-        // --- IMPROVED STRATEGY: INWARD SAMPLING ---
-        // Don't grab the absolute edge (which might be a black frame).
-        // Grab from 85% width (usually safe white space after the date).
-        const sampleW = 20; 
-        const sampleX = Math.floor(scanCanvas.width * 0.85); 
+        // 2. Capture the "Reference Rows" (The clean pixels above and below the text)
+        // We pick a row slightly outside the erasure zone to ensure it's clean
+        const refTopY = Math.max(0, startY - 2); 
+        const refBottomY = Math.min(height - 1, endY + 2);
 
-        // 1. Grab the texture
-        const texture = scanCtx.getImageData(sampleX, drawY, sampleW, drawH);
-        
-        // --- NEW: DARKNESS SAFETY CHECK ---
-        // Check the center pixel of our sample. If it's too dark (black frame), abort!
-        const centerIdx = Math.floor((sampleW * drawH * 4) / 2);
-        const r = texture.data[centerIdx];
-        const g = texture.data[centerIdx + 1];
-        const b = texture.data[centerIdx + 2];
-        const brightness = (r + g + b) / 3;
+        // Get the raw pixel data for the entire width of the image
+        const topRowData = scanCtx.getImageData(0, refTopY, width, 1).data;
+        const bottomRowData = scanCtx.getImageData(0, refBottomY, width, 1).data;
 
-        // If brightness is less than 100 (Dark Grey/Black), use White Fallback
-        if (brightness < 100) {
-            throw new Error("Sample is too dark (likely a border)");
+        // 3. Create a new buffer for the area we are erasing
+        const newImageData = scanCtx.createImageData(width, regionHeight);
+        const data = newImageData.data;
+
+        // 4. PIXEL-BY-PIXEL LOOP
+        // Iterate through every single column (x) from left to right
+        for (let x = 0; x < width; x++) {
+            
+            // Get the color of the pixel immediately ABOVE this column
+            const r1 = topRowData[x * 4];
+            const g1 = topRowData[x * 4 + 1];
+            const b1 = topRowData[x * 4 + 2];
+            const a1 = topRowData[x * 4 + 3]; // Alpha (Transparency)
+
+            // Get the color of the pixel immediately BELOW this column
+            const r2 = bottomRowData[x * 4];
+            const g2 = bottomRowData[x * 4 + 1];
+            const b2 = bottomRowData[x * 4 + 2];
+            const a2 = bottomRowData[x * 4 + 3];
+
+            // Fill the vertical gap for this specific column
+            for (let localY = 0; localY < regionHeight; localY++) {
+                // Calculate position in the 1D array
+                const index = (localY * width + x) * 4;
+
+                // Calculate blend factor 't' (0.0 at top, 1.0 at bottom)
+                // This creates a smooth vertical transition
+                const t = localY / regionHeight;
+
+                // Linear Interpolation (Lerp) for R, G, B, A
+                data[index]     = r1 * (1 - t) + r2 * t; // Red
+                data[index + 1] = g1 * (1 - t) + g2 * t; // Green
+                data[index + 2] = b1 * (1 - t) + b2 * t; // Blue
+                data[index + 3] = a1 * (1 - t) + a2 * t; // Alpha
+            }
         }
 
-        // 2. If safe, Draw Stretched Texture
-        const tempC = document.createElement('canvas');
-        tempC.width = sampleW;
-        tempC.height = drawH;
-        tempC.getContext('2d').putImageData(texture, 0, 0);
-
-        scanCtx.drawImage(
-            tempC, 
-            0, 0, sampleW, drawH,
-            0, drawY, scanCanvas.width, drawH
-        );
+        // 5. Paste the mathematically calculated pixels back onto the canvas
+        scanCtx.putImageData(newImageData, 0, startY);
 
     } catch (e) {
-        // Fallback: If texture was dark or failed, pick a "Safe" color
-        // We try to pick a color from the Top-Left corner (usually clean paper)
-        try {
-            const p = scanCtx.getImageData(10, 10, 1, 1).data;
-            // Ensure fallback isn't black either
-            if ((p[0]+p[1]+p[2])/3 < 50) {
-                 scanCtx.fillStyle = '#f5f5f5'; // Force Light Grey
-            } else {
-                 scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
-            }
-            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
-        } catch (e2) {
-            // Ultimate fallback
-            scanCtx.fillStyle = '#ffffff';
-            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
-        }
+        console.error("Pixel healing failed", e);
+        // Fallback: Simple blur if pixel manipulation crashes
+        scanCtx.fillStyle = '#ffffff';
+        scanCtx.fillRect(0, startY, width, regionHeight);
     }
 };
 // Remove any old event listeners (safety)
