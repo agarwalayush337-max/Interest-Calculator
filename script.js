@@ -1189,84 +1189,100 @@ const fillSearchTableFromScan = (loanData) => {
 // FIXED: "Smart Edge" Eraser (Avoids black borders)
 // NEW: "Pixel-by-Pixel" Vertical Healing (The Perfectionist Method)
 
+// --- Helper Function: Check if a region of pixels is "clean" ---
+// Returns true only if NO pixels in the region are dark (ink/borders).
+const isRegionClean = (ctx, x, y, w, h, threshold = 110) => {
+    try {
+        // Get all pixel data for the sample region
+        const data = ctx.getImageData(x, y, w, h).data;
+        // Loop through every pixel (R, G, B, Alpha)
+        for (let i = 0; i < data.length; i += 4) {
+            // Calculate brightness (average of R, G, B)
+            const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+            // If any single pixel is too dark, the region is "dirty"
+            if (brightness < threshold) {
+                return false; 
+            }
+        }
+        return true; // All pixels passed the brightness check
+    } catch (e) {
+        return false; // Handle off-canvas errors safely
+    }
+};
+
+// --- Main Function: The Robust Multi-Stage Eraser ---
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
-    const width = scanCanvas.width;
-    const height = scanCanvas.height;
-
-    // 1. Get Coordinates (Y-axis only)
+    // 1. Define the Erase Zone (Full Width based on Y-coordinates)
     const ymin = Math.max(0, box[0]);
     const ymax = Math.min(1000, box[2]);
     if (ymax <= ymin) return;
 
-    // Convert to pixels
+    const width = scanCanvas.width;
+    const height = scanCanvas.height;
+
+    // Convert to pixels & add generous padding for tall handwriting
     const y = Math.floor((ymin / 1000) * height);
     const h = Math.ceil(((ymax - ymin) / 1000) * height);
+    const padY = 12; 
+    const drawY = Math.max(0, y - padY);
+    const drawH = Math.min(height - drawY, h + (padY * 2));
 
-    // Add padding to ensure we cover the text completely
-    // We go 8 pixels above and 8 pixels below the detected text box
-    const startY = Math.max(0, y - 8); 
-    const endY = Math.min(height - 1, y + h + 8);
-    const regionHeight = endY - startY;
+    // --- STAGE 1: "Smart Texture Match" (The Perfectionist Choice) ---
+    // We search the right margin for a clean sample to clone.
+    const sampleW = 25; // Width of the slice to grab
+    // Scan from 95% width down to 75% width, looking for a clean spot
+    for (let sampleX = Math.floor(width * 0.95); sampleX > Math.floor(width * 0.75); sampleX -= 10) {
+        
+        // Check: Is this spot clean?
+        if (isRegionClean(scanCtx, sampleX, drawY, sampleW, drawH)) {
+            try {
+                // Found a clean slice! Capture its texture.
+                const texture = scanCtx.getImageData(sampleX, drawY, sampleW, drawH);
+                
+                // Place it on a temporary canvas
+                const tempC = document.createElement('canvas');
+                tempC.width = sampleW;
+                tempC.height = drawH;
+                tempC.getContext('2d').putImageData(texture, 0, 0);
 
-    if (regionHeight <= 0) return;
-
-    try {
-        // 2. Capture the "Reference Rows" (The clean pixels above and below the text)
-        // We pick a row slightly outside the erasure zone to ensure it's clean
-        const refTopY = Math.max(0, startY - 2); 
-        const refBottomY = Math.min(height - 1, endY + 2);
-
-        // Get the raw pixel data for the entire width of the image
-        const topRowData = scanCtx.getImageData(0, refTopY, width, 1).data;
-        const bottomRowData = scanCtx.getImageData(0, refBottomY, width, 1).data;
-
-        // 3. Create a new buffer for the area we are erasing
-        const newImageData = scanCtx.createImageData(width, regionHeight);
-        const data = newImageData.data;
-
-        // 4. PIXEL-BY-PIXEL LOOP
-        // Iterate through every single column (x) from left to right
-        for (let x = 0; x < width; x++) {
-            
-            // Get the color of the pixel immediately ABOVE this column
-            const r1 = topRowData[x * 4];
-            const g1 = topRowData[x * 4 + 1];
-            const b1 = topRowData[x * 4 + 2];
-            const a1 = topRowData[x * 4 + 3]; // Alpha (Transparency)
-
-            // Get the color of the pixel immediately BELOW this column
-            const r2 = bottomRowData[x * 4];
-            const g2 = bottomRowData[x * 4 + 1];
-            const b2 = bottomRowData[x * 4 + 2];
-            const a2 = bottomRowData[x * 4 + 3];
-
-            // Fill the vertical gap for this specific column
-            for (let localY = 0; localY < regionHeight; localY++) {
-                // Calculate position in the 1D array
-                const index = (localY * width + x) * 4;
-
-                // Calculate blend factor 't' (0.0 at top, 1.0 at bottom)
-                // This creates a smooth vertical transition
-                const t = localY / regionHeight;
-
-                // Linear Interpolation (Lerp) for R, G, B, A
-                data[index]     = r1 * (1 - t) + r2 * t; // Red
-                data[index + 1] = g1 * (1 - t) + g2 * t; // Green
-                data[index + 2] = b1 * (1 - t) + b2 * t; // Blue
-                data[index + 3] = a1 * (1 - t) + a2 * t; // Alpha
+                // Draw it stretched across the entire line.
+                // Because it's from the same Y-level, lines and lighting match perfectly.
+                scanCtx.drawImage(tempC, 0, 0, sampleW, drawH, 0, drawY, width, drawH);
+                return; // Success! Exit the function.
+            } catch (e) {
+                console.warn("Stage 1 clone failed:", e);
+                //If cloning fails, break the loop and fall through to Stage 2
+                break; 
             }
         }
+    }
 
-        // 5. Paste the mathematically calculated pixels back onto the canvas
-        scanCtx.putImageData(newImageData, 0, startY);
+    // --- STAGE 2: "Average Color Fill" (The Reliable Fallback) ---
+    //If we couldn't find a clean texture, calculate the average paper color.
+    try {
+        // Sample a 20x20 patch from a safe spot near the top-left
+        const safeSize = 20;
+        const safeX = Math.min(width - safeSize, 30);
+        const safeY = Math.min(height - safeSize, 30);
+        const p = scanCtx.getImageData(safeX, safeY, safeSize, safeSize).data;
+        
+        // Calculate the average Red, Green, and Blue values
+        let r=0, g=0, b=0;
+        for(let i=0; i<p.length; i+=4) { r+=p[i]; g+=p[i+1]; b+=p[i+2]; }
+        const count = p.length / 4;
+        r = Math.round(r/count); g = Math.round(g/count); b = Math.round(b/count);
 
+        // Fill the area with this solid, matching color.
+        scanCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        scanCtx.fillRect(0, drawY, width, drawH);
     } catch (e) {
-        console.error("Pixel healing failed", e);
-        // Fallback: Simple blur if pixel manipulation crashes
-        scanCtx.fillStyle = '#ffffff';
-        scanCtx.fillRect(0, startY, width, regionHeight);
+        // --- STAGE 3: "Ultimate Safety Net" ---
+        // If even averaging fails, just use a clean off-white.
+        console.warn("Stage 2 average failed:", e);
+        scanCtx.fillStyle = '#f2f2f2'; 
+        scanCtx.fillRect(0, drawY, width, drawH);
     }
 };
 // Remove any old event listeners (safety)
