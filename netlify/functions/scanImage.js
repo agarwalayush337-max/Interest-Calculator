@@ -26,15 +26,23 @@ exports.handler = async function(event) {
     
     let promptText;
     if (scanType === 'loan_numbers') {
-        // Updated Prompt: Asks for text AND bounding box coordinates (0-1000 scale)
-        promptText = `From the provided image, identify all loan numbers (e.g., 'A/123', 'B456'). 
-        Return a raw JSON array of objects. 
-        Each object must have two fields: 
-        1. "no": The formatted loan number string (replace '1' with '/' if 3-digit starts with it, e.g., A153 -> A/53).
-        2. "box": An array of 4 integers representing the bounding box [ymin, xmin, ymax, xmax] on a scale of 0 to 1000.
+        // Updated Prompt: Combines OLD formatting rules with NEW "Entire Row" box request
+        promptText = `From the provided image, identify all loan lines. 
+        Return a raw JSON array of objects. Each object must have two fields:
+        
+        1. "no": Extract the loan number with these specific rules: 
+           - Replace '1' with '/' for 3-digit numbers starting with it (e.g., A153 -> A/53).
+           - Otherwise, ensure there is a '/' between the letter and number (e.g., B766 -> B/766).
+           - Replace any '.', ' ', or '-' with '/' (e.g., b.579 -> b/579).
+           - Transcription must be perfect.
+
+        2. "box": An array of 4 integers [ymin, xmin, ymax, xmax] on a scale of 0 to 1000. 
+           - IMPORTANT: This box must encompass the ENTIRE ROW (The Loan Number + The Principal + The Date). 
+           - Do not just box the number; box the whole line so it can be erased.
+
         Do not include markdown formatting. Just the JSON.`;
     } else {
-        // Original prompt for the calculator (unchanged)
+        // Original prompt (unchanged)
         promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 3-digit numbers starting with it (A166->A/66) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." 
     }
 
