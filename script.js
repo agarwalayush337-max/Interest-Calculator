@@ -280,21 +280,39 @@ const cleanAndSortTable = () => {
 };
 
 // --- Image Scanning ---
+// Updated: fix formatting (B.673 -> B/673) for Calculator Tab
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
         return;
     }
+    
     const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
         !r.querySelector('.principal').value && !r.querySelector('.no').value
     );
+    
     let emptyRowIndex = 0;
+    
     loans.forEach((loan) => {
+        // --- FORMATTING FIX ---
+        // 1. Force Uppercase
+        let cleanNo = String(loan.no).toUpperCase();
+
+        // 2. Replace Dot/Space/Dash between Letter and Number with '/'
+        // Matches "B.673", "A. 617", "B-673", "B 673"
+        cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]+(\d)/g, '$1/$2');
+
+        // 3. (Safety) If it is just "A617" (no separator), add the slash
+        if (/^[A-Z]\d+$/.test(cleanNo)) {
+             cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
+        }
+
         const formattedLoan = {
-            no: loan.no,
+            no: cleanNo,
             principal: String(loan.principal).replace(/,/g, ''),
             date: formatDateToDDMMYYYY(parseDate(loan.date))
         };
+        
         if (emptyRowIndex < emptyRows.length) {
             const targetRow = emptyRows[emptyRowIndex];
             targetRow.querySelector('.no').value = formattedLoan.no;
@@ -305,6 +323,7 @@ const fillTableFromScan = (loans) => {
             addRow(formattedLoan);
         }
     });
+    
     updateAllCalculations();
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
