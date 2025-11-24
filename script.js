@@ -1207,7 +1207,7 @@ const eraseRegion = (box) => {
     // Instead of a huge fixed number (like 35px), we take a percentage.
     // We add 12% padding to the top and bottom.
     // If the line is 50px tall, this adds 6px. It scales automatically.
-    const padding = Math.ceil(h * 0.05); 
+    const padding = Math.ceil(h * 0.12); 
     
     // Apply the calculated padding
     const drawY = Math.max(0, y - padding);
