@@ -1166,15 +1166,13 @@ const eraseRegion = (box) => {
     scanCtx.fillRect(x - 2, y - 4, w + 20, h + 8);
 };
 // NEW: Download Function
-// NEW: Robust Download/Share Function for Mobile & PC
+// NEW: Specific Logic for Mobile (Share) vs PC (Download)
 document.getElementById('downloadErasedBtn').addEventListener('click', async () => {
     if (!scanCanvas) {
         showConfirm("Error", "No image to download.", false);
         return;
     }
 
-    // Convert Canvas to a Blob (Binary File) instead of a long String
-    // This prevents memory crashes on mobile devices
     scanCanvas.toBlob(async (blob) => {
         if (!blob) {
             showConfirm("Error", "Failed to process image.", false);
@@ -1183,31 +1181,35 @@ document.getElementById('downloadErasedBtn').addEventListener('click', async () 
 
         const fileName = `Erased_List_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: 'image/png' });
+        
+        // 1. Detect if the user is on a Mobile Device
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-        // STRATEGY 1: Web Share API (Best for Mobile)
-        // Checks if the browser allows sharing files directly
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // 2. LOGIC FOR MOBILE (iOS / Android)
+        // We MUST use navigator.share here because iOS Safari blocks direct downloads
+        if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
             try {
                 await navigator.share({
                     files: [file],
                     title: 'Filtered Loan List',
-                    text: 'Here is the filtered list with "Not Available" lines removed.'
+                    text: 'Here is the filtered list.'
                 });
-                return; // Stop here if sharing was successful
             } catch (error) {
-                // If user cancelled share, or it failed, we fall through to Strategy 2
-                console.warn('Share failed or cancelled:', error);
+                // If the user cancelled the share, do nothing.
+                console.log('Share cancelled or failed', error);
             }
+            return; // Stop here, do not try to download
         }
 
-        // STRATEGY 2: Classic Download (Best for PC / Fallback)
+        // 3. LOGIC FOR PC (Desktop)
+        // Force a direct download link click
         try {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.download = fileName;
             
-            // Append to body is required for some mobile browsers (Firefox Android)
+            // Required for the click to register in some contexts
             document.body.appendChild(link);
             link.click();
             
@@ -1216,7 +1218,7 @@ document.getElementById('downloadErasedBtn').addEventListener('click', async () 
             setTimeout(() => URL.revokeObjectURL(url), 100);
         } catch (err) {
             console.error(err);
-            showConfirm("Error", "Download failed. Please try a different browser.", false);
+            showConfirm("Error", "Download failed.", false);
         }
 
     }, 'image/png', 1.0); // 1.0 = High Quality
