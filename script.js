@@ -931,24 +931,14 @@ const deleteReport = async (docId, isFinalised = false) => {
 // Updated: Aggressive Normalizer (Fixes Matching Issues)
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
-    
-    // 1. Remove EVERYTHING that is not a letter or number
-    // "B. 523" -> "B523" | "A-873" -> "A873"
-    const cleanStr = String(loanNo).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    
-    // 2. Split Letters and Numbers
-    const match = cleanStr.match(/^([A-Z]+)(\d+)$/);
+    // This regex finds a non-digit prefix and a digit suffix.
+    const match = loanNo.match(/^(\D*)(\d+)$/);
     if (match) {
-        const prefix = match[1]; 
-        // Parse int to remove leading zeros (e.g. 052 -> 52)
-        const numericPart = parseInt(match[2], 10).toString();
-        
-        // 3. Rebuild in standard format: "LETTER/NUMBER"
-        return `${prefix}/${numericPart}`;
+        const prefix = match[1]; // e.g., "A/"
+        const numericPart = parseInt(match[2], 10).toString(); // e.g., "052" -> 52 -> "52"
+        return prefix + numericPart;
     }
-    
-    // Fallback if it's just numbers or just letters
-    return cleanStr;
+    return loanNo; // Return original if it doesn't match the pattern
 };
 
 // Updated: Rebuilds cache using the new Normalizer
