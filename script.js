@@ -1189,100 +1189,61 @@ const fillSearchTableFromScan = (loanData) => {
 // FIXED: "Smart Edge" Eraser (Avoids black borders)
 // NEW: "Pixel-by-Pixel" Vertical Healing (The Perfectionist Method)
 
-// --- Helper Function: Check if a region of pixels is "clean" ---
-// Returns true only if NO pixels in the region are dark (ink/borders).
-const isRegionClean = (ctx, x, y, w, h, threshold = 110) => {
-    try {
-        // Get all pixel data for the sample region
-        const data = ctx.getImageData(x, y, w, h).data;
-        // Loop through every pixel (R, G, B, Alpha)
-        for (let i = 0; i < data.length; i += 4) {
-            // Calculate brightness (average of R, G, B)
-            const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
-            // If any single pixel is too dark, the region is "dirty"
-            if (brightness < threshold) {
-                return false; 
-            }
-        }
-        return true; // All pixels passed the brightness check
-    } catch (e) {
-        return false; // Handle off-canvas errors safely
-    }
-};
-
-// --- Main Function: The Robust Multi-Stage Eraser ---
+// FIXED: "Safe Stretch" Eraser (Reverted to best logic + Safety Adjustments)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
-    // 1. Define the Erase Zone (Full Width based on Y-coordinates)
+    // 1. Get Coordinates
     const ymin = Math.max(0, box[0]);
     const ymax = Math.min(1000, box[2]);
+    
+    // Safety check
     if (ymax <= ymin) return;
 
-    const width = scanCanvas.width;
-    const height = scanCanvas.height;
+    // 2. Convert to pixels
+    const y = Math.floor((ymin / 1000) * scanCanvas.height);
+    const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
+    
+    // 3. AGGRESSIVE PADDING (Fixes "Under/Over Covering")
+    // We expand the box significantly to catch tall loops (l, h, g, y)
+    // Move up 15px, and expand total height by 35px
+    const drawY = Math.max(0, y - 15); 
+    const drawH = h + 35;
 
-    // Convert to pixels & add generous padding for tall handwriting
-    const y = Math.floor((ymin / 1000) * height);
-    const h = Math.ceil(((ymax - ymin) / 1000) * height);
-    const padY = 12; 
-    const drawY = Math.max(0, y - padY);
-    const drawH = Math.min(height - drawY, h + (padY * 2));
-
-    // --- STAGE 1: "Smart Texture Match" (The Perfectionist Choice) ---
-    // We search the right margin for a clean sample to clone.
-    const sampleW = 25; // Width of the slice to grab
-    // Scan from 95% width down to 75% width, looking for a clean spot
-    for (let sampleX = Math.floor(width * 0.95); sampleX > Math.floor(width * 0.75); sampleX -= 10) {
-        
-        // Check: Is this spot clean?
-        if (isRegionClean(scanCtx, sampleX, drawY, sampleW, drawH)) {
-            try {
-                // Found a clean slice! Capture its texture.
-                const texture = scanCtx.getImageData(sampleX, drawY, sampleW, drawH);
-                
-                // Place it on a temporary canvas
-                const tempC = document.createElement('canvas');
-                tempC.width = sampleW;
-                tempC.height = drawH;
-                tempC.getContext('2d').putImageData(texture, 0, 0);
-
-                // Draw it stretched across the entire line.
-                // Because it's from the same Y-level, lines and lighting match perfectly.
-                scanCtx.drawImage(tempC, 0, 0, sampleW, drawH, 0, drawY, width, drawH);
-                return; // Success! Exit the function.
-            } catch (e) {
-                console.warn("Stage 1 clone failed:", e);
-                //If cloning fails, break the loop and fall through to Stage 2
-                break; 
-            }
-        }
-    }
-
-    // --- STAGE 2: "Average Color Fill" (The Reliable Fallback) ---
-    //If we couldn't find a clean texture, calculate the average paper color.
     try {
-        // Sample a 20x20 patch from a safe spot near the top-left
-        const safeSize = 20;
-        const safeX = Math.min(width - safeSize, 30);
-        const safeY = Math.min(height - safeSize, 30);
-        const p = scanCtx.getImageData(safeX, safeY, safeSize, safeSize).data;
-        
-        // Calculate the average Red, Green, and Blue values
-        let r=0, g=0, b=0;
-        for(let i=0; i<p.length; i+=4) { r+=p[i]; g+=p[i+1]; b+=p[i+2]; }
-        const count = p.length / 4;
-        r = Math.round(r/count); g = Math.round(g/count); b = Math.round(b/count);
+        // 4. THE "SAFE ZONE" STRATEGY
+        // Instead of the absolute edge (100%), we grab from 92% width.
+        // This is far enough right to be empty paper, but far enough left to miss the black monitor frame.
+        const safeMargin = Math.floor(scanCanvas.width * 0.92); 
+        const sampleW = 30; // Grab a nice chunk of texture
 
-        // Fill the area with this solid, matching color.
-        scanCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        scanCtx.fillRect(0, drawY, width, drawH);
+        // Capture the clean paper texture
+        const texture = scanCtx.getImageData(safeMargin, drawY, sampleW, drawH);
+        
+        // Create a temp canvas for the pattern
+        const tempC = document.createElement('canvas');
+        tempC.width = sampleW;
+        tempC.height = drawH;
+        tempC.getContext('2d').putImageData(texture, 0, 0);
+
+        // STRETCH IT ACROSS (Restores seamless look)
+        // We draw that clean paper slice across the entire width of the line.
+        scanCtx.drawImage(
+            tempC, 
+            0, 0, sampleW, drawH,        // Source
+            0, drawY, scanCanvas.width, drawH // Destination
+        );
+
     } catch (e) {
-        // --- STAGE 3: "Ultimate Safety Net" ---
-        // If even averaging fails, just use a clean off-white.
-        console.warn("Stage 2 average failed:", e);
-        scanCtx.fillStyle = '#f2f2f2'; 
-        scanCtx.fillRect(0, drawY, width, drawH);
+        // Fallback: If anything fails, use a solid color match from the top left
+        try {
+            const p = scanCtx.getImageData(20, 20, 1, 1).data;
+            scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
+        } catch (e2) {
+            scanCtx.fillStyle = '#fff';
+            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
+        }
     }
 };
 // Remove any old event listeners (safety)
