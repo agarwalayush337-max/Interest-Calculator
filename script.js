@@ -1176,41 +1176,60 @@ const fillSearchTableFromScan = (loanData) => {
 // NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
 // NEW: "Full Width" Paper Texture Cloner
 // Updated: "Full Width" Texture Cloner with Safety Checks
+// FIXED: Robust "Full Width" Eraser (Uses Image Stretching)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
-    // Use only Y coordinates for full-width erase
+    // 1. Get Coordinates (Y-axis only for full width)
     const ymin = Math.max(0, box[0]);
     const ymax = Math.min(1000, box[2]);
     
+    // Safety: If the box is nonsense (e.g. height 0), skip
+    if (ymax <= ymin) return;
+
     // Convert to pixels
     const y = Math.floor((ymin / 1000) * scanCanvas.height);
     const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
-    const safeH = Math.max(h, 15); // Minimum height to ensure visibility
+    
+    // Ensure the erase strip is tall enough to cover handwriting (min 20px)
+    const safeH = Math.max(h, 20);
+    // Add generous padding (move up 10px, expand height by 20px) to cover tall letters
+    const drawY = Math.max(0, y - 10);
+    const drawH = safeH + 20;
 
     try {
-        // 1. Grab a texture sample from the rightmost 5% of the image (empty paper margin)
-        const sampleW = Math.max(20, Math.floor(scanCanvas.width * 0.05));
+        // --- STRATEGY: STRETCH CLONE ---
+        // 1. Grab a vertical slice of "clean paper" from the far right edge (last 50px)
+        const sampleW = Math.min(50, Math.floor(scanCanvas.width * 0.1)); 
         const sampleX = scanCanvas.width - sampleW;
-        
-        // 2. Clone it
-        const texture = scanCtx.getImageData(sampleX, y, sampleW, safeH);
-        
-        // 3. Create a pattern
+
+        // 2. Put it on a temp canvas
+        const texture = scanCtx.getImageData(sampleX, drawY, sampleW, drawH);
         const tempC = document.createElement('canvas');
         tempC.width = sampleW;
-        tempC.height = safeH;
+        tempC.height = drawH;
         tempC.getContext('2d').putImageData(texture, 0, 0);
-        const pattern = scanCtx.createPattern(tempC, 'repeat-x');
-        
-        // 4. Fill the whole line (with small vertical padding for neatness)
-        scanCtx.fillStyle = pattern;
-        scanCtx.fillRect(0, y - 5, scanCanvas.width, safeH + 10);
+
+        // 3. Draw it stretched across the whole width
+        // This is much safer than 'createPattern' which can fail or align wrong
+        scanCtx.drawImage(
+            tempC, 
+            0, 0, sampleW, drawH,   // Source (The small slice)
+            0, drawY, scanCanvas.width, drawH // Destination (The full row)
+        );
 
     } catch (e) {
-        // Fallback: White box if texture fails
-        scanCtx.fillStyle = '#ffffff';
-        scanCtx.fillRect(0, y - 5, scanCanvas.width, safeH + 10);
+        console.error("Eraser failed, using fallback color", e);
+        // Fallback: Just pick the color of the paper and paint a solid block
+        try {
+            const p = scanCtx.getImageData(scanCanvas.width - 10, drawY + drawH/2, 1, 1).data;
+            scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
+        } catch (e2) {
+            // Ultimate fallback: White box
+            scanCtx.fillStyle = 'white';
+            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
+        }
     }
 };
 
