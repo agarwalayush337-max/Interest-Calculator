@@ -1190,60 +1190,54 @@ const fillSearchTableFromScan = (loanData) => {
 // NEW: "Pixel-by-Pixel" Vertical Healing (The Perfectionist Method)
 
 // FIXED: "Safe Stretch" Eraser (Reverted to best logic + Safety Adjustments)
+// FIXED: "Adaptive Stretch" Eraser (Scales perfectly to line size)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
     // 1. Get Coordinates
     const ymin = Math.max(0, box[0]);
     const ymax = Math.min(1000, box[2]);
-    
-    // Safety check
     if (ymax <= ymin) return;
 
     // 2. Convert to pixels
     const y = Math.floor((ymin / 1000) * scanCanvas.height);
     const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
+
+    // --- ADAPTIVE PADDING ---
+    // Instead of a huge fixed number (like 35px), we take a percentage.
+    // We add 12% padding to the top and bottom.
+    // If the line is 50px tall, this adds 6px. It scales automatically.
+    const padding = Math.ceil(h * 0.12); 
     
-    // 3. AGGRESSIVE PADDING (Fixes "Under/Over Covering")
-    // We expand the box significantly to catch tall loops (l, h, g, y)
-    // Move up 15px, and expand total height by 35px
-    const drawY = Math.max(0, y - 15); 
-    const drawH = h + 35;
+    // Apply the calculated padding
+    const drawY = Math.max(0, y - padding);
+    const drawH = h + (padding * 2);
 
     try {
-        // 4. THE "SAFE ZONE" STRATEGY
-        // Instead of the absolute edge (100%), we grab from 92% width.
-        // This is far enough right to be empty paper, but far enough left to miss the black monitor frame.
+        // --- SAFE ZONE STRATEGY ---
+        // Sample from 92% width (Safe from black borders, but still empty paper)
         const safeMargin = Math.floor(scanCanvas.width * 0.92); 
-        const sampleW = 30; // Grab a nice chunk of texture
+        const sampleW = 30;
 
-        // Capture the clean paper texture
+        // Capture clean paper texture
         const texture = scanCtx.getImageData(safeMargin, drawY, sampleW, drawH);
         
-        // Create a temp canvas for the pattern
         const tempC = document.createElement('canvas');
         tempC.width = sampleW;
         tempC.height = drawH;
         tempC.getContext('2d').putImageData(texture, 0, 0);
 
-        // STRETCH IT ACROSS (Restores seamless look)
-        // We draw that clean paper slice across the entire width of the line.
+        // Stretch it across the line
         scanCtx.drawImage(
             tempC, 
-            0, 0, sampleW, drawH,        // Source
-            0, drawY, scanCanvas.width, drawH // Destination
+            0, 0, sampleW, drawH, 
+            0, drawY, scanCanvas.width, drawH 
         );
 
     } catch (e) {
-        // Fallback: If anything fails, use a solid color match from the top left
-        try {
-            const p = scanCtx.getImageData(20, 20, 1, 1).data;
-            scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
-            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
-        } catch (e2) {
-            scanCtx.fillStyle = '#fff';
-            scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
-        }
+        // Fallback
+        scanCtx.fillStyle = '#fff';
+        scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
     }
 };
 // Remove any old event listeners (safety)
