@@ -928,43 +928,56 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 // --- Loan Search Feature Functions ---
 // NEW: Helper function to normalize loan numbers (e.g., A/052 -> A/52)
+// Updated: Aggressive Normalizer (Fixes Matching Issues)
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
-    // This regex finds a non-digit prefix and a digit suffix.
-    const match = loanNo.match(/^(\D*)(\d+)$/);
+    
+    // 1. Remove EVERYTHING that is not a letter or number
+    // "B. 523" -> "B523" | "A-873" -> "A873"
+    const cleanStr = String(loanNo).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    
+    // 2. Split Letters and Numbers
+    const match = cleanStr.match(/^([A-Z]+)(\d+)$/);
     if (match) {
-        const prefix = match[1]; // e.g., "A/"
-        const numericPart = parseInt(match[2], 10).toString(); // e.g., "052" -> 52 -> "52"
-        return prefix + numericPart;
+        const prefix = match[1]; 
+        // Parse int to remove leading zeros (e.g. 052 -> 52)
+        const numericPart = parseInt(match[2], 10).toString();
+        
+        // 3. Rebuild in standard format: "LETTER/NUMBER"
+        return `${prefix}/${numericPart}`;
     }
-    return loanNo; // Return original if it doesn't match the pattern
+    
+    // Fallback if it's just numbers or just letters
+    return cleanStr;
 };
 
+// Updated: Rebuilds cache using the new Normalizer
 const buildLoanSearchCache = () => {
     loanSearchCache.clear();
     if (cachedFinalisedReports.length === 0) return;
 
+    console.log("Building Cache..."); // Debug Log
+
     cachedFinalisedReports.forEach(report => {
         if (report.loans && Array.isArray(report.loans)) {
             report.loans.forEach(loan => {
-                const originalLoanNo = loan.no?.trim().toUpperCase();
+                const originalLoanNo = loan.no?.trim();
                 if (originalLoanNo) {
-                    const normalizedKey = normalizeLoanNo(originalLoanNo);
-                    if (!loanSearchCache.has(normalizedKey)) {
-                        loanSearchCache.set(normalizedKey, {
+                    // Use the NEW normalizer
+                    const key = normalizeLoanNo(originalLoanNo);
+                    
+                    if (!loanSearchCache.has(key)) {
+                        loanSearchCache.set(key, {
                             principal: loan.principal,
                             reportDate: report.reportDate,
-                            originalNo: originalLoanNo,
-                            reportId: report.id // Add the report ID to the cache
+                            reportId: report.id
                         });
                     }
                 }
             });
         }
     });
-    document.querySelectorAll('#loanSearchTable tbody tr').forEach(row => {
-        performLoanSearch(row.querySelector('.search-no'));
-    });
+    console.log(`Cache Built. Total unique loans in DB: ${loanSearchCache.size}`);
 };
 
 // Updated: addSearchRow saves coordinates in memory
@@ -1090,55 +1103,72 @@ const handleNumberScan = async (event) => {
 };
 
 // Updated: Uses row.eraseBox to find what to erase
+// Updated: Main Logic with Debugging
 const fillSearchTableFromScan = (loanData) => {
+    // 1. Force a Cache Rebuild to ensure rules match
+    buildLoanSearchCache(); 
+
     if (!loanData || loanData.length === 0) {
         showConfirm('Scan Results', 'No numbers found.', false);
         return;
     }
 
-    // DEBUG CHECK: Are coordinates coming from the backend?
-    const missingBoxes = loanData.filter(item => !item.box).length;
-    if (missingBoxes === loanData.length) {
-        showConfirm("Backend Error", "The server is returning numbers but NO COORDINATES. Please deploy the updated 'scanImage.js' file to Netlify.", false);
-        // We continue anyway to show the numbers, but erasing won't work
+    // CHECK: Did the backend send coordinates?
+    const hasBoxes = loanData.some(item => item.box && item.box.length === 4);
+    if (!hasBoxes) {
+        alert("CRITICAL ERROR: The backend is NOT sending erase coordinates.\nPlease deploy 'scanImage.js' to Netlify again.");
     }
 
-    // 1. Clear empty rows
+    // Clear empty rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
-    // 2. Add new rows
+    // Add rows
     loanData.forEach(item => {
         addSearchRow(item.no, item.box);
     });
 
-    // 3. Search & Erase
+    // Process Search & Erase
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
+    let debugLog = []; // To store what happened
 
     inputs.forEach((input) => {
-        // Run Search (Now uses the smarter normalizeLoanNo)
+        const rawValue = input.value;
+        const normalizedKey = normalizeLoanNo(rawValue);
+        
+        // Check availability
         performLoanSearch(input); 
 
         const row = input.closest('tr');
         const statusCell = row.querySelector('.status-cell');
         
-        // Only erase if it is "Not Available" (Orange)
+        // Logic: If Orange (Not Available) -> Erase
         if (statusCell && statusCell.classList.contains('status-not-available')) {
             if (row.eraseBox) {
                 eraseRegion(row.eraseBox);
                 erasedCount++;
+                debugLog.push(`${normalizedKey}: MATCHED & ERASED`);
+            } else {
+                debugLog.push(`${normalizedKey}: MATCHED but NO BOX (Cannot erase)`);
             }
+        } else {
+            // Check if it SHOULD have matched
+            const existsInCache = loanSearchCache.has(normalizedKey);
+            debugLog.push(`${normalizedKey}: ${existsInCache ? "In Cache (Why is it green?)" : "Not in DB"}`);
         }
     });
 
     renumberSearchRows();
     
     if (erasedCount > 0) {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount}.`, false);
+        showConfirm('Success', `Erased ${erasedCount} lines successfully.`, false);
     } else {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Nothing erased (either all are new, or coordinates missing).`, false);
+        // If nothing happened, show the user WHY
+        console.log(debugLog.join('\n'));
+        const sample = debugLog.slice(0, 5).join('\n');
+        showConfirm('Nothing Erased', `The app searched but didn't find matches to erase.\n\nDebug Info:\n${sample}`, false);
     }
 };
 // NEW: Function to draw white box over coordinates
