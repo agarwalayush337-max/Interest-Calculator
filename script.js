@@ -1133,6 +1133,7 @@ const fillSearchTableFromScan = (loanData) => {
 
 // NEW: Function to draw white box over coordinates
 // NEW: Intelligent Erase with Background Color Matching
+// NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas) return;
     
@@ -1145,25 +1146,53 @@ const eraseRegion = (box) => {
     const w = Math.ceil(((xmax - xmin) / 1000) * scanCanvas.width);
     const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
 
-    // --- COLOR MATCHING LOGIC ---
-    // We pick a pixel just outside the box to the left to sample the background color.
-    // Safety check: ensure we don't pick a pixel off-screen (x < 0)
-    const sampleX = Math.max(0, x - 10); 
-    const sampleY = Math.min(y + (h / 2), scanCanvas.height - 1); // Sample from the middle height of the row
+    // Add padding to cover the text fully
+    const padX = 5;
+    const padY = 5;
+    const targetX = Math.max(0, x - padX);
+    const targetY = Math.max(0, y - padY);
+    const targetW = w + (padX * 2);
+    const targetH = h + (padY * 2);
 
-    // Get the RGBA values of that background pixel
-    const pixelData = scanCtx.getImageData(sampleX, sampleY, 1, 1).data;
-    const r = pixelData[0];
-    const g = pixelData[1];
-    const b = pixelData[2];
+    // --- CLONE STAMP LOGIC ---
+    // Instead of a solid color, we copy a piece of the "empty" paper next to the text.
+    
+    // Attempt 1: Try to clone from the RIGHT side of the text (usually empty in lists)
+    // We look at the area starting at (x + w)
+    let sourceX = targetX + targetW + 10; 
+    let sourceY = targetY; // Keep same height to align paper lines
 
-    // Set the fill style to that sampled background color
-    scanCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    // Safety check: If copying from right goes off-screen, copy from the LEFT instead
+    if (sourceX + targetW > scanCanvas.width) {
+        sourceX = targetX - targetW - 10;
+    }
 
-    // Draw the box (with a little extra padding to cover messy edges)
-    // We expand x slightly to the left to blend with the sample point
-    // We expand width (w) to ensure we cover the whole date on the right
-    scanCtx.fillRect(x - 2, y - 4, w + 20, h + 8);
+    // Double Safety: If left is also invalid, just clamp it
+    if (sourceX < 0) sourceX = 0;
+
+    try {
+        // 1. Capture the "Clean" patch of paper
+        const paperTexture = scanCtx.getImageData(sourceX, sourceY, targetW, targetH);
+        
+        // 2. Paste it over the "Dirty" text
+        // We use a temporary canvas to blend it slightly so edges aren't sharp
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = targetW;
+        tempCanvas.height = targetH;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        tempCtx.putImageData(paperTexture, 0, 0);
+        
+        // Draw the cloned patch onto the main canvas
+        scanCtx.drawImage(tempCanvas, targetX, targetY);
+        
+    } catch (e) {
+        // Fallback: If cloning fails (e.g., edge of image), use the Blur/Solid Color method
+        console.warn("Cloning failed, using solid fill fallback");
+        const pixelData = scanCtx.getImageData(targetX - 5, targetY + (targetH/2), 1, 1).data;
+        scanCtx.fillStyle = `rgb(${pixelData[0]}, ${pixelData[1]}, ${pixelData[2]})`;
+        scanCtx.fillRect(targetX, targetY, targetW, targetH);
+    }
 };
 // NEW: Download Function
 // NEW: Specific Logic for Mobile (Share) vs PC (Download)
