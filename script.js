@@ -280,33 +280,56 @@ const cleanAndSortTable = () => {
 };
 
 // --- Image Scanning ---
-const fillTableFromScan = (loans) => {
-    if (!loans || loans.length === 0) {
-        showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
+const fillSearchTableFromScan = (loanData) => {
+    if (!loanData || loanData.length === 0) {
+        showConfirm('Scan Results', 'No numbers found.', false);
         return;
     }
-    const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
-        !r.querySelector('.principal').value && !r.querySelector('.no').value
-    );
-    let emptyRowIndex = 0;
-    loans.forEach((loan) => {
-        const formattedLoan = {
-            no: loan.no,
-            principal: String(loan.principal).replace(/,/g, ''),
-            date: formatDateToDDMMYYYY(parseDate(loan.date))
-        };
-        if (emptyRowIndex < emptyRows.length) {
-            const targetRow = emptyRows[emptyRowIndex];
-            targetRow.querySelector('.no').value = formattedLoan.no;
-            targetRow.querySelector('.principal').value = formattedLoan.principal;
-            targetRow.querySelector('.date').value = formattedLoan.date;
-            emptyRowIndex++;
-        } else {
-            addRow(formattedLoan);
+
+    // DEBUG CHECK: Are coordinates coming from the backend?
+    const missingBoxes = loanData.filter(item => !item.box).length;
+    if (missingBoxes === loanData.length) {
+        showConfirm("Backend Error", "The server is returning numbers but NO COORDINATES. Please deploy the updated 'scanImage.js' file to Netlify.", false);
+        // We continue anyway to show the numbers, but erasing won't work
+    }
+
+    // 1. Clear empty rows
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (!input.value.trim()) input.closest('tr').remove();
+    });
+
+    // 2. Add new rows
+    loanData.forEach(item => {
+        addSearchRow(item.no, item.box);
+    });
+
+    // 3. Search & Erase
+    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
+    let erasedCount = 0;
+
+    inputs.forEach((input) => {
+        // Run Search (Now uses the smarter normalizeLoanNo)
+        performLoanSearch(input); 
+
+        const row = input.closest('tr');
+        const statusCell = row.querySelector('.status-cell');
+        
+        // Only erase if it is "Not Available" (Orange)
+        if (statusCell && statusCell.classList.contains('status-not-available')) {
+            if (row.eraseBox) {
+                eraseRegion(row.eraseBox);
+                erasedCount++;
+            }
         }
     });
-    updateAllCalculations();
-    showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
+
+    renumberSearchRows();
+    
+    if (erasedCount > 0) {
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount}.`, false);
+    } else {
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Nothing erased (either all are new, or coordinates missing).`, false);
+    }
 };
 
 const handleImageScan = async (fileOrEvent) => {
@@ -928,16 +951,26 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 // --- Loan Search Feature Functions ---
 // NEW: Helper function to normalize loan numbers (e.g., A/052 -> A/52)
+// Updated: Aggressive normalization to fix "B 523" vs "B/523" mismatches
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
-    // This regex finds a non-digit prefix and a digit suffix.
-    const match = loanNo.match(/^(\D*)(\d+)$/);
+    
+    // 1. Remove ALL spaces, dots, dashes, and slashes first
+    // "B. 523" -> "B523"
+    const cleanStr = loanNo.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    
+    // 2. Separate Letters and Numbers
+    const match = cleanStr.match(/^([A-Z]+)(\d+)$/);
     if (match) {
-        const prefix = match[1]; // e.g., "A/"
-        const numericPart = parseInt(match[2], 10).toString(); // e.g., "052" -> 52 -> "52"
-        return prefix + numericPart;
+        const prefix = match[1]; 
+        const numericPart = parseInt(match[2], 10).toString(); // Removes leading zeros (052 -> 52)
+        
+        // 3. Rebuild with a standard format (e.g., "B/523")
+        return `${prefix}/${numericPart}`;
     }
-    return loanNo; // Return original if it doesn't match the pattern
+    
+    // Fallback if pattern doesn't match
+    return loanNo.trim().toUpperCase();
 };
 
 const buildLoanSearchCache = () => {
