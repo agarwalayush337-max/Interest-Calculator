@@ -33,7 +33,9 @@ let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
-
+let currentScanCoordinates = []; // Stores the box data from AI
+let scanCanvas = null;           // Reference to the canvas
+let scanCtx = null;              // Canvas context
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
 let isUpdatingFromListener = false;
@@ -1026,57 +1028,137 @@ const performLoanSearch = (inputElement) => {
     }
 };
 
+// Updated: Handle Image Scan to draw on Canvas
 const handleNumberScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-    showConfirm('Scanning for Numbers...', 'Please wait while the document is being analyzed.', false);
-    try {
-        const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                const base64Image = reader.result.split(',')[1];
-                const response = await fetch('/.netlify/functions/scanImage', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
-                });
-                closeConfirm();
-                if (!response.ok) {
-                    const errorInfo = await response.json();
-                    throw new Error(errorInfo.error || 'The scan failed.');
-                }
-                const result = await response.json();
-                fillSearchTableFromScan(result.loanNumbers);
-            } catch (fetchError) {
-                closeConfirm();
-                await showConfirm('Scan Error', fetchError.message, false);
-            }
-        };
-        reader.readAsDataURL(file);
-    } catch (error) {
-        closeConfirm();
-        await showConfirm('File Error', 'Could not read the selected image file.', false);
-    }
+
+    // 1. Setup Canvas
+    scanCanvas = document.getElementById('scanCanvas');
+    scanCtx = scanCanvas.getContext('2d');
+    const img = new Image();
+    
+    showConfirm('Scanning...', 'Analyzing document structure...', false);
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+        try {
+            // Load image into Image Object and Canvas
+            img.src = reader.result;
+            await new Promise(r => img.onload = r);
+            
+            // Resize canvas to match image
+            scanCanvas.width = img.width;
+            scanCanvas.height = img.height;
+            scanCtx.drawImage(img, 0, 0);
+
+            // Send to Gemini
+            const base64Image = reader.result.split(',')[1];
+            const response = await fetch('/.netlify/functions/scanImage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
+            });
+            
+            closeConfirm();
+            if (!response.ok) throw new Error((await response.json()).error);
+            
+            const result = await response.json();
+            
+            // Store coordinates for erasing later
+            currentScanCoordinates = result.loanNumbers || [];
+            
+            fillSearchTableFromScan(result.loanNumbers);
+            
+            // Show the download button
+            document.getElementById('downloadErasedBtn').style.display = 'inline-flex';
+
+        } catch (error) {
+            closeConfirm();
+            await showConfirm('Error', error.message, false);
+        }
+    };
+    reader.readAsDataURL(file);
     numberImageUploadInput.value = '';
 };
 
-const fillSearchTableFromScan = (loanNumbers) => {
-    if (!loanNumbers || loanNumbers.length === 0) {
-        showConfirm('Scan Results', 'Could not find any loan numbers in the image.', false);
+// Updated: Fill Table and Auto-Erase
+const fillSearchTableFromScan = (loanData) => {
+    if (!loanData || loanData.length === 0) {
+        showConfirm('Scan Results', 'No numbers found.', false);
         return;
     }
+
+    // Clear empty rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (!input.value.trim()) {
-            input.closest('tr').remove();
+        if (!input.value.trim()) input.closest('tr').remove();
+    });
+
+    // Add rows and check availability
+    loanData.forEach(item => {
+        // item now contains { no: "...", box: [...] }
+        addSearchRow(item.no);
+    });
+
+    // Perform Search & Erase Logic
+    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
+    let erasedCount = 0;
+
+    inputs.forEach((input, index) => {
+        // Trigger the search logic (this sets the red/green status)
+        performLoanSearch(input); 
+
+        // Check the result immediately
+        const row = input.closest('tr');
+        const statusCell = row.querySelector('.status-cell');
+        
+        // IF "Not Available" (Already in DB) -> Erase from Image
+        if (statusCell && statusCell.classList.contains('status-not-available')) {
+            const loanItem = currentScanCoordinates.find(i => i.no === input.value.toUpperCase());
+            
+            if (loanItem && loanItem.box) {
+                eraseRegion(loanItem.box);
+                erasedCount++;
+            }
         }
     });
-    loanNumbers.forEach(no => addSearchRow(no));
-    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (input.value) performLoanSearch(input);
-    });
+
     renumberSearchRows();
-    showConfirm('Scan Complete', `${loanNumbers.length} loan number(s) were found and added to the search list.`, false);
+    if(erasedCount > 0) {
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} numbers that were already finalised.`, false);
+    } else {
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
+    }
 };
+
+// NEW: Function to draw white box over coordinates
+const eraseRegion = (box) => {
+    if (!scanCtx || !scanCanvas) return;
+    
+    // Gemini returns [ymin, xmin, ymax, xmax] scaled to 1000
+    const [ymin, xmin, ymax, xmax] = box;
+    
+    // Convert to pixel coordinates
+    const x = (xmin / 1000) * scanCanvas.width;
+    const y = (ymin / 1000) * scanCanvas.height;
+    const w = ((xmax - xmin) / 1000) * scanCanvas.width;
+    const h = ((ymax - ymin) / 1000) * scanCanvas.height;
+
+    // Draw White Rectangle (Eraser)
+    scanCtx.fillStyle = "white"; 
+    // We add a tiny padding (approx 2px) to ensure full coverage
+    scanCtx.fillRect(x - 2, y - 2, w + 4, h + 4);
+};
+
+// NEW: Download Function
+document.getElementById('downloadErasedBtn').addEventListener('click', () => {
+    if (!scanCanvas) return;
+    
+    const link = document.createElement('a');
+    link.download = `Erased_Image_${new Date().getTime()}.png`;
+    link.href = scanCanvas.toDataURL();
+    link.click();
+});
 
 const filterSearchResults = (filter) => {
     const rows = document.querySelectorAll('#loanSearchTable tbody tr');
