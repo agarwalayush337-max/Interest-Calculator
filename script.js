@@ -967,14 +967,14 @@ const buildLoanSearchCache = () => {
     });
 };
 
-// Updated: addSearchRow now accepts an optional 'box' parameter
+// Updated: addSearchRow saves coordinates in memory
 const addSearchRow = (loanNo = '', box = null) => {
     const rowCount = loanSearchTableBody.rows.length;
     const row = loanSearchTableBody.insertRow();
     
-    // Store the erase coordinates directly on the row element (if provided)
+    // SAVE COORDINATES DIRECTLY TO THE ROW OBJECT
     if (box) {
-        row.dataset.eraseBox = JSON.stringify(box);
+        row.eraseBox = box; // Store raw array
     }
 
     row.innerHTML = `
@@ -1089,56 +1089,51 @@ const handleNumberScan = async (event) => {
     numberImageUploadInput.value = '';
 };
 
-// Updated: Fill Table and Auto-Erase
-// Updated: Uses dataset.eraseBox instead of text matching
+// Updated: Uses row.eraseBox to find what to erase
 const fillSearchTableFromScan = (loanData) => {
     if (!loanData || loanData.length === 0) {
         showConfirm('Scan Results', 'No numbers found.', false);
         return;
     }
 
-    // Clear empty rows first
+    // 1. Clear empty rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
-    // Add rows WITH their coordinate boxes attached
+    // 2. Add new rows (Coordinates are saved automatically by addSearchRow)
     loanData.forEach(item => {
-        // item contains { no: "...", box: [...] }
         addSearchRow(item.no, item.box);
     });
 
-    // Perform Search & Erase Logic
+    // 3. Search & Erase
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
 
     inputs.forEach((input) => {
-        // 1. Run the search (sets the Red/Green/Orange status)
+        // Check availability
         performLoanSearch(input); 
 
         const row = input.closest('tr');
         const statusCell = row.querySelector('.status-cell');
         
-        // 2. Check: Is it "Not Available" (already in database)?
+        // If "Not Available" AND we have coordinates -> Erase it
         if (statusCell && statusCell.classList.contains('status-not-available')) {
-            
-            // 3. Retrieve the coordinates directly from the row
-            if (row.dataset.eraseBox) {
-                try {
-                    const box = JSON.parse(row.dataset.eraseBox);
-                    eraseRegion(box);
-                    erasedCount++;
-                } catch (e) {
-                    console.error("Error parsing erase box coordinates", e);
-                }
+            if (row.eraseBox) {
+                console.log("Erasing row:", input.value, row.eraseBox); // Debug log
+                eraseRegion(row.eraseBox);
+                erasedCount++;
+            } else {
+                console.warn("Row marked for erase but no box found:", input.value);
             }
         }
     });
 
     renumberSearchRows();
     
+    // Show confirmation
     if (erasedCount > 0) {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} finished loans from the image.`, false);
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} from the image.`, false);
     } else {
         showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
     }
@@ -1149,170 +1144,89 @@ const fillSearchTableFromScan = (loanData) => {
 // NEW: "Full Width" Paper Texture Cloner
 // Updated: "Full Width" Texture Cloner with Safety Checks
 const eraseRegion = (box) => {
-    if (!scanCtx || !scanCanvas || !box || box.length < 4) return;
+    if (!scanCtx || !scanCanvas || !box) return;
 
-    // Gemini box: [ymin, xmin, ymax, xmax] (0-1000 scale)
-    const ymin = Math.max(0, box[0]); // Prevent negative
-    const ymax = Math.min(1000, box[2]); // Prevent over 1000
-
-    // Safety: If height is invalid, skip
-    if (ymax <= ymin) return;
-
+    // Use only Y coordinates for full-width erase
+    const ymin = Math.max(0, box[0]);
+    const ymax = Math.min(1000, box[2]);
+    
     // Convert to pixels
     const y = Math.floor((ymin / 1000) * scanCanvas.height);
     const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
-
-    // Safety: If pixel height is too small, make it visible (at least 10px)
-    const safeH = Math.max(h, 10);
-
-    // --- TEXTURE STRATEGY: RIGHT MARGIN CLONING ---
-    const sampleWidth = Math.floor(scanCanvas.width * 0.05); // Grab 5% form right edge
-    const sampleX = scanCanvas.width - sampleWidth;
+    const safeH = Math.max(h, 15); // Minimum height to ensure visibility
 
     try {
-        // 1. Capture "Clean" paper texture
-        const marginTexture = scanCtx.getImageData(sampleX, y, sampleWidth, safeH);
-
-        // 2. Pattern fill
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = sampleWidth;
-        tempCanvas.height = safeH;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.putImageData(marginTexture, 0, 0);
-
-        const pattern = scanCtx.createPattern(tempCanvas, 'repeat-x');
+        // 1. Grab a texture sample from the rightmost 5% of the image (empty paper margin)
+        const sampleW = Math.max(20, Math.floor(scanCanvas.width * 0.05));
+        const sampleX = scanCanvas.width - sampleW;
+        
+        // 2. Clone it
+        const texture = scanCtx.getImageData(sampleX, y, sampleW, safeH);
+        
+        // 3. Create a pattern
+        const tempC = document.createElement('canvas');
+        tempC.width = sampleW;
+        tempC.height = safeH;
+        tempC.getContext('2d').putImageData(texture, 0, 0);
+        const pattern = scanCtx.createPattern(tempC, 'repeat-x');
+        
+        // 4. Fill the whole line (with small vertical padding for neatness)
         scanCtx.fillStyle = pattern;
-
-        // 3. Fill FULL WIDTH (with padding for messy handwriting)
-        // y - 5 pixels up, height + 10 pixels down
-        scanCtx.fillRect(0, Math.max(0, y - 5), scanCanvas.width, safeH + 10);
+        scanCtx.fillRect(0, y - 5, scanCanvas.width, safeH + 10);
 
     } catch (e) {
-        console.error("Texture clone failed, using fallback", e);
-        // Fallback: Solid color from right edge
-        try {
-            const p = scanCtx.getImageData(scanCanvas.width - 5, y + safeH/2, 1, 1).data;
-            scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
-            scanCtx.fillRect(0, Math.max(0, y - 5), scanCanvas.width, safeH + 10);
-        } catch (e2) {
-            // Ultimate fallback: White box
-            scanCtx.fillStyle = 'white';
-            scanCtx.fillRect(0, Math.max(0, y - 5), scanCanvas.width, safeH + 10);
-        }
+        // Fallback: White box if texture fails
+        scanCtx.fillStyle = '#ffffff';
+        scanCtx.fillRect(0, y - 5, scanCanvas.width, safeH + 10);
     }
 };
 
-// NEW: Strict Mobile vs PC Download Logic
-document.getElementById('downloadErasedBtn').addEventListener('click', async () => {
-    if (!scanCanvas) {
-        showConfirm("Error", "No image to download.", false);
-        return;
-    }
-
-    scanCanvas.toBlob(async (blob) => {
-        if (!blob) return;
-
-        const fileName = `Erased_List_${Date.now()}.png`;
-        const file = new File([blob], fileName, { type: 'image/png' });
-        
-        // Robust Mobile Detection
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        // --- 1. PC LOGIC (Force Direct Download) ---
-        if (!isMobile) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 100);
-            return; // STOP HERE
-        }
-
-        // --- 2. MOBILE LOGIC (Try Share Sheet first) ---
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            try {
-                await navigator.share({
-                    files: [file],
-                    title: 'Filtered Loan List',
-                });
-            } catch (error) {
-                console.log('Share cancelled');
-            }
+// Remove any old event listeners (safety)
+const downloadBtn = document.getElementById('downloadErasedBtn');
+if (downloadBtn) {
+    // We use .onclick = function ... this overwrites any previous clicks!
+    downloadBtn.onclick = function() {
+        if (!scanCanvas) {
+            showConfirm("Error", "No image to download.", false);
             return;
         }
 
-        // --- 3. MOBILE FALLBACK (If Share fails/unsupported) ---
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-    }, 'image/png', 1.0);
-});
-// NEW: Download Function
-// NEW: Specific Logic for Mobile (Share) vs PC (Download)
-document.getElementById('downloadErasedBtn').addEventListener('click', async () => {
-    if (!scanCanvas) {
-        showConfirm("Error", "No image to download.", false);
-        return;
-    }
+        scanCanvas.toBlob((blob) => {
+            if (!blob) return;
 
-    scanCanvas.toBlob(async (blob) => {
-        if (!blob) {
-            showConfirm("Error", "Failed to process image.", false);
-            return;
-        }
+            const fileName = `Erased_List_${Date.now()}.png`;
+            const file = new File([blob], fileName, { type: 'image/png' });
+            
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-        const fileName = `Erased_List_${Date.now()}.png`;
-        const file = new File([blob], fileName, { type: 'image/png' });
-        
-        // 1. Detect if the user is on a Mobile Device
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        // 2. LOGIC FOR MOBILE (iOS / Android)
-        // We MUST use navigator.share here because iOS Safari blocks direct downloads
-        if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
-            try {
-                await navigator.share({
-                    files: [file],
-                    title: 'Filtered Loan List',
-                    text: 'Here is the filtered list.'
-                });
-            } catch (error) {
-                // If the user cancelled the share, do nothing.
-                console.log('Share cancelled or failed', error);
+            if (isMobile) {
+                // MOBILE LOGIC: Share Sheet
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    navigator.share({
+                        files: [file],
+                        title: 'Filtered Loan List'
+                    }).catch(console.error);
+                } else {
+                    // Mobile Fallback
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            } else {
+                // PC LOGIC: Direct Download ONLY
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             }
-            return; // Stop here, do not try to download
-        }
-
-        // 3. LOGIC FOR PC (Desktop)
-        // Force a direct download link click
-        try {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = fileName;
-            
-            // Required for the click to register in some contexts
-            document.body.appendChild(link);
-            link.click();
-            
-            // Cleanup
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 100);
-        } catch (err) {
-            console.error(err);
-            showConfirm("Error", "Download failed.", false);
-        }
-
-    }, 'image/png', 1.0); // 1.0 = High Quality
-});
+        }, 'image/png', 1.0);
+    };
+}
 const filterSearchResults = (filter) => {
     const rows = document.querySelectorAll('#loanSearchTable tbody tr');
     rows.forEach(row => {
