@@ -1163,6 +1163,7 @@ const fillSearchTableFromScan = (loanData) => {
     }
 };
 // NEW: "Smart Mosaic" Eraser (Photoshop-style PatchMatch Algorithm)
+// FIXED: "Smart Edge Detector" (Solves Black Bars & Streaks)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
@@ -1171,125 +1172,86 @@ const eraseRegion = (box) => {
     const ymax = Math.min(1000, box[2]);
     if (ymax <= ymin) return;
 
+    // 2. Dimensions & Adaptive Padding
     const width = scanCanvas.width;
     const height = scanCanvas.height;
-
-    // Convert to pixels
     const y = Math.floor((ymin / 1000) * height);
     const h = Math.ceil(((ymax - ymin) / 1000) * height);
-
-    // Adaptive Padding (15% - Ensures we cover the handwriting loops)
-    const padding = Math.ceil(h * 0.15); 
+    const padding = Math.ceil(h * 0.12); 
     const drawY = Math.max(0, y - padding);
     const drawH = h + (padding * 2);
 
     try {
-        // --- STEP 1: FIND THE CLEANEST SOURCE BANK ---
-        // We don't just grab the edge. We scan the right side of the image
-        // to find a patch of paper that has LOW NOISE (No text) and HIGH BRIGHTNESS (No border).
+        // --- STEP 1: FIND THE PAPER (Avoid the Black Border) ---
+        // We start at the far right edge and walk left until we find bright paper.
         
-        const scanW = 40; // Size of the patch to search for
-        let bestSourceX = width - scanW - 5; // Default start
-        let lowestNoise = Infinity;
+        let safeX = width - 10; // Start at the edge
+        const minX = width * 0.80; // Don't go further left than 80% (into the text)
+        let foundCleanPaper = false;
 
-        // Search range: 80% to 98% of the page width
-        const searchStart = Math.floor(width * 0.80);
-        const searchEnd = Math.floor(width * 0.98);
+        while (safeX > minX) {
+            // Check the brightness of a vertical strip at this X position
+            const sample = scanCtx.getImageData(safeX, drawY, 5, drawH);
+            const brightness = getAverageBrightness(sample);
 
-        for (let testX = searchStart; testX < searchEnd; testX += 10) {
-            // Grab a sample
-            const sample = scanCtx.getImageData(testX, drawY, scanW, drawH);
-            
-            // Analyze it
-            const brightness = getBrightness(sample);
-            const noise = getNoise(sample, brightness);
-
-            // LOGIC:
-            // 1. Brightness > 100 (Rejects Black Borders/Shadows)
-            // 2. Noise < lowestNoise (Rejects Text/Ink)
-            if (brightness > 100 && noise < lowestNoise) {
-                lowestNoise = noise;
-                bestSourceX = testX;
+            // If brightness > 120, it's likely white/yellow paper (not a black border)
+            if (brightness > 120) {
+                foundCleanPaper = true;
+                break; // Found it! Stop looking.
             }
+            
+            // If it was dark, move left and try again
+            safeX -= 10;
         }
 
-        // --- STEP 2: MOSAIC RECONSTRUCTION ---
-        // Instead of stretching, we fill the gap with randomized "Tiles" from our clean source.
-        // This preserves the paper grain and lines perfectly.
-        
-        const tileWidth = 8; // Small tiles look more natural
-        
-        for (let destX = 0; destX < width; destX += tileWidth) {
+        // --- STEP 2: ERASE ---
+        if (foundCleanPaper) {
+            // OPTION A: STRETCH (If we found clean paper)
+            // Capture the clean strip we found
+            const texture = scanCtx.getImageData(safeX, drawY, 5, drawH);
             
-            // A. Randomize Source
-            // Pick a random spot inside our "Clean Bank" so it doesn't look like a repeating pattern
-            const randomOffset = Math.floor(Math.random() * (scanW - tileWidth));
-            const sourceX = bestSourceX + randomOffset;
-
-            // B. Capture Tile
-            const tileData = scanCtx.getImageData(sourceX, drawY, tileWidth, drawH);
-
-            // C. Auto-Exposure (Lighting Match)
-            // Measure brightness of where we are pasting vs where we took it from
-            const destSample = scanCtx.getImageData(destX, Math.max(0, drawY - 5), tileWidth, 1);
-            const destBright = getBrightness(destSample);
-            const tileBright = getBrightness(tileData);
-            const diff = destBright - tileBright;
-
-            // Apply exposure correction if needed (handles shadows on the page)
-            if (Math.abs(diff) > 2) {
-                const d = tileData.data;
-                for (let i = 0; i < d.length; i += 4) {
-                    d[i] = clamp(d[i] + diff);     // R
-                    d[i+1] = clamp(d[i+1] + diff); // G
-                    d[i+2] = clamp(d[i+2] + diff); // B
-                }
-            }
-
-            // D. Paste Tile
-            // Use a temp canvas to handle the drawing safely
             const tempC = document.createElement('canvas');
-            tempC.width = tileWidth;
+            tempC.width = 5;
             tempC.height = drawH;
-            tempC.getContext('2d').putImageData(tileData, 0, 0);
+            tempC.getContext('2d').putImageData(texture, 0, 0);
 
-            // Draw tile onto the main image
-            const wToDraw = Math.min(tileWidth, width - destX); // Don't overflow edge
-            scanCtx.drawImage(tempC, 0, 0, wToDraw, drawH, destX, drawY, wToDraw, drawH);
+            // Stretch it across the line
+            scanCtx.drawImage(tempC, 0, 0, 5, drawH, 0, drawY, width, drawH);
+        } else {
+            // OPTION B: SOLID FILL (Safety Fallback)
+            // If we couldn't find clean paper (text blocked it or border was too thick),
+            // DO NOT stretch dirt. Just fill with a solid safe color.
+            
+            // Try to pick a color from the top-left of the image (usually safe)
+            try {
+                const p = scanCtx.getImageData(20, 20, 1, 1).data;
+                scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            } catch (e) {
+                scanCtx.fillStyle = '#f5f5f5'; // Light Grey
+            }
+            scanCtx.fillRect(0, drawY, width, drawH);
         }
 
     } catch (e) {
-        console.warn("Mosaic failed, using fallback", e);
+        console.warn("Eraser failed, using white fallback");
         scanCtx.fillStyle = '#fff';
         scanCtx.fillRect(0, drawY, width, drawH);
     }
 };
 
-// --- COMPUTER VISION HELPER FUNCTIONS ---
-
-const clamp = (num) => Math.min(255, Math.max(0, num));
-
-// Calculates Average Brightness (0-255)
-const getBrightness = (imageData) => {
+// --- HELPER: Measure Brightness ---
+const getAverageBrightness = (imageData) => {
     let sum = 0;
     const data = imageData.data;
-    for (let i = 0; i < data.length; i += 4) {
+    // Check every 4th pixel to speed it up
+    for (let i = 0; i < data.length; i += 16) { 
         sum += (data[i] + data[i+1] + data[i+2]) / 3;
     }
-    return sum / (data.length / 4);
+    // Approximate average
+    return sum / (data.length / 16);
 };
 
-// Calculates "Noise" (How much the pixels vary). 
-// High Noise = Ink/Text. Low Noise = Clean Paper.
-const getNoise = (imageData, avgBrightness) => {
-    const data = imageData.data;
-    let sumDiff = 0;
-    for (let i = 0; i < data.length; i += 4) {
-        const b = (data[i] + data[i+1] + data[i+2]) / 3;
-        sumDiff += Math.abs(b - avgBrightness);
-    }
-    return sumDiff / (data.length / 4);
-};
+
 // Remove any old event listeners (safety)
 const downloadBtn = document.getElementById('downloadErasedBtn');
 if (downloadBtn) {
