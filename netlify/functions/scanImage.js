@@ -31,9 +31,9 @@ exports.handler = async function(event) {
         Return a raw JSON array of objects. Each object must have two fields:
         
         1. "no": Extract the loan number.
-           - Replace '1' with '/' if a 3-digit number starts with 1 (e.g., A153 -> A/53).
+           - Replace '1' with '/' if a 4-digit number starts with 1 (e.g., A153 -> A/53).
            - Ensure there is a '/' between the letter and number (e.g., B766 -> B/766).
-           - Replace any '.', ' ', or '-' with '/' (e.g., b.579 -> b/579).
+           - Replace any '.', ' ', or '-' with '/' (e.g., b.579 -> b/579, d.81 -> d/81)
            - Transcription must be perfect.
 
         2. "box": An array of 4 integers [ymin, xmin, ymax, xmax] on a scale of 0 to 1000. 
