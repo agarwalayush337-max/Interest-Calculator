@@ -1114,8 +1114,54 @@ const handleNumberScan = async (event) => {
 // Updated: Uses row.eraseBox to find what to erase
 // Updated: Main Logic with Debugging
 // Updated: Restored original "Scan Complete" message format
+const fillSearchTableFromScan = (loanData) => {
+    // 1. Force a Cache Rebuild to ensure rules match
+    buildLoanSearchCache(); 
 
+    if (!loanData || loanData.length === 0) {
+        showConfirm('Scan Results', 'No numbers found.', false);
+        return;
+    }
 
+    // 2. Clear empty rows
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (!input.value.trim()) input.closest('tr').remove();
+    });
+
+    // 3. Add new rows
+    loanData.forEach(item => {
+        addSearchRow(item.no, item.box);
+    });
+
+    // 4. Search & Erase Logic
+    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
+    let erasedCount = 0;
+
+    inputs.forEach((input) => {
+        // Run Search
+        performLoanSearch(input); 
+
+        const row = input.closest('tr');
+        const statusCell = row.querySelector('.status-cell');
+        
+        // If "Not Available" (Orange) -> Erase
+        if (statusCell && statusCell.classList.contains('status-not-available')) {
+            if (row.eraseBox) {
+                eraseRegion(row.eraseBox);
+                erasedCount++;
+            }
+        }
+    });
+
+    renumberSearchRows();
+    
+    // --- RESTORED EARLIER MESSAGE FORMAT ---
+    if (erasedCount > 0) {
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} finished loans from the image.`, false);
+    } else {
+        showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
+    }
+};
 // NEW: Function to draw white box over coordinates
 // NEW: Intelligent Erase with Background Color Matching
 // NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
@@ -1528,188 +1574,4 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
-});
-
-
-// ======================================================
-// PASTE THIS AT THE END OF SCRIPT.JS
-// (Replaces all previous Sheet/Scanner logic)
-// ======================================================
-
-// --- 1. SHEET HELPERS ---
-
-const convertToCsvLink = (url) => {
-    try {
-        if (!url) return '';
-        // If it's already a CSV export link, keep it
-        if (url.includes('output=csv') || url.includes('format=csv')) return url;
-
-        // If it's a standard "Edit" link, convert to Export link
-        const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-        if (match && match[1]) {
-            return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
-        }
-        return url;
-    } catch (e) { return url; }
-};
-
-const fetchSheetData = async (url) => {
-    const statusEl = document.getElementById('sheetStatus');
-    const finalUrl = convertToCsvLink(url);
-    
-    if(statusEl) {
-        statusEl.textContent = "⏳ Connecting to Sheet...";
-        statusEl.style.color = "#d35400";
-    }
-
-    try {
-        const response = await fetch(finalUrl);
-        // If Google says 404 or 403, it's a bad link
-        if (!response.ok) throw new Error("Connection failed. Check permissions.");
-        
-        const text = await response.text();
-        
-        // If we get HTML instead of CSV, the sheet is Private
-        if (text.trim().startsWith("<!DOCTYPE html>")) {
-            throw new Error("Sheet is PRIVATE. Share it as 'Anyone with the link'.");
-        }
-
-        const rows = text.split('\n');
-        sheetDetailsCache.clear();
-        
-        rows.forEach(row => {
-            // Split CSV properly
-            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); // Regex to handle commas inside quotes
-            if (cols.length >= 2) {
-                const rawNo = cols[0].replace(/^"|"$/g, '').trim(); // Remove quotes
-                const cleanNo = normalizeLoanNo(rawNo); 
-                const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
-
-                if (cleanNo && details) {
-                    sheetDetailsCache.set(cleanNo, details);
-                }
-            }
-        });
-
-        console.log(`Loaded ${sheetDetailsCache.size} details.`);
-        if(statusEl) {
-            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
-            statusEl.style.color = "var(--success-color)";
-        }
-        return true;
-
-    } catch (error) {
-        console.error(error);
-        if(statusEl) {
-            statusEl.textContent = "❌ Link Error.";
-            statusEl.style.color = "var(--danger-color)";
-        }
-        // Show an actual alert so you know WHY it failed
-        showConfirm("Sheet Error", `${error.message}\n\nMake sure your Google Sheet is shared as 'Anyone with the link' -> 'Viewer'.`, false);
-        return false;
-    }
-};
-
-// --- 2. DRAWING FUNCTIONS ---
-
-const annotateLoanDetails = (box, text) => {
-    if (!scanCtx || !scanCanvas || !box) return;
-
-    // Get coordinates relative to the number
-    const ymin = Math.max(0, box[0]);
-    const xmax = Math.min(1000, box[3]); // The right edge of the number
-    
-    // Convert to pixels
-    const y = Math.floor((ymin / 1000) * scanCanvas.height);
-    const x = Math.floor((xmax / 1000) * scanCanvas.width);
-    const h = Math.ceil(((box[2] - ymin) / 1000) * scanCanvas.height);
-
-    // Styling
-    const fontSize = Math.max(16, Math.floor(h * 0.65)); // Slightly smaller font
-    scanCtx.font = `bold ${fontSize}px sans-serif`;
-    scanCtx.fillStyle = "#2980b9"; // Professional Blue
-    scanCtx.textBaseline = "middle";
-
-    // Draw text to the right of the number (with padding)
-    // x + 40px ensures we don't write ON TOP of the number
-    scanCtx.fillText(text, x + 40, y + (h / 2));
-};
-
-// --- 3. MAIN SCANNER ---
-
-const fillSearchTableFromScan = async (loanData) => {
-    
-    // STEP A: Try to load the sheet if a link exists
-    const sheetUrl = document.getElementById('publicSheetInput').value.trim();
-    if (sheetUrl) {
-        // Save it for next time
-        localStorage.setItem('publicSheetUrl', sheetUrl);
-        // Force load logic
-        await fetchSheetData(sheetUrl);
-    }
-
-    // STEP B: Standard Search Prep
-    buildLoanSearchCache(); 
-
-    if (!loanData || loanData.length === 0) {
-        showConfirm('Scan Results', 'No numbers found.', false);
-        return;
-    }
-
-    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (!input.value.trim()) input.closest('tr').remove();
-    });
-
-    loanData.forEach(item => {
-        addSearchRow(item.no, item.box);
-    });
-
-    // STEP C: Process Results
-    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
-    let erasedCount = 0;
-    let annotatedCount = 0;
-
-    inputs.forEach((input) => {
-        const rawValue = input.value;
-        const normalizedKey = normalizeLoanNo(rawValue);
-        
-        performLoanSearch(input); 
-
-        const row = input.closest('tr');
-        const statusCell = row.querySelector('.status-cell');
-        
-        // ERASE if Not Available
-        if (statusCell && statusCell.classList.contains('status-not-available')) {
-            if (row.eraseBox) {
-                eraseRegion(row.eraseBox);
-                erasedCount++;
-            }
-        }
-        
-        // ANNOTATE if Available
-        else if (statusCell && statusCell.classList.contains('status-available')) {
-            // Check memory for details
-            if (sheetDetailsCache.has(normalizedKey) && row.eraseBox) {
-                const details = sheetDetailsCache.get(normalizedKey);
-                annotateLoanDetails(row.eraseBox, details);
-                annotatedCount++;
-            }
-        }
-    });
-
-    renumberSearchRows();
-    
-    let msg = `Found ${loanData.length} numbers.`;
-    if (erasedCount > 0) msg += ` Erased ${erasedCount}.`;
-    if (annotatedCount > 0) msg += ` Annotated ${annotatedCount}.`;
-    
-    showConfirm('Scan Complete', msg, false);
-};
-
-// --- 4. STARTUP ---
-document.addEventListener('DOMContentLoaded', () => {
-    const savedUrl = localStorage.getItem('publicSheetUrl');
-    if (savedUrl && document.getElementById('publicSheetInput')) {
-        document.getElementById('publicSheetInput').value = savedUrl;
-    }
 });
