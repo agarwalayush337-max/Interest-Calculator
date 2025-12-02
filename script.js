@@ -33,10 +33,13 @@ let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
-let currentScanCoordinates = []; // Stores the box data from AI
-let scanCanvas = null;           // Reference to the canvas
-let scanCtx = null;              // Canvas context
-let sheetDetailsCache = new Map(); // <--- ADD THIS LINE
+
+// --- NEW GLOBALS FOR SCANNING & SHEETS ---
+let currentScanCoordinates = []; 
+let scanCanvas = null;           
+let scanCtx = null;              
+let sheetDetailsCache = new Map(); // Stores Sheet Data
+
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
 let isUpdatingFromListener = false;
@@ -1101,7 +1104,8 @@ const handleNumberScan = async (event) => {
             fillSearchTableFromScan(result.loanNumbers);
             
             // Show the download button
-            document.getElementById('downloadErasedBtn').style.display = 'inline-flex';
+            const dlBtn = document.getElementById('downloadErasedBtn');
+            if (dlBtn) dlBtn.style.display = 'inline-flex';
 
         } catch (error) {
             closeConfirm();
@@ -1112,190 +1116,93 @@ const handleNumberScan = async (event) => {
     numberImageUploadInput.value = '';
 };
 
-// Updated: Uses row.eraseBox to find what to erase
-// Updated: Main Logic with Debugging
-// Updated: Restored original "Scan Complete" message format
-// Updated: Combines Erasing (Existing) with Annotation (New)
-const fillSearchTableFromScan = async (loanData) => {
-    
-    // 1. Force-Load Sheet if needed
-    const sheetUrl = document.getElementById('publicSheetInput').value.trim();
-    if (sheetUrl && sheetDetailsCache.size === 0) {
-        await fetchSheetData(sheetUrl);
-    }
-
-    // 2. Build Cache & Safety Checks
-    buildLoanSearchCache(); 
-
-    if (!loanData || loanData.length === 0) {
-        showConfirm('Scan Results', 'No numbers found.', false);
-        return;
-    }
-
-    // 3. Clear & Repopulate Table
-    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (!input.value.trim()) input.closest('tr').remove();
-    });
-
-    loanData.forEach(item => {
-        addSearchRow(item.no, item.box);
-    });
-
-    // 4. Process Each Item
-    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
-    let erasedCount = 0;
-    let annotatedCount = 0;
-
-    inputs.forEach((input) => {
-        const rawValue = input.value;
-        const normalizedKey = normalizeLoanNo(rawValue);
-        
-        performLoanSearch(input); 
-
-        const row = input.closest('tr');
-        const statusCell = row.querySelector('.status-cell');
-        
-        // --- LOGIC START ---
-        
-        // A. If "Not Available" -> ERASE (Uses your existing perfect eraser)
-        if (statusCell && statusCell.classList.contains('status-not-available')) {
-            if (row.eraseBox) {
-                eraseRegion(row.eraseBox);
-                erasedCount++;
-            }
-        }
-        
-        // B. If "Available" -> ANNOTATE (New Logic)
-        else if (statusCell && statusCell.classList.contains('status-available')) {
-            // Check if we have details for this number in the Sheet
-            if (sheetDetailsCache.has(normalizedKey)) {
-                const details = sheetDetailsCache.get(normalizedKey);
-                
-                // Only annotate if we have coordinates
-                if (row.eraseBox) {
-                    annotateLoanDetails(row.eraseBox, details);
-                    annotatedCount++;
-                }
-            }
-        }
-        // --- LOGIC END ---
-    });
-
-    renumberSearchRows();
-    
-    // Status Message
-    let msg = `Found ${loanData.length} numbers.`;
-    if (erasedCount > 0) msg += ` Erased ${erasedCount}.`;
-    if (annotatedCount > 0) msg += ` Annotated ${annotatedCount}.`;
-    
-    showConfirm('Scan Complete', msg, false);
-};
-// NEW: Function to draw white box over coordinates
-// NEW: Intelligent Erase with Background Color Matching
-// NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
-// NEW: "Full Width" Paper Texture Cloner
-// Updated: "Full Width" Texture Cloner with Safety Checks
-// FIXED: Robust "Full Width" Eraser (Uses Image Stretching)
-// FIXED: "Smart Edge" Eraser (Avoids black borders)
-// NEW: "Pixel-by-Pixel" Vertical Healing (The Perfectionist Method)
-
-// FIXED: "Safe Stretch" Eraser (Reverted to best logic + Safety Adjustments)
-// FIXED: "Adaptive Stretch" Eraser (Scales perfectly to line size)
+// FIXED: "Smart Edge Detector" (Solves Black Bars & Streaks)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
-    // 1. Get Coordinates
+    // 1. Coordinates
     const ymin = Math.max(0, box[0]);
     const ymax = Math.min(1000, box[2]);
     if (ymax <= ymin) return;
 
-    // 2. Convert to pixels
-    const y = Math.floor((ymin / 1000) * scanCanvas.height);
-    const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
-
-    // --- ADAPTIVE PADDING ---
-    // Instead of a huge fixed number (like 35px), we take a percentage.
-    // We add 12% padding to the top and bottom.
-    // If the line is 50px tall, this adds 6px. It scales automatically.
+    // 2. Dimensions & Adaptive Padding
+    const width = scanCanvas.width;
+    const height = scanCanvas.height;
+    const y = Math.floor((ymin / 1000) * height);
+    const h = Math.ceil(((ymax - ymin) / 1000) * height);
     const padding = Math.ceil(h * 0.12); 
-    
-    // Apply the calculated padding
     const drawY = Math.max(0, y - padding);
     const drawH = h + (padding * 2);
 
     try {
-        // --- SAFE ZONE STRATEGY ---
-        // Sample from 92% width (Safe from black borders, but still empty paper)
-        const safeMargin = Math.floor(scanCanvas.width * 0.92); 
-        const sampleW = 30;
-
-        // Capture clean paper texture
-        const texture = scanCtx.getImageData(safeMargin, drawY, sampleW, drawH);
+        // --- STEP 1: FIND THE PAPER (Avoid the Black Border) ---
+        // We start at the far right edge and walk left until we find bright paper.
         
-        const tempC = document.createElement('canvas');
-        tempC.width = sampleW;
-        tempC.height = drawH;
-        tempC.getContext('2d').putImageData(texture, 0, 0);
+        let safeX = width - 10; // Start at the edge
+        const minX = width * 0.80; // Don't go further left than 80% (into the text)
+        let foundCleanPaper = false;
 
-        // Stretch it across the line
-        scanCtx.drawImage(
-            tempC, 
-            0, 0, sampleW, drawH, 
-            0, drawY, scanCanvas.width, drawH 
-        );
+        // Measure Brightness Helper
+        const getAverageBrightness = (imageData) => {
+            let sum = 0;
+            const data = imageData.data;
+            // Check every 4th pixel to speed it up
+            for (let i = 0; i < data.length; i += 16) { 
+                sum += (data[i] + data[i+1] + data[i+2]) / 3;
+            }
+            return sum / (data.length / 16);
+        };
 
-    } catch (e) {
-        // Fallback
-        scanCtx.fillStyle = '#fff';
-        scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
-    }
-};
-// Remove any old event listeners (safety)
-const downloadBtn = document.getElementById('downloadErasedBtn');
-if (downloadBtn) {
-    // We use .onclick = function ... this overwrites any previous clicks!
-    downloadBtn.onclick = function() {
-        if (!scanCanvas) {
-            showConfirm("Error", "No image to download.", false);
-            return;
+        while (safeX > minX) {
+            // Check the brightness of a vertical strip at this X position
+            const sample = scanCtx.getImageData(safeX, drawY, 5, drawH);
+            const brightness = getAverageBrightness(sample);
+
+            // If brightness > 120, it's likely white/yellow paper (not a black border)
+            if (brightness > 120) {
+                foundCleanPaper = true;
+                break; // Found it! Stop looking.
+            }
+            
+            // If it was dark, move left and try again
+            safeX -= 10;
         }
 
-        scanCanvas.toBlob((blob) => {
-            if (!blob) return;
-
-            const fileName = `Erased_List_${Date.now()}.png`;
-            const file = new File([blob], fileName, { type: 'image/png' });
+        // --- STEP 2: ERASE ---
+        if (foundCleanPaper) {
+            // OPTION A: STRETCH (If we found clean paper)
+            // Capture the clean strip we found
+            const texture = scanCtx.getImageData(safeX, drawY, 5, drawH);
             
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const tempC = document.createElement('canvas');
+            tempC.width = 5;
+            tempC.height = drawH;
+            tempC.getContext('2d').putImageData(texture, 0, 0);
 
-            if (isMobile) {
-                // MOBILE LOGIC: Share Sheet
-                if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                    navigator.share({
-                        files: [file],
-                        title: 'Filtered Loan List'
-                    }).catch(console.error);
-                } else {
-                    // Mobile Fallback
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = fileName;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-            } else {
-                // PC LOGIC: Direct Download ONLY
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = fileName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+            // Stretch it across the line
+            scanCtx.drawImage(tempC, 0, 0, 5, drawH, 0, drawY, width, drawH);
+        } else {
+            // OPTION B: SOLID FILL (Safety Fallback)
+            // If we couldn't find clean paper (text blocked it or border was too thick),
+            // DO NOT stretch dirt. Just fill with a solid safe color.
+            
+            // Try to pick a color from the top-left of the image (usually safe)
+            try {
+                const p = scanCtx.getImageData(20, 20, 1, 1).data;
+                scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            } catch (e) {
+                scanCtx.fillStyle = '#f5f5f5'; // Light Grey
             }
-        }, 'image/png', 1.0);
-    };
-}
+            scanCtx.fillRect(0, drawY, width, drawH);
+        }
+
+    } catch (e) {
+        console.warn("Eraser failed, using white fallback");
+        scanCtx.fillStyle = '#fff';
+        scanCtx.fillRect(0, drawY, width, drawH);
+    }
+};
+
 const filterSearchResults = (filter) => {
     const rows = document.querySelectorAll('#loanSearchTable tbody tr');
     rows.forEach(row => {
@@ -1602,114 +1509,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
-});
-// ======================================================
-// NEW FEATURES: GOOGLE SHEET & ANNOTATION
-// ======================================================
 
-// 1. Convert "View/Edit" Link to "CSV Link"
-const convertToCsvLink = (url) => {
-    try {
-        if (!url) return '';
-        if (url.includes('output=csv') || url.includes('format=csv')) return url;
-        const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-        if (match && match[1]) {
-            return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
-        }
-        return url;
-    } catch (e) { return url; }
-};
-
-// 2. Fetch Data from Sheet
-const fetchSheetData = async (url) => {
-    const statusEl = document.getElementById('sheetStatus');
-    const finalUrl = convertToCsvLink(url);
-    
-    if(statusEl) {
-        statusEl.textContent = "⏳ Loading details...";
-        statusEl.style.color = "#d35400";
-    }
-
-    try {
-        const response = await fetch(finalUrl);
-        if (!response.ok) throw new Error("Connection failed");
-        
-        const text = await response.text();
-        if (text.trim().startsWith("<!DOCTYPE html>")) throw new Error("Sheet is Private");
-
-        const rows = text.split('\n');
-        sheetDetailsCache.clear();
-        
-        rows.forEach(row => {
-            // Regex handles commas inside quotes
-            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
-            if (cols.length >= 2) {
-                const rawNo = cols[0].replace(/^"|"$/g, '').trim();
-                const cleanNo = normalizeLoanNo(rawNo); 
-                const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
-
-                if (cleanNo && details) {
-                    sheetDetailsCache.set(cleanNo, details);
-                }
-            }
-        });
-
-        console.log(`Loaded ${sheetDetailsCache.size} details.`);
-        if(statusEl) {
-            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
-            statusEl.style.color = "var(--success-color)";
-        }
-        return true;
-
-    } catch (error) {
-        console.error(error);
-        if(statusEl) {
-            statusEl.textContent = "❌ Link Error.";
-            statusEl.style.color = "var(--danger-color)";
-        }
-        return false;
-    }
-};
-
-// 3. Draw Details on Image
-const annotateLoanDetails = (box, text) => {
-    if (!scanCtx || !scanCanvas || !box) return;
-
-    // Calculate position relative to the number's box
-    const ymin = Math.max(0, box[0]);
-    const xmax = Math.min(1000, box[3]); 
-    
-    const y = Math.floor((ymin / 1000) * scanCanvas.height);
-    const x = Math.floor((xmax / 1000) * scanCanvas.width);
-    const h = Math.ceil(((box[2] - ymin) / 1000) * scanCanvas.height);
-
-    // Styling (Blue Text)
-    const fontSize = Math.max(16, Math.floor(h * 0.75)); 
-    scanCtx.font = `bold ${fontSize}px sans-serif`;
-    scanCtx.fillStyle = "#2980b9"; 
-    scanCtx.textBaseline = "middle";
-
-    // Draw text 40px to the right of the number
-    scanCtx.fillText(text, x + 40, y + (h / 2));
-};
-
-// 4. Input Handler
-const saveAndLoadSheet = (url) => {
-    if (!url) return;
-    const cleanUrl = url.trim();
-    localStorage.setItem('publicSheetUrl', cleanUrl);
-    fetchSheetData(cleanUrl);
-};
-
-// 5. Restore Link on Startup
-document.addEventListener('DOMContentLoaded', () => {
+    // --- Auto-Load Saved Sheet on Startup ---
     const savedUrl = localStorage.getItem('publicSheetUrl');
-    if (savedUrl) {
-        const input = document.getElementById('publicSheetInput');
-        if (input) {
-            input.value = savedUrl;
-            fetchSheetData(savedUrl);
-        }
+    const inputEl = document.getElementById('publicSheetInput');
+    
+    if (savedUrl && inputEl) {
+        inputEl.value = savedUrl;
+        // Trigger fetch immediately
+        fetchSheetData(savedUrl);
     }
 });
 
@@ -1717,11 +1525,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // PASTE THIS AT THE END OF SCRIPT.JS
 // (Hardcoded Link + Sorted List Generation)
 // ======================================================
-
-// Ensure cache exists
-if (typeof sheetDetailsCache === 'undefined') {
-    var sheetDetailsCache = new Map();
-}
 
 // 1. DATA FETCHER (Reads hardcoded value)
 const fetchSheetData = async (url) => {
@@ -1965,9 +1768,3 @@ const fillSearchTableFromScan = async (loanData) => {
     
     showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
 };
-
-// 4. STARTUP LISTENER
-document.addEventListener('DOMContentLoaded', () => {
-    // Load immediately on startup
-    fetchSheetData();
-});
