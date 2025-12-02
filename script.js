@@ -1,5 +1,10 @@
-// --- At the top of the file, BEFORE any other code ---
-// Register the Service Worker
+// ======================================================
+// INTEREST CALCULATOR PWA - FULL SCRIPT
+// Features: 360-Day Logic, AI OCR, Forensic Eraser, 
+// Sorted List Gen (Mobile/PC Smart Export)
+// ======================================================
+
+// --- 1. SERVICE WORKER & CONFIG ---
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
         .then(registration => {
@@ -10,7 +15,6 @@ if ('serviceWorker' in navigator) {
         });
 }
 
-// --- Firebase Configuration ---
 const firebaseConfig = {
     apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
     authDomain: "interest-calculator-8d997.firebaseapp.com",
@@ -34,7 +38,7 @@ let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
-// --- NEW GLOBALS FOR SCANNING & SHEETS ---
+// --- GLOBALS FOR SCANNING & SHEETS ---
 let currentScanCoordinates = []; 
 let scanCanvas = null;           
 let scanCtx = null;              
@@ -283,8 +287,7 @@ const cleanAndSortTable = () => {
     renumberRows();
 };
 
-// --- Image Scanning ---
-// Updated: fix formatting (B.673 -> B/673) for Calculator Tab
+// --- Image Scanning (Calculator Tab) ---
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
@@ -298,15 +301,9 @@ const fillTableFromScan = (loans) => {
     let emptyRowIndex = 0;
     
     loans.forEach((loan) => {
-        // --- FORMATTING FIX ---
-        // 1. Force Uppercase
+        // Formatting: B.673 -> B/673
         let cleanNo = String(loan.no).toUpperCase();
-
-        // 2. Replace Dot/Space/Dash between Letter and Number with '/'
-        // Matches "B.673", "A. 617", "B-673", "B 673"
         cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]+(\d)/g, '$1/$2');
-
-        // 3. (Safety) If it is just "A617" (no separator), add the slash
         if (/^[A-Z]\d+$/.test(cleanNo)) {
              cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
         }
@@ -414,7 +411,6 @@ const showTab = (tabId) => {
     }
 };
 
-// --- New helper function to reset the calculator state ---
 const resetCalculatorState = () => {
     if (!user) return;
     const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
@@ -497,35 +493,21 @@ const generatePDF = async (action = 'save') => {
     const fileName = `Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`;
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-    // First, check if the browser supports the Web Share API for files
     if (isMobile && navigator.share && navigator.canShare) {
-        // Convert the jsPDF document into a blob, then a File object
         const pdfBlob = doc.output('blob');
         const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-        // Check if the browser can share this specific file
         if (navigator.canShare({ files: [pdfFile] })) {
             try {
-                // Open the native share dialog with only the file
-                await navigator.share({
-                    files: [pdfFile]
-                });
-                // The return statement exits the function so the fallback code doesn't run
+                await navigator.share({ files: [pdfFile] });
                 return; 
-            } catch (error) {
-                console.error('Share API failed:', error);
-                // If sharing fails (e.g., user cancels), we'll proceed to the fallback.
-            }
+            } catch (error) { console.error('Share API failed:', error); }
         }
     }
 
-    // --- FALLBACK LOGIC ---
-    // This code runs if the Share API isn't supported or fails.
     if (action === 'print' && !isMobile) {
         doc.autoPrint();
         doc.output('dataurlnewwindow');
     } else {
-        // Standard download for desktops or older mobile browsers
         doc.save(fileName);
     }
 };
@@ -577,9 +559,6 @@ const saveReport = async (silent = false) => {
         if (navigator.onLine && reportsCollection) {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
-                if (!silent) {
-                    // Success message is part of the confirmation to clear
-                }
                 success = true;
             } catch (error) {
                 console.error("Error updating report:", error);
@@ -604,9 +583,6 @@ const saveReport = async (silent = false) => {
             try {
                 report.isDeleted = false;
                 await reportsCollection.add(report);
-                if (!silent) {
-                    // Success message is part of the confirmation to clear
-                }
                 success = true;
             } catch (error) { console.error("Error saving online:", error); }
         } else {
@@ -623,7 +599,6 @@ const saveReport = async (silent = false) => {
     
     if (success) {
         loadRecentTransactions();
-
         let shouldClear = false;
         if (silent) {
             shouldClear = true;
@@ -633,25 +608,19 @@ const saveReport = async (silent = false) => {
                 "Your report has been saved. Would you like to clear the sheet for a new entry?"
             );
         }
-
         if (shouldClear) {
             resetCalculatorState();
         }
-        
         listenForLiveStateChanges();
     }
     return success;
 };
 
 const exportToPDF = async () => {
-    // Check if the view-mode action bar is currently visible.
     const isViewMode = viewModeActionBar.style.display !== 'none';
-
     if (isViewMode) {
-        // If in view-only mode, just generate the PDF from the visible data.
         generatePDF('save');
     } else {
-        // If in edit mode, save silently first, then generate the PDF.
         const wasSaved = await saveReport(true); 
         if (wasSaved) {
             generatePDF('save');
@@ -667,16 +636,13 @@ const clearSheet = async () => {
     }
 };
 
-// NEW function to add to script.js
 const clearSearchTable = async () => {
     const confirmed = await showConfirm(
         "Clear Search Sheet", 
         "Are you sure you want to clear all search rows?"
     );
     if (confirmed) {
-        // Clear the existing rows
         loanSearchTableBody.innerHTML = '';
-        // Add 5 new empty rows to start with
         for (let i = 0; i < 5; i++) {
             addSearchRow();
         }
@@ -950,33 +916,29 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 
 // --- Loan Search Feature Functions ---
-// NEW: Helper function to normalize loan numbers (e.g., A/052 -> A/52)
-// Updated: Aggressive Normalizer (Fixes Matching Issues)
+// Aggressive Normalizer (Fixes Matching Issues) e.g., A/052 -> A/52
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
-    // This regex finds a non-digit prefix and a digit suffix.
     const match = loanNo.match(/^(\D*)(\d+)$/);
     if (match) {
-        const prefix = match[1]; // e.g., "A/"
-        const numericPart = parseInt(match[2], 10).toString(); // e.g., "052" -> 52 -> "52"
+        const prefix = match[1]; 
+        const numericPart = parseInt(match[2], 10).toString(); 
         return prefix + numericPart;
     }
-    return loanNo; // Return original if it doesn't match the pattern
+    return loanNo; 
 };
 
-// Updated: Rebuilds cache using the new Normalizer
 const buildLoanSearchCache = () => {
     loanSearchCache.clear();
     if (cachedFinalisedReports.length === 0) return;
 
-    console.log("Building Cache..."); // Debug Log
+    console.log("Building Cache..."); 
 
     cachedFinalisedReports.forEach(report => {
         if (report.loans && Array.isArray(report.loans)) {
             report.loans.forEach(loan => {
                 const originalLoanNo = loan.no?.trim();
                 if (originalLoanNo) {
-                    // Use the NEW normalizer
                     const key = normalizeLoanNo(originalLoanNo);
                     
                     if (!loanSearchCache.has(key)) {
@@ -993,14 +955,23 @@ const buildLoanSearchCache = () => {
     console.log(`Cache Built. Total unique loans in DB: ${loanSearchCache.size}`);
 };
 
-// Updated: addSearchRow saves coordinates in memory
-const addSearchRow = (loanNo = '', box = null) => {
+// UPDATED: addSearchRow now stores scan data (Principal/Date) for the report
+const addSearchRow = (loanNo = '', box = null, extraData = null) => {
     const rowCount = loanSearchTableBody.rows.length;
     const row = loanSearchTableBody.insertRow();
     
-    // SAVE COORDINATES DIRECTLY TO THE ROW OBJECT
     if (box) {
         row.eraseBox = box; // Store raw array
+    }
+
+    // Save extra data for the Generated Image (Amount/Date)
+    if (extraData) {
+        row.scanData = {
+            principal: extraData.principal || '-',
+            date: extraData.date || '-'
+        };
+    } else {
+        row.scanData = { principal: '-', date: '-' };
     }
 
     row.innerHTML = `
@@ -1061,7 +1032,7 @@ const performLoanSearch = (inputElement) => {
     }
 };
 
-// Updated: Handle Image Scan to draw on Canvas
+// Handle Image Scan for Loan Search Tab
 const handleNumberScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -1098,15 +1069,10 @@ const handleNumberScan = async (event) => {
             
             const result = await response.json();
             
-            // Store coordinates for erasing later
             currentScanCoordinates = result.loanNumbers || [];
             
             fillSearchTableFromScan(result.loanNumbers);
             
-            // Show the download button
-            const dlBtn = document.getElementById('downloadErasedBtn');
-            if (dlBtn) dlBtn.style.display = 'inline-flex';
-
         } catch (error) {
             closeConfirm();
             await showConfirm('Error', error.message, false);
@@ -1116,7 +1082,7 @@ const handleNumberScan = async (event) => {
     numberImageUploadInput.value = '';
 };
 
-// FIXED: "Smart Edge Detector" (Solves Black Bars & Streaks)
+// "Smart Edge Detector" (Solves Black Bars & Streaks)
 const eraseRegion = (box) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
@@ -1135,18 +1101,15 @@ const eraseRegion = (box) => {
     const drawH = h + (padding * 2);
 
     try {
-        // --- STEP 1: FIND THE PAPER (Avoid the Black Border) ---
+        // STEP 1: FIND THE PAPER (Avoid the Black Border)
         // We start at the far right edge and walk left until we find bright paper.
-        
-        let safeX = width - 10; // Start at the edge
-        const minX = width * 0.80; // Don't go further left than 80% (into the text)
+        let safeX = width - 10; 
+        const minX = width * 0.80; 
         let foundCleanPaper = false;
 
-        // Measure Brightness Helper
         const getAverageBrightness = (imageData) => {
             let sum = 0;
             const data = imageData.data;
-            // Check every 4th pixel to speed it up
             for (let i = 0; i < data.length; i += 16) { 
                 sum += (data[i] + data[i+1] + data[i+2]) / 3;
             }
@@ -1154,44 +1117,31 @@ const eraseRegion = (box) => {
         };
 
         while (safeX > minX) {
-            // Check the brightness of a vertical strip at this X position
             const sample = scanCtx.getImageData(safeX, drawY, 5, drawH);
             const brightness = getAverageBrightness(sample);
-
-            // If brightness > 120, it's likely white/yellow paper (not a black border)
             if (brightness > 120) {
                 foundCleanPaper = true;
-                break; // Found it! Stop looking.
+                break; 
             }
-            
-            // If it was dark, move left and try again
             safeX -= 10;
         }
 
-        // --- STEP 2: ERASE ---
+        // STEP 2: ERASE
         if (foundCleanPaper) {
-            // OPTION A: STRETCH (If we found clean paper)
-            // Capture the clean strip we found
+            // Capture and Stretch
             const texture = scanCtx.getImageData(safeX, drawY, 5, drawH);
-            
             const tempC = document.createElement('canvas');
             tempC.width = 5;
             tempC.height = drawH;
             tempC.getContext('2d').putImageData(texture, 0, 0);
-
-            // Stretch it across the line
             scanCtx.drawImage(tempC, 0, 0, 5, drawH, 0, drawY, width, drawH);
         } else {
-            // OPTION B: SOLID FILL (Safety Fallback)
-            // If we couldn't find clean paper (text blocked it or border was too thick),
-            // DO NOT stretch dirt. Just fill with a solid safe color.
-            
-            // Try to pick a color from the top-left of the image (usually safe)
+            // Fallback: Solid Fill
             try {
                 const p = scanCtx.getImageData(20, 20, 1, 1).data;
                 scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
             } catch (e) {
-                scanCtx.fillStyle = '#f5f5f5'; // Light Grey
+                scanCtx.fillStyle = '#f5f5f5'; 
             }
             scanCtx.fillRect(0, drawY, width, drawH);
         }
@@ -1486,7 +1436,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     addSearchRowBtn.addEventListener('click', () => addSearchRow());
     scanNumbersBtn.addEventListener('click', () => numberImageUploadInput.click());
     numberImageUploadInput.addEventListener('change', handleNumberScan);
-   clearSearchSheetBtn.addEventListener('click', clearSearchTable);
+    clearSearchSheetBtn.addEventListener('click', clearSearchTable);
     
     loanSearchTableBody.addEventListener('input', (e) => {
         if (e.target.matches('.search-no')) {
@@ -1516,17 +1466,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     if (savedUrl && inputEl) {
         inputEl.value = savedUrl;
-        // Trigger fetch immediately
         fetchSheetData(savedUrl);
     }
 });
 
 // ======================================================
-// PASTE THIS AT THE END OF SCRIPT.JS
-// (Hardcoded Link + Sorted List Generation)
+// EXTERNAL INTEGRATION LOGIC (Sheet & Report Gen)
 // ======================================================
 
-// 1. DATA FETCHER (Reads hardcoded value)
+// 1. DATA FETCHER
 const fetchSheetData = async (url) => {
     // If no URL passed, grab from hidden input
     if (!url) {
@@ -1578,7 +1526,7 @@ const fetchSheetData = async (url) => {
     }
 };
 
-// 2. GENERATE SORTED IMAGE
+// 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
 const generateSortedImage = (loanList) => {
     if (!loanList || loanList.length === 0) {
         showConfirm("Error", "No available loans to generate list.", false);
@@ -1587,51 +1535,70 @@ const generateSortedImage = (loanList) => {
 
     // A. Categorize and Sort
     const processedList = loanList.map(item => {
-        // Get detail or default to "Unknown"
+        // Get detail or default to "?"
         const detail = sheetDetailsCache.get(item.no) || "?";
-        return { no: item.no, detail: detail };
+        return { 
+            no: item.no, 
+            principal: item.principal || '-', 
+            date: item.date || '-', 
+            detail: detail 
+        };
     });
 
-    // Sort Logic: 
-    // 1. By Detail (G comes before S)
-    // 2. By Number (A/1 comes before A/10)
+    // Sort Logic: 1. Detail (G/S), 2. Loan Number
     processedList.sort((a, b) => {
         if (a.detail < b.detail) return -1;
         if (a.detail > b.detail) return 1;
         return a.no.localeCompare(b.no, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    // B. Create Canvas
+    // B. Create Canvas (Wider for 4 columns)
     const reportCanvas = document.createElement('canvas');
     const ctx = reportCanvas.getContext('2d');
     
     // Layout Config
     const rowHeight = 50;
     const headerHeight = 80;
+    const subHeaderHeight = 40; 
     const padding = 20;
     
-    // Set Height based on list size
-    reportCanvas.width = 700;
-    reportCanvas.height = headerHeight + (processedList.length * rowHeight) + padding;
+    reportCanvas.width = 900; 
+    reportCanvas.height = headerHeight + subHeaderHeight + (processedList.length * rowHeight) + padding;
 
     // C. Draw White Background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, reportCanvas.width, reportCanvas.height);
 
-    // D. Draw Header
+    // D. Draw Main Header
     ctx.fillStyle = "#3D52D5"; 
     ctx.fillRect(0, 0, reportCanvas.width, headerHeight);
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 32px sans-serif";
     ctx.textBaseline = "middle";
-    ctx.fillText("Sorted Loan List", 30, headerHeight/2);
+    ctx.fillText("Loan Search Report", 30, headerHeight/2);
     
     const dateStr = new Date().toLocaleDateString('en-GB');
     ctx.font = "20px sans-serif";
     ctx.fillText(dateStr, reportCanvas.width - 150, headerHeight/2);
 
-    // E. Draw Rows
-    let y = headerHeight + 40;
+    // E. Draw Column Headers
+    let y = headerHeight;
+    ctx.fillStyle = "#e9ecef"; 
+    ctx.fillRect(0, y, reportCanvas.width, subHeaderHeight);
+    
+    ctx.fillStyle = "#495057";
+    ctx.font = "bold 18px sans-serif";
+    
+    // Column Positions
+    const colX = { no: 50, amt: 300, date: 550, det: 780 };
+    
+    ctx.fillText("LOAN NO", colX.no, y + 25);
+    ctx.fillText("AMOUNT", colX.amt, y + 25);
+    ctx.fillText("DATE", colX.date, y + 25);
+    ctx.fillText("DETAIL", colX.det, y + 25);
+
+    // F. Draw Rows
+    y += subHeaderHeight + 35;
     let currentCategory = null;
 
     processedList.forEach(item => {
@@ -1639,61 +1606,73 @@ const generateSortedImage = (loanList) => {
         if (item.detail !== currentCategory) {
             currentCategory = item.detail;
             
-            // Header Bar
-            ctx.fillStyle = "#f8f9fa";
-            ctx.fillRect(0, y - 35, reportCanvas.width, 40);
+            ctx.fillStyle = "#f1f3f5";
+            ctx.fillRect(0, y - 30, reportCanvas.width, 35);
             
-            ctx.fillStyle = "#666";
-            ctx.font = "bold 18px sans-serif";
-            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 15);
+            ctx.fillStyle = "#333";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 8);
             
-            // Horizontal Line
-            ctx.strokeStyle = "#ccc";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, y + 5);
-            ctx.lineTo(reportCanvas.width, y + 5);
-            ctx.stroke();
-            
-            y += 20; // Add spacing after header
+            y += 20; 
         }
 
         // Row Content
-        ctx.font = "28px sans-serif";
         ctx.fillStyle = "#000000";
-        ctx.fillText(item.no, 50, y);
+        ctx.font = "24px sans-serif";
+        
+        ctx.fillText(item.no, colX.no, y);
+        ctx.fillText(item.principal, colX.amt, y);
+        ctx.fillText(item.date, colX.date, y);
 
-        // Detail Badge (Right Side)
+        // Detail Badge
         let badgeColor = "#333";
-        if (item.detail === "G") badgeColor = "#27ae60"; // Green
-        else if (item.detail === "S") badgeColor = "#2980b9"; // Blue
-        else if (item.detail === "?") badgeColor = "#e74c3c"; // Red
+        if (item.detail === "G") badgeColor = "#27ae60"; 
+        else if (item.detail === "S") badgeColor = "#2980b9"; 
+        else if (item.detail === "?") badgeColor = "#e74c3c"; 
 
         ctx.fillStyle = badgeColor;
-        ctx.font = "bold 28px sans-serif";
-        ctx.fillText(item.detail, 550, y);
+        ctx.font = "bold 24px sans-serif";
+        ctx.fillText(item.detail, colX.det, y);
 
-        // Light divider
+        // Divider
         ctx.strokeStyle = "#eee";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(40, y + 15);
-        ctx.lineTo(660, y + 15);
+        ctx.lineTo(860, y + 15);
         ctx.stroke();
 
         y += rowHeight;
     });
 
-    // F. Download Logic
+    // G. Download Logic (Strict PC vs Mobile)
     reportCanvas.toBlob((blob) => {
-        const file = new File([blob], `Sorted_List_${Date.now()}.png`, { type: 'image/png' });
+        const fileName = `Loan_List_${Date.now()}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
         
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file], title: 'Sorted List' }).catch(console.error);
-        } else {
+        // Mobile Detect
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        // Mobile: Share
+        if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({
+                files: [file],
+                title: 'Sorted Loan List',
+                text: 'Here is the scanned loan list.'
+            }).catch((error) => {
+                console.error('Share failed', error);
+                // Fallback
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fileName;
+                link.click();
+            });
+        } 
+        // PC: Download
+        else {
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = file.name;
+            link.download = fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -1701,7 +1680,7 @@ const generateSortedImage = (loanList) => {
     });
 };
 
-// 3. MAIN SCANNER (Modified for Sorted Download)
+// 3. MAIN SCANNER (UPDATED: Captures Full Data)
 const fillSearchTableFromScan = async (loanData) => {
     
     // A. Ensure Data is Loaded
@@ -1709,7 +1688,6 @@ const fillSearchTableFromScan = async (loanData) => {
         await fetchSheetData();
     }
 
-    // B. Standard Prep
     buildLoanSearchCache(); 
 
     if (!loanData || loanData.length === 0) {
@@ -1717,18 +1695,20 @@ const fillSearchTableFromScan = async (loanData) => {
         return;
     }
 
+    // Clear empty
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
+    // Add rows with EXTRA DATA (Pass whole item)
     loanData.forEach(item => {
-        addSearchRow(item.no, item.box);
+        addSearchRow(item.no, item.box, item);
     });
 
-    // C. Process & Collect
+    // Process & Collect
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
-    let availableLoans = []; // Capture list for sorting
+    let availableLoans = []; 
 
     inputs.forEach((input) => {
         const rawValue = input.value;
@@ -1745,21 +1725,24 @@ const fillSearchTableFromScan = async (loanData) => {
                 erasedCount++;
             }
         }
-        // Collect Available
+        // Collect Available (Fetch stored ScanData)
         else if (statusCell && statusCell.classList.contains('status-available')) {
-            availableLoans.push({ no: normalizedKey });
+            const storedData = row.scanData || { principal: '-', date: '-' };
+            availableLoans.push({ 
+                no: normalizedKey,
+                principal: storedData.principal,
+                date: storedData.date
+            });
         }
     });
 
     renumberSearchRows();
     
-    // D. Setup Download Button
     const dlBtn = document.getElementById('downloadErasedBtn');
     if(dlBtn) {
         if (availableLoans.length > 0) {
             dlBtn.style.display = 'inline-flex';
             dlBtn.textContent = "Download Sorted List";
-            // Override click to generate sorted image
             dlBtn.onclick = () => generateSortedImage(availableLoans);
         } else {
             dlBtn.style.display = 'none';
