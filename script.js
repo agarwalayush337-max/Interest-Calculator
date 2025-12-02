@@ -36,6 +36,7 @@ const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 let currentScanCoordinates = []; // Stores the box data from AI
 let scanCanvas = null;           // Reference to the canvas
 let scanCtx = null;              // Canvas context
+let sheetDetailsCache = new Map(); // <--- ADD THIS LINE
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
 let isUpdatingFromListener = false;
@@ -1114,8 +1115,16 @@ const handleNumberScan = async (event) => {
 // Updated: Uses row.eraseBox to find what to erase
 // Updated: Main Logic with Debugging
 // Updated: Restored original "Scan Complete" message format
-const fillSearchTableFromScan = (loanData) => {
-    // 1. Force a Cache Rebuild to ensure rules match
+// Updated: Combines Erasing (Existing) with Annotation (New)
+const fillSearchTableFromScan = async (loanData) => {
+    
+    // 1. Force-Load Sheet if needed
+    const sheetUrl = document.getElementById('publicSheetInput').value.trim();
+    if (sheetUrl && sheetDetailsCache.size === 0) {
+        await fetchSheetData(sheetUrl);
+    }
+
+    // 2. Build Cache & Safety Checks
     buildLoanSearchCache(); 
 
     if (!loanData || loanData.length === 0) {
@@ -1123,44 +1132,63 @@ const fillSearchTableFromScan = (loanData) => {
         return;
     }
 
-    // 2. Clear empty rows
+    // 3. Clear & Repopulate Table
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
-    // 3. Add new rows
     loanData.forEach(item => {
         addSearchRow(item.no, item.box);
     });
 
-    // 4. Search & Erase Logic
+    // 4. Process Each Item
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
+    let annotatedCount = 0;
 
     inputs.forEach((input) => {
-        // Run Search
+        const rawValue = input.value;
+        const normalizedKey = normalizeLoanNo(rawValue);
+        
         performLoanSearch(input); 
 
         const row = input.closest('tr');
         const statusCell = row.querySelector('.status-cell');
         
-        // If "Not Available" (Orange) -> Erase
+        // --- LOGIC START ---
+        
+        // A. If "Not Available" -> ERASE (Uses your existing perfect eraser)
         if (statusCell && statusCell.classList.contains('status-not-available')) {
             if (row.eraseBox) {
                 eraseRegion(row.eraseBox);
                 erasedCount++;
             }
         }
+        
+        // B. If "Available" -> ANNOTATE (New Logic)
+        else if (statusCell && statusCell.classList.contains('status-available')) {
+            // Check if we have details for this number in the Sheet
+            if (sheetDetailsCache.has(normalizedKey)) {
+                const details = sheetDetailsCache.get(normalizedKey);
+                
+                // Only annotate if we have coordinates
+                if (row.eraseBox) {
+                    annotateLoanDetails(row.eraseBox, details);
+                    annotatedCount++;
+                }
+            }
+        }
+        // --- LOGIC END ---
     });
 
     renumberSearchRows();
     
-    // --- RESTORED EARLIER MESSAGE FORMAT ---
-    if (erasedCount > 0) {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} finished loans from the image.`, false);
-    } else {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
-    }
+    // Status Message
+    let msg = `Found ${loanData.length} numbers.`;
+    if (erasedCount > 0) msg += ` Erased ${erasedCount}.`;
+    if (annotatedCount > 0) msg += ` Annotated ${annotatedCount}.`;
+    
+    showConfirm('Scan Complete', msg, false);
 };
 // NEW: Function to draw white box over coordinates
 // NEW: Intelligent Erase with Background Color Matching
@@ -1574,4 +1602,114 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
+});
+
+// ======================================================
+// NEW FEATURES: GOOGLE SHEET & ANNOTATION
+// ======================================================
+
+// 1. Convert "View/Edit" Link to "CSV Link"
+const convertToCsvLink = (url) => {
+    try {
+        if (!url) return '';
+        if (url.includes('output=csv') || url.includes('format=csv')) return url;
+        const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        if (match && match[1]) {
+            return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+        }
+        return url;
+    } catch (e) { return url; }
+};
+
+// 2. Fetch Data from Sheet
+const fetchSheetData = async (url) => {
+    const statusEl = document.getElementById('sheetStatus');
+    const finalUrl = convertToCsvLink(url);
+    
+    if(statusEl) {
+        statusEl.textContent = "⏳ Loading details...";
+        statusEl.style.color = "#d35400";
+    }
+
+    try {
+        const response = await fetch(finalUrl);
+        if (!response.ok) throw new Error("Connection failed");
+        
+        const text = await response.text();
+        if (text.trim().startsWith("<!DOCTYPE html>")) throw new Error("Sheet is Private");
+
+        const rows = text.split('\n');
+        sheetDetailsCache.clear();
+        
+        rows.forEach(row => {
+            // Regex handles commas inside quotes
+            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+            if (cols.length >= 2) {
+                const rawNo = cols[0].replace(/^"|"$/g, '').trim();
+                const cleanNo = normalizeLoanNo(rawNo); 
+                const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
+
+                if (cleanNo && details) {
+                    sheetDetailsCache.set(cleanNo, details);
+                }
+            }
+        });
+
+        console.log(`Loaded ${sheetDetailsCache.size} details.`);
+        if(statusEl) {
+            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
+            statusEl.style.color = "var(--success-color)";
+        }
+        return true;
+
+    } catch (error) {
+        console.error(error);
+        if(statusEl) {
+            statusEl.textContent = "❌ Link Error.";
+            statusEl.style.color = "var(--danger-color)";
+        }
+        return false;
+    }
+};
+
+// 3. Draw Details on Image
+const annotateLoanDetails = (box, text) => {
+    if (!scanCtx || !scanCanvas || !box) return;
+
+    // Calculate position relative to the number's box
+    const ymin = Math.max(0, box[0]);
+    const xmax = Math.min(1000, box[3]); 
+    
+    const y = Math.floor((ymin / 1000) * scanCanvas.height);
+    const x = Math.floor((xmax / 1000) * scanCanvas.width);
+    const h = Math.ceil(((box[2] - ymin) / 1000) * scanCanvas.height);
+
+    // Styling (Blue Text)
+    const fontSize = Math.max(16, Math.floor(h * 0.75)); 
+    scanCtx.font = `bold ${fontSize}px sans-serif`;
+    scanCtx.fillStyle = "#2980b9"; 
+    scanCtx.textBaseline = "middle";
+
+    // Draw text 40px to the right of the number
+    scanCtx.fillText(text, x + 40, y + (h / 2));
+};
+
+// 4. Input Handler
+const saveAndLoadSheet = (url) => {
+    if (!url) return;
+    const cleanUrl = url.trim();
+    localStorage.setItem('publicSheetUrl', cleanUrl);
+    fetchSheetData(cleanUrl);
+};
+
+// 5. Restore Link on Startup
+document.addEventListener('DOMContentLoaded', () => {
+    const savedUrl = localStorage.getItem('publicSheetUrl');
+    if (savedUrl) {
+        const input = document.getElementById('publicSheetInput');
+        if (input) {
+            input.value = savedUrl;
+            fetchSheetData(savedUrl);
+        }
+    }
 });
