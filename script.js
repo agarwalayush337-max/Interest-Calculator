@@ -1529,16 +1529,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 });
+
+
 // ======================================================
-// PASTE THIS AT THE VERY END OF SCRIPT.JS
+// PASTE THIS AT THE END OF SCRIPT.JS
+// (Replaces all previous Sheet/Scanner logic)
 // ======================================================
 
-// --- 1. SMART SHEET HELPERS ---
+// --- 1. SHEET HELPERS ---
 
-// Auto-converts "View/Edit" links to "CSV Export" links
 const convertToCsvLink = (url) => {
     try {
+        if (!url) return '';
+        // If it's already a CSV export link, keep it
         if (url.includes('output=csv') || url.includes('format=csv')) return url;
+
+        // If it's a standard "Edit" link, convert to Export link
         const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
         if (match && match[1]) {
             return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
@@ -1547,40 +1553,36 @@ const convertToCsvLink = (url) => {
     } catch (e) { return url; }
 };
 
-// Triggered when you paste a link in the input box
-const saveAndLoadSheet = (url) => {
-    if (!url) return;
-    const cleanUrl = url.trim();
-    localStorage.setItem('publicSheetUrl', cleanUrl);
-    fetchSheetData(cleanUrl);
-};
-
-// Downloads and parses the Google Sheet
 const fetchSheetData = async (url) => {
     const statusEl = document.getElementById('sheetStatus');
     const finalUrl = convertToCsvLink(url);
     
     if(statusEl) {
-        statusEl.textContent = "⏳ Downloading details...";
-        statusEl.style.color = "#d35400"; // Orange
+        statusEl.textContent = "⏳ Connecting to Sheet...";
+        statusEl.style.color = "#d35400";
     }
 
     try {
         const response = await fetch(finalUrl);
-        if (!response.ok) throw new Error("Connection failed");
+        // If Google says 404 or 403, it's a bad link
+        if (!response.ok) throw new Error("Connection failed. Check permissions.");
         
         const text = await response.text();
-        if (text.trim().startsWith("<!DOCTYPE html>")) throw new Error("Sheet is not public");
+        
+        // If we get HTML instead of CSV, the sheet is Private
+        if (text.trim().startsWith("<!DOCTYPE html>")) {
+            throw new Error("Sheet is PRIVATE. Share it as 'Anyone with the link'.");
+        }
 
         const rows = text.split('\n');
         sheetDetailsCache.clear();
         
         rows.forEach(row => {
-            const cols = row.split(',');
+            // Split CSV properly
+            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); // Regex to handle commas inside quotes
             if (cols.length >= 2) {
-                const rawNo = cols[0];
+                const rawNo = cols[0].replace(/^"|"$/g, '').trim(); // Remove quotes
                 const cleanNo = normalizeLoanNo(rawNo); 
-                // Remove quotes and whitespace from details
                 const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
 
                 if (cleanNo && details) {
@@ -1589,36 +1591,64 @@ const fetchSheetData = async (url) => {
             }
         });
 
-        console.log(`Live Loaded: ${sheetDetailsCache.size} records.`);
+        console.log(`Loaded ${sheetDetailsCache.size} details.`);
         if(statusEl) {
-            statusEl.textContent = `✅ Ready: ${sheetDetailsCache.size} details loaded.`;
+            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
             statusEl.style.color = "var(--success-color)";
         }
-        return true; 
+        return true;
 
     } catch (error) {
-        console.error("Sheet Load Error:", error);
+        console.error(error);
         if(statusEl) {
-            statusEl.textContent = "❌ Error: Link invalid or Sheet not public.";
+            statusEl.textContent = "❌ Link Error.";
             statusEl.style.color = "var(--danger-color)";
         }
-        return false; 
+        // Show an actual alert so you know WHY it failed
+        showConfirm("Sheet Error", `${error.message}\n\nMake sure your Google Sheet is shared as 'Anyone with the link' -> 'Viewer'.`, false);
+        return false;
     }
 };
 
-// --- 2. UPDATED SCANNER FUNCTION ---
+// --- 2. DRAWING FUNCTIONS ---
+
+const annotateLoanDetails = (box, text) => {
+    if (!scanCtx || !scanCanvas || !box) return;
+
+    // Get coordinates relative to the number
+    const ymin = Math.max(0, box[0]);
+    const xmax = Math.min(1000, box[3]); // The right edge of the number
+    
+    // Convert to pixels
+    const y = Math.floor((ymin / 1000) * scanCanvas.height);
+    const x = Math.floor((xmax / 1000) * scanCanvas.width);
+    const h = Math.ceil(((box[2] - ymin) / 1000) * scanCanvas.height);
+
+    // Styling
+    const fontSize = Math.max(16, Math.floor(h * 0.65)); // Slightly smaller font
+    scanCtx.font = `bold ${fontSize}px sans-serif`;
+    scanCtx.fillStyle = "#2980b9"; // Professional Blue
+    scanCtx.textBaseline = "middle";
+
+    // Draw text to the right of the number (with padding)
+    // x + 40px ensures we don't write ON TOP of the number
+    scanCtx.fillText(text, x + 40, y + (h / 2));
+};
+
+// --- 3. MAIN SCANNER ---
 
 const fillSearchTableFromScan = async (loanData) => {
     
-    // STEP A: Force-Load the Sheet if needed
+    // STEP A: Try to load the sheet if a link exists
     const sheetUrl = document.getElementById('publicSheetInput').value.trim();
-    
-    // If we have a URL but no data in memory, download it NOW.
-    if (sheetUrl && sheetDetailsCache.size === 0) {
+    if (sheetUrl) {
+        // Save it for next time
+        localStorage.setItem('publicSheetUrl', sheetUrl);
+        // Force load logic
         await fetchSheetData(sheetUrl);
     }
 
-    // STEP B: Prepare the List
+    // STEP B: Standard Search Prep
     buildLoanSearchCache(); 
 
     if (!loanData || loanData.length === 0) {
@@ -1634,7 +1664,7 @@ const fillSearchTableFromScan = async (loanData) => {
         addSearchRow(item.no, item.box);
     });
 
-    // STEP C: Process Each Item
+    // STEP C: Process Results
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
     let annotatedCount = 0;
@@ -1648,7 +1678,7 @@ const fillSearchTableFromScan = async (loanData) => {
         const row = input.closest('tr');
         const statusCell = row.querySelector('.status-cell');
         
-        // 1. ERASE if "Not Available" (Orange)
+        // ERASE if Not Available
         if (statusCell && statusCell.classList.contains('status-not-available')) {
             if (row.eraseBox) {
                 eraseRegion(row.eraseBox);
@@ -1656,16 +1686,13 @@ const fillSearchTableFromScan = async (loanData) => {
             }
         }
         
-        // 2. ANNOTATE if "Available" (Green)
+        // ANNOTATE if Available
         else if (statusCell && statusCell.classList.contains('status-available')) {
-            // Check if our Sheet has details for this number
-            if (sheetDetailsCache.has(normalizedKey)) {
+            // Check memory for details
+            if (sheetDetailsCache.has(normalizedKey) && row.eraseBox) {
                 const details = sheetDetailsCache.get(normalizedKey);
-                // Only write text if we know where the number is (eraseBox)
-                if (row.eraseBox) {
-                    annotateLoanDetails(row.eraseBox, details);
-                    annotatedCount++;
-                }
+                annotateLoanDetails(row.eraseBox, details);
+                annotatedCount++;
             }
         }
     });
@@ -1679,14 +1706,10 @@ const fillSearchTableFromScan = async (loanData) => {
     showConfirm('Scan Complete', msg, false);
 };
 
-// --- 3. RESTORE SAVED LINK ON STARTUP ---
+// --- 4. STARTUP ---
 document.addEventListener('DOMContentLoaded', () => {
     const savedUrl = localStorage.getItem('publicSheetUrl');
-    if (savedUrl) {
-        const inputEl = document.getElementById('publicSheetInput');
-        if (inputEl) {
-            inputEl.value = savedUrl;
-            fetchSheetData(savedUrl);
-        }
+    if (savedUrl && document.getElementById('publicSheetInput')) {
+        document.getElementById('publicSheetInput').value = savedUrl;
     }
 });
