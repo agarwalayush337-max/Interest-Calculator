@@ -1712,3 +1712,262 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+// ======================================================
+// PASTE THIS AT THE END OF SCRIPT.JS
+// (Hardcoded Link + Sorted List Generation)
+// ======================================================
+
+// Ensure cache exists
+if (typeof sheetDetailsCache === 'undefined') {
+    var sheetDetailsCache = new Map();
+}
+
+// 1. DATA FETCHER (Reads hardcoded value)
+const fetchSheetData = async (url) => {
+    // If no URL passed, grab from hidden input
+    if (!url) {
+        const input = document.getElementById('publicSheetInput');
+        if (input && input.value) url = input.value;
+    }
+    if (!url) return false;
+
+    // Add timestamp to force fresh data
+    const uniqueUrl = url + `&t=${Date.now()}`;
+    const statusEl = document.getElementById('sheetStatus');
+
+    if(statusEl) {
+        statusEl.textContent = "⏳ Updating details...";
+        statusEl.style.color = "#d35400";
+    }
+
+    try {
+        const response = await fetch(uniqueUrl);
+        if (!response.ok) throw new Error("Connection Failed");
+        const text = await response.text();
+        
+        const rows = text.split('\n');
+        sheetDetailsCache.clear();
+        
+        rows.forEach(row => {
+            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+            if (cols.length >= 2) {
+                const rawNo = cols[0].replace(/^"|"$/g, '').trim(); 
+                const cleanNo = normalizeLoanNo(rawNo); 
+                const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
+                if (cleanNo && details) sheetDetailsCache.set(cleanNo, details);
+            }
+        });
+
+        console.log(`Loaded ${sheetDetailsCache.size} details.`);
+        if(statusEl) {
+            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
+            statusEl.style.color = "var(--success-color)";
+        }
+        return true;
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        if(statusEl) {
+            statusEl.textContent = "❌ Sheet Error.";
+            statusEl.style.color = "var(--danger-color)";
+        }
+        return false;
+    }
+};
+
+// 2. GENERATE SORTED IMAGE
+const generateSortedImage = (loanList) => {
+    if (!loanList || loanList.length === 0) {
+        showConfirm("Error", "No available loans to generate list.", false);
+        return;
+    }
+
+    // A. Categorize and Sort
+    const processedList = loanList.map(item => {
+        // Get detail or default to "Unknown"
+        const detail = sheetDetailsCache.get(item.no) || "?";
+        return { no: item.no, detail: detail };
+    });
+
+    // Sort Logic: 
+    // 1. By Detail (G comes before S)
+    // 2. By Number (A/1 comes before A/10)
+    processedList.sort((a, b) => {
+        if (a.detail < b.detail) return -1;
+        if (a.detail > b.detail) return 1;
+        return a.no.localeCompare(b.no, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    // B. Create Canvas
+    const reportCanvas = document.createElement('canvas');
+    const ctx = reportCanvas.getContext('2d');
+    
+    // Layout Config
+    const rowHeight = 50;
+    const headerHeight = 80;
+    const padding = 20;
+    
+    // Set Height based on list size
+    reportCanvas.width = 700;
+    reportCanvas.height = headerHeight + (processedList.length * rowHeight) + padding;
+
+    // C. Draw White Background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, reportCanvas.width, reportCanvas.height);
+
+    // D. Draw Header
+    ctx.fillStyle = "#3D52D5"; 
+    ctx.fillRect(0, 0, reportCanvas.width, headerHeight);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 32px sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Sorted Loan List", 30, headerHeight/2);
+    
+    const dateStr = new Date().toLocaleDateString('en-GB');
+    ctx.font = "20px sans-serif";
+    ctx.fillText(dateStr, reportCanvas.width - 150, headerHeight/2);
+
+    // E. Draw Rows
+    let y = headerHeight + 40;
+    let currentCategory = null;
+
+    processedList.forEach(item => {
+        // Draw Category Header if changed
+        if (item.detail !== currentCategory) {
+            currentCategory = item.detail;
+            
+            // Header Bar
+            ctx.fillStyle = "#f8f9fa";
+            ctx.fillRect(0, y - 35, reportCanvas.width, 40);
+            
+            ctx.fillStyle = "#666";
+            ctx.font = "bold 18px sans-serif";
+            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 15);
+            
+            // Horizontal Line
+            ctx.strokeStyle = "#ccc";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, y + 5);
+            ctx.lineTo(reportCanvas.width, y + 5);
+            ctx.stroke();
+            
+            y += 20; // Add spacing after header
+        }
+
+        // Row Content
+        ctx.font = "28px sans-serif";
+        ctx.fillStyle = "#000000";
+        ctx.fillText(item.no, 50, y);
+
+        // Detail Badge (Right Side)
+        let badgeColor = "#333";
+        if (item.detail === "G") badgeColor = "#27ae60"; // Green
+        else if (item.detail === "S") badgeColor = "#2980b9"; // Blue
+        else if (item.detail === "?") badgeColor = "#e74c3c"; // Red
+
+        ctx.fillStyle = badgeColor;
+        ctx.font = "bold 28px sans-serif";
+        ctx.fillText(item.detail, 550, y);
+
+        // Light divider
+        ctx.strokeStyle = "#eee";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(40, y + 15);
+        ctx.lineTo(660, y + 15);
+        ctx.stroke();
+
+        y += rowHeight;
+    });
+
+    // F. Download Logic
+    reportCanvas.toBlob((blob) => {
+        const file = new File([blob], `Sorted_List_${Date.now()}.png`, { type: 'image/png' });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file], title: 'Sorted List' }).catch(console.error);
+        } else {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = file.name;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    });
+};
+
+// 3. MAIN SCANNER (Modified for Sorted Download)
+const fillSearchTableFromScan = async (loanData) => {
+    
+    // A. Ensure Data is Loaded
+    if (sheetDetailsCache.size === 0) {
+        await fetchSheetData();
+    }
+
+    // B. Standard Prep
+    buildLoanSearchCache(); 
+
+    if (!loanData || loanData.length === 0) {
+        showConfirm('Scan Results', 'No numbers found.', false);
+        return;
+    }
+
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (!input.value.trim()) input.closest('tr').remove();
+    });
+
+    loanData.forEach(item => {
+        addSearchRow(item.no, item.box);
+    });
+
+    // C. Process & Collect
+    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
+    let erasedCount = 0;
+    let availableLoans = []; // Capture list for sorting
+
+    inputs.forEach((input) => {
+        const rawValue = input.value;
+        const normalizedKey = normalizeLoanNo(rawValue);
+        performLoanSearch(input); 
+
+        const row = input.closest('tr');
+        const statusCell = row.querySelector('.status-cell');
+        
+        // Erase Not Available
+        if (statusCell && statusCell.classList.contains('status-not-available')) {
+            if (row.eraseBox) {
+                eraseRegion(row.eraseBox);
+                erasedCount++;
+            }
+        }
+        // Collect Available
+        else if (statusCell && statusCell.classList.contains('status-available')) {
+            availableLoans.push({ no: normalizedKey });
+        }
+    });
+
+    renumberSearchRows();
+    
+    // D. Setup Download Button
+    const dlBtn = document.getElementById('downloadErasedBtn');
+    if(dlBtn) {
+        if (availableLoans.length > 0) {
+            dlBtn.style.display = 'inline-flex';
+            dlBtn.textContent = "Download Sorted List";
+            // Override click to generate sorted image
+            dlBtn.onclick = () => generateSortedImage(availableLoans);
+        } else {
+            dlBtn.style.display = 'none';
+        }
+    }
+    
+    showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
+};
+
+// 4. STARTUP LISTENER
+document.addEventListener('DOMContentLoaded', () => {
+    // Load immediately on startup
+    fetchSheetData();
+});
