@@ -1575,38 +1575,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 });
-// --- "LIVE LOAD" GOOGLE SHEET LOGIC ---
+// --- IMPROVED: SMART SHEET LOADER ---
 
-// 1. Save URL and Fetch Immediately
-const saveAndLoadSheet = (url) => {
-    if (!url) return;
-    localStorage.setItem('publicSheetUrl', url.trim());
-    fetchSheetData(url.trim());
+// 1. Helper: Convert "Edit URL" to "CSV URL" automatically
+const convertToCsvLink = (url) => {
+    try {
+        // If it's already a CSV link, return it
+        if (url.includes('output=csv') || url.includes('format=csv')) return url;
+
+        // If it's a standard Google Sheet URL (docs.google.com/spreadsheets/d/ID/...)
+        const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        if (match && match[1]) {
+            // Construct the export URL using the ID
+            return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+        }
+        return url; // Return original if pattern not found
+    } catch (e) {
+        return url;
+    }
 };
 
-// 2. The Background Fetcher
+// 2. The Fetcher (Now returns a Promise so we can wait for it)
 const fetchSheetData = async (url) => {
     const statusEl = document.getElementById('sheetStatus');
-    if(statusEl) statusEl.textContent = "Updating details...";
+    const finalUrl = convertToCsvLink(url); // Auto-fix the link
+    
+    if(statusEl) {
+        statusEl.textContent = "⏳ Downloading details...";
+        statusEl.style.color = "#d35400"; // Orange
+    }
 
     try {
-        const response = await fetch(url);
+        const response = await fetch(finalUrl);
         if (!response.ok) throw new Error("Connection failed");
         
         const text = await response.text();
+        
+        // Safety Check: Did we get HTML instead of CSV? (Common error)
+        if (text.trim().startsWith("<!DOCTYPE html>")) {
+            throw new Error("Link is not a CSV. Make sure the sheet is Public.");
+        }
+
         const rows = text.split('\n');
         
-        // Clear old data
         sheetDetailsCache.clear();
         
-        // Parse CSV
         rows.forEach(row => {
             const cols = row.split(',');
             if (cols.length >= 2) {
                 const rawNo = cols[0];
-                // Use your existing normalizer
                 const cleanNo = normalizeLoanNo(rawNo); 
-                // Clean details (remove quotes)
+                // Remove quotes and whitespace
                 const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
 
                 if (cleanNo && details) {
@@ -1617,28 +1636,94 @@ const fetchSheetData = async (url) => {
 
         console.log(`Live Loaded: ${sheetDetailsCache.size} records.`);
         if(statusEl) {
-            statusEl.textContent = `Live: ${sheetDetailsCache.size} records loaded.`;
+            statusEl.textContent = `✅ Ready: ${sheetDetailsCache.size} details loaded.`;
             statusEl.style.color = "var(--success-color)";
         }
+        return true; // Success
 
     } catch (error) {
         console.error("Sheet Load Error:", error);
         if(statusEl) {
-            statusEl.textContent = "Error loading sheet. Check link.";
+            statusEl.textContent = "❌ Error: Sheet must be Public or Link is wrong.";
             statusEl.style.color = "var(--danger-color)";
         }
+        return false; // Failed
     }
 };
 
-// 3. Auto-Run on Startup
-document.addEventListener('DOMContentLoaded', () => {
-    // ... existing setup ...
-
-    // Check if we have a saved link
-    const savedUrl = localStorage.getItem('publicSheetUrl');
-    if (savedUrl) {
-        document.getElementById('publicSheetInput').value = savedUrl;
-        // Trigger the fetch immediately in background
-        fetchSheetData(savedUrl);
+// 3. Updated Main Function: FORCE LOAD before Scanning
+const fillSearchTableFromScan = async (loanData) => {
+    
+    // A. CHECK: Do we need to load the sheet?
+    const sheetUrl = document.getElementById('publicSheetInput').value.trim();
+    
+    // If there is a URL but Cache is empty, LOAD IT NOW.
+    if (sheetUrl && sheetDetailsCache.size === 0) {
+        await fetchSheetData(sheetUrl);
     }
-});
+
+    // B. Standard Logic
+    buildLoanSearchCache(); 
+
+    if (!loanData || loanData.length === 0) {
+        showConfirm('Scan Results', 'No numbers found.', false);
+        return;
+    }
+
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (!input.value.trim()) input.closest('tr').remove();
+    });
+
+    loanData.forEach(item => {
+        addSearchRow(item.no, item.box);
+    });
+
+    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
+    let erasedCount = 0;
+    let annotatedCount = 0;
+
+    inputs.forEach((input) => {
+        const rawValue = input.value;
+        const normalizedKey = normalizeLoanNo(rawValue);
+        
+        performLoanSearch(input); 
+
+        const row = input.closest('tr');
+        const statusCell = row.querySelector('.status-cell');
+        
+        // ERASE Logic
+        if (statusCell && statusCell.classList.contains('status-not-available')) {
+            if (row.eraseBox) {
+                eraseRegion(row.eraseBox);
+                erasedCount++;
+            }
+        }
+        
+        // ANNOTATE Logic (Now robust)
+        else if (statusCell && statusCell.classList.contains('status-available')) {
+            if (sheetDetailsCache.has(normalizedKey)) {
+                const details = sheetDetailsCache.get(normalizedKey);
+                // Only annotate if we have a box to draw next to
+                if (row.eraseBox) {
+                    annotateLoanDetails(row.eraseBox, details);
+                    annotatedCount++;
+                }
+            }
+        }
+    });
+
+    renumberSearchRows();
+    
+    let msg = `Found ${loanData.length} numbers.`;
+    if (erasedCount > 0) msg += ` Erased ${erasedCount}.`;
+    if (annotatedCount > 0) msg += ` Annotated ${annotatedCount}.`;
+    
+    showConfirm('Scan Complete', msg, false);
+};
+
+// 4. Trigger Save on Input Change (Keep this)
+const saveAndLoadSheet = (url) => {
+    if (!url) return;
+    localStorage.setItem('publicSheetUrl', url.trim());
+    fetchSheetData(url.trim());
+};
