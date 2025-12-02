@@ -1575,3 +1575,70 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 });
+// --- "LIVE LOAD" GOOGLE SHEET LOGIC ---
+
+// 1. Save URL and Fetch Immediately
+const saveAndLoadSheet = (url) => {
+    if (!url) return;
+    localStorage.setItem('publicSheetUrl', url.trim());
+    fetchSheetData(url.trim());
+};
+
+// 2. The Background Fetcher
+const fetchSheetData = async (url) => {
+    const statusEl = document.getElementById('sheetStatus');
+    if(statusEl) statusEl.textContent = "Updating details...";
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Connection failed");
+        
+        const text = await response.text();
+        const rows = text.split('\n');
+        
+        // Clear old data
+        sheetDetailsCache.clear();
+        
+        // Parse CSV
+        rows.forEach(row => {
+            const cols = row.split(',');
+            if (cols.length >= 2) {
+                const rawNo = cols[0];
+                // Use your existing normalizer
+                const cleanNo = normalizeLoanNo(rawNo); 
+                // Clean details (remove quotes)
+                const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
+
+                if (cleanNo && details) {
+                    sheetDetailsCache.set(cleanNo, details);
+                }
+            }
+        });
+
+        console.log(`Live Loaded: ${sheetDetailsCache.size} records.`);
+        if(statusEl) {
+            statusEl.textContent = `Live: ${sheetDetailsCache.size} records loaded.`;
+            statusEl.style.color = "var(--success-color)";
+        }
+
+    } catch (error) {
+        console.error("Sheet Load Error:", error);
+        if(statusEl) {
+            statusEl.textContent = "Error loading sheet. Check link.";
+            statusEl.style.color = "var(--danger-color)";
+        }
+    }
+};
+
+// 3. Auto-Run on Startup
+document.addEventListener('DOMContentLoaded', () => {
+    // ... existing setup ...
+
+    // Check if we have a saved link
+    const savedUrl = localStorage.getItem('publicSheetUrl');
+    if (savedUrl) {
+        document.getElementById('publicSheetInput').value = savedUrl;
+        // Trigger the fetch immediately in background
+        fetchSheetData(savedUrl);
+    }
+});
