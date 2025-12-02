@@ -1114,54 +1114,8 @@ const handleNumberScan = async (event) => {
 // Updated: Uses row.eraseBox to find what to erase
 // Updated: Main Logic with Debugging
 // Updated: Restored original "Scan Complete" message format
-const fillSearchTableFromScan = (loanData) => {
-    // 1. Force a Cache Rebuild to ensure rules match
-    buildLoanSearchCache(); 
 
-    if (!loanData || loanData.length === 0) {
-        showConfirm('Scan Results', 'No numbers found.', false);
-        return;
-    }
 
-    // 2. Clear empty rows
-    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (!input.value.trim()) input.closest('tr').remove();
-    });
-
-    // 3. Add new rows
-    loanData.forEach(item => {
-        addSearchRow(item.no, item.box);
-    });
-
-    // 4. Search & Erase Logic
-    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
-    let erasedCount = 0;
-
-    inputs.forEach((input) => {
-        // Run Search
-        performLoanSearch(input); 
-
-        const row = input.closest('tr');
-        const statusCell = row.querySelector('.status-cell');
-        
-        // If "Not Available" (Orange) -> Erase
-        if (statusCell && statusCell.classList.contains('status-not-available')) {
-            if (row.eraseBox) {
-                eraseRegion(row.eraseBox);
-                erasedCount++;
-            }
-        }
-    });
-
-    renumberSearchRows();
-    
-    // --- RESTORED EARLIER MESSAGE FORMAT ---
-    if (erasedCount > 0) {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} finished loans from the image.`, false);
-    } else {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
-    }
-};
 // NEW: Function to draw white box over coordinates
 // NEW: Intelligent Erase with Background Color Matching
 // NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
@@ -1574,4 +1528,165 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
+});
+// ======================================================
+// PASTE THIS AT THE VERY END OF SCRIPT.JS
+// ======================================================
+
+// --- 1. SMART SHEET HELPERS ---
+
+// Auto-converts "View/Edit" links to "CSV Export" links
+const convertToCsvLink = (url) => {
+    try {
+        if (url.includes('output=csv') || url.includes('format=csv')) return url;
+        const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        if (match && match[1]) {
+            return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+        }
+        return url;
+    } catch (e) { return url; }
+};
+
+// Triggered when you paste a link in the input box
+const saveAndLoadSheet = (url) => {
+    if (!url) return;
+    const cleanUrl = url.trim();
+    localStorage.setItem('publicSheetUrl', cleanUrl);
+    fetchSheetData(cleanUrl);
+};
+
+// Downloads and parses the Google Sheet
+const fetchSheetData = async (url) => {
+    const statusEl = document.getElementById('sheetStatus');
+    const finalUrl = convertToCsvLink(url);
+    
+    if(statusEl) {
+        statusEl.textContent = "⏳ Downloading details...";
+        statusEl.style.color = "#d35400"; // Orange
+    }
+
+    try {
+        const response = await fetch(finalUrl);
+        if (!response.ok) throw new Error("Connection failed");
+        
+        const text = await response.text();
+        if (text.trim().startsWith("<!DOCTYPE html>")) throw new Error("Sheet is not public");
+
+        const rows = text.split('\n');
+        sheetDetailsCache.clear();
+        
+        rows.forEach(row => {
+            const cols = row.split(',');
+            if (cols.length >= 2) {
+                const rawNo = cols[0];
+                const cleanNo = normalizeLoanNo(rawNo); 
+                // Remove quotes and whitespace from details
+                const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
+
+                if (cleanNo && details) {
+                    sheetDetailsCache.set(cleanNo, details);
+                }
+            }
+        });
+
+        console.log(`Live Loaded: ${sheetDetailsCache.size} records.`);
+        if(statusEl) {
+            statusEl.textContent = `✅ Ready: ${sheetDetailsCache.size} details loaded.`;
+            statusEl.style.color = "var(--success-color)";
+        }
+        return true; 
+
+    } catch (error) {
+        console.error("Sheet Load Error:", error);
+        if(statusEl) {
+            statusEl.textContent = "❌ Error: Link invalid or Sheet not public.";
+            statusEl.style.color = "var(--danger-color)";
+        }
+        return false; 
+    }
+};
+
+// --- 2. UPDATED SCANNER FUNCTION ---
+
+const fillSearchTableFromScan = async (loanData) => {
+    
+    // STEP A: Force-Load the Sheet if needed
+    const sheetUrl = document.getElementById('publicSheetInput').value.trim();
+    
+    // If we have a URL but no data in memory, download it NOW.
+    if (sheetUrl && sheetDetailsCache.size === 0) {
+        await fetchSheetData(sheetUrl);
+    }
+
+    // STEP B: Prepare the List
+    buildLoanSearchCache(); 
+
+    if (!loanData || loanData.length === 0) {
+        showConfirm('Scan Results', 'No numbers found.', false);
+        return;
+    }
+
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (!input.value.trim()) input.closest('tr').remove();
+    });
+
+    loanData.forEach(item => {
+        addSearchRow(item.no, item.box);
+    });
+
+    // STEP C: Process Each Item
+    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
+    let erasedCount = 0;
+    let annotatedCount = 0;
+
+    inputs.forEach((input) => {
+        const rawValue = input.value;
+        const normalizedKey = normalizeLoanNo(rawValue);
+        
+        performLoanSearch(input); 
+
+        const row = input.closest('tr');
+        const statusCell = row.querySelector('.status-cell');
+        
+        // 1. ERASE if "Not Available" (Orange)
+        if (statusCell && statusCell.classList.contains('status-not-available')) {
+            if (row.eraseBox) {
+                eraseRegion(row.eraseBox);
+                erasedCount++;
+            }
+        }
+        
+        // 2. ANNOTATE if "Available" (Green)
+        else if (statusCell && statusCell.classList.contains('status-available')) {
+            // Check if our Sheet has details for this number
+            if (sheetDetailsCache.has(normalizedKey)) {
+                const details = sheetDetailsCache.get(normalizedKey);
+                // Only write text if we know where the number is (eraseBox)
+                if (row.eraseBox) {
+                    annotateLoanDetails(row.eraseBox, details);
+                    annotatedCount++;
+                }
+            }
+        }
+    });
+
+    renumberSearchRows();
+    
+    let msg = `Found ${loanData.length} numbers.`;
+    if (erasedCount > 0) msg += ` Erased ${erasedCount}.`;
+    if (annotatedCount > 0) msg += ` Annotated ${annotatedCount}.`;
+    
+    showConfirm('Scan Complete', msg, false);
+};
+
+// --- 3. RESTORE SAVED LINK ON STARTUP ---
+document.addEventListener('DOMContentLoaded', () => {
+    const savedUrl = localStorage.getItem('publicSheetUrl');
+    if (savedUrl) {
+        const inputEl = document.getElementById('publicSheetInput');
+        if (inputEl) {
+            inputEl.value = savedUrl;
+            fetchSheetData(savedUrl);
+        }
+    }
 });
