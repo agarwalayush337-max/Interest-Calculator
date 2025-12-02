@@ -1603,54 +1603,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 });
-
 // ======================================================
-// PASTE THIS AT THE VERY END OF SCRIPT.JS
-// (Fixed: Uses "Publish to Web" for 100% Reliability)
+// NEW FEATURES: GOOGLE SHEET & ANNOTATION
 // ======================================================
 
-// Ensure the cache variable exists (prevents crash if declared earlier)
-if (typeof sheetDetailsCache === 'undefined') {
-    var sheetDetailsCache = new Map();
-}
+// 1. Convert "View/Edit" Link to "CSV Link"
+const convertToCsvLink = (url) => {
+    try {
+        if (!url) return '';
+        if (url.includes('output=csv') || url.includes('format=csv')) return url;
+        const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        if (match && match[1]) {
+            return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+        }
+        return url;
+    } catch (e) { return url; }
+};
 
-// 1. DATA FETCHER (Strict "Publish to Web" Logic)
+// 2. Fetch Data from Sheet
 const fetchSheetData = async (url) => {
     const statusEl = document.getElementById('sheetStatus');
-    const inputEl = document.getElementById('publicSheetInput');
-    
-    // Add timestamp to prevent browser caching old data
-    const cleanUrl = url.trim();
-    const uniqueUrl = cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + `t=${Date.now()}`;
+    const finalUrl = convertToCsvLink(url);
     
     if(statusEl) {
-        statusEl.textContent = "⏳ Downloading...";
+        statusEl.textContent = "⏳ Loading details...";
         statusEl.style.color = "#d35400";
     }
 
     try {
-        const response = await fetch(uniqueUrl);
-        
-        // 1. Check for Network Errors
-        if (!response.ok) throw new Error(`Connection Error (${response.status})`);
+        const response = await fetch(finalUrl);
+        if (!response.ok) throw new Error("Connection failed");
         
         const text = await response.text();
-        
-        // 2. Check for Privacy/Login Errors
-        // If Google sends back HTML login page instead of CSV data
-        if (text.trim().startsWith("<!DOCTYPE html>") || text.includes("<html")) {
-            throw new Error("Sheet is Private. Use 'File > Share > Publish to web'.");
-        }
+        if (text.trim().startsWith("<!DOCTYPE html>")) throw new Error("Sheet is Private");
 
         const rows = text.split('\n');
         sheetDetailsCache.clear();
         
         rows.forEach(row => {
-            // Regex handles commas inside quotes (standard CSV format)
+            // Regex handles commas inside quotes
             const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
             if (cols.length >= 2) {
-                // Remove quotes from Excel
-                const rawNo = cols[0].replace(/^"|"$/g, '').trim(); 
+                const rawNo = cols[0].replace(/^"|"$/g, '').trim();
                 const cleanNo = normalizeLoanNo(rawNo); 
                 const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
 
@@ -1665,38 +1659,23 @@ const fetchSheetData = async (url) => {
             statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
             statusEl.style.color = "var(--success-color)";
         }
-        if(inputEl) inputEl.style.borderColor = "var(--success-color)";
-        
         return true;
 
     } catch (error) {
-        console.error("Sheet Error:", error);
+        console.error(error);
         if(statusEl) {
-            statusEl.textContent = "❌ Error. See Console.";
+            statusEl.textContent = "❌ Link Error.";
             statusEl.style.color = "var(--danger-color)";
         }
-        if(inputEl) inputEl.style.borderColor = "var(--danger-color)";
-        
-        // Detailed Alert
-        showConfirm("Link Error", 
-            `Could not read the Google Sheet.\n\nReason: ${error.message}\n\nSOLUTION:\n1. Go to File > Share > Publish to web.\n2. Select 'Comma-separated values (.csv)'.\n3. Paste THAT link here.`, 
-            false
-        );
         return false;
     }
 };
 
-// 2. INPUT HANDLER (Auto-Saves Link)
-const saveAndLoadSheet = (url) => {
-    if (!url) return;
-    localStorage.setItem('publicSheetUrl', url.trim());
-    fetchSheetData(url.trim());
-};
-
-// 3. ANNOTATION DRAWING (Black Text)
+// 3. Draw Details on Image
 const annotateLoanDetails = (box, text) => {
     if (!scanCtx || !scanCanvas || !box) return;
 
+    // Calculate position relative to the number's box
     const ymin = Math.max(0, box[0]);
     const xmax = Math.min(1000, box[3]); 
     
@@ -1704,104 +1683,32 @@ const annotateLoanDetails = (box, text) => {
     const x = Math.floor((xmax / 1000) * scanCanvas.width);
     const h = Math.ceil(((box[2] - ymin) / 1000) * scanCanvas.height);
 
-    // Dynamic Font Size (60% of line height)
-    const fontSize = Math.max(16, Math.floor(h * 0.60)); 
+    // Styling (Blue Text)
+    const fontSize = Math.max(16, Math.floor(h * 0.75)); 
     scanCtx.font = `bold ${fontSize}px sans-serif`;
-    
-    // COLOR: Black
-    scanCtx.fillStyle = "#000000"; 
+    scanCtx.fillStyle = "#2980b9"; 
     scanCtx.textBaseline = "middle";
 
-    // Draw text with 40px padding to the right
+    // Draw text 40px to the right of the number
     scanCtx.fillText(text, x + 40, y + (h / 2));
 };
 
-// 4. MAIN SCANNER (The Brain)
-const fillSearchTableFromScan = async (loanData) => {
-    
-    // A. Attempt to Load Sheet Data
-    const inputEl = document.getElementById('publicSheetInput');
-    const sheetUrl = inputEl ? inputEl.value.trim() : '';
-    
-    // Only fetch if we have a URL and haven't loaded data yet
-    if (sheetUrl && sheetDetailsCache.size === 0) {
-        const success = await fetchSheetData(sheetUrl);
-        if (!success) {
-            // If fetching failed, we pause to let the user know, but continue processing numbers
-            console.warn("Continuing scan without annotations due to sheet error.");
-        }
-    }
-
-    // B. Standard Search Prep
-    buildLoanSearchCache(); 
-
-    if (!loanData || loanData.length === 0) {
-        showConfirm('Scan Results', 'No numbers found.', false);
-        return;
-    }
-
-    // Clear UI
-    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (!input.value.trim()) input.closest('tr').remove();
-    });
-
-    // Populate Table
-    loanData.forEach(item => {
-        addSearchRow(item.no, item.box);
-    });
-
-    // C. Process Items (Erase & Annotate)
-    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
-    let erasedCount = 0;
-    let annotatedCount = 0;
-
-    inputs.forEach((input) => {
-        const rawValue = input.value;
-        const normalizedKey = normalizeLoanNo(rawValue);
-        
-        performLoanSearch(input); 
-
-        const row = input.closest('tr');
-        const statusCell = row.querySelector('.status-cell');
-        
-        // 1. ERASE (Orange)
-        if (statusCell && statusCell.classList.contains('status-not-available')) {
-            if (row.eraseBox) {
-                eraseRegion(row.eraseBox);
-                erasedCount++;
-            }
-        }
-        
-        // 2. ANNOTATE (Green)
-        else if (statusCell && statusCell.classList.contains('status-available')) {
-            // Check cache for details
-            if (sheetDetailsCache.has(normalizedKey)) {
-                const details = sheetDetailsCache.get(normalizedKey);
-                if (row.eraseBox) {
-                    annotateLoanDetails(row.eraseBox, details);
-                    annotatedCount++;
-                }
-            }
-        }
-    });
-
-    renumberSearchRows();
-    
-    let msg = `Found ${loanData.length} numbers.`;
-    if (erasedCount > 0) msg += ` Erased ${erasedCount}.`;
-    if (annotatedCount > 0) msg += ` Annotated ${annotatedCount}.`;
-    
-    showConfirm('Scan Complete', msg, false);
+// 4. Input Handler
+const saveAndLoadSheet = (url) => {
+    if (!url) return;
+    const cleanUrl = url.trim();
+    localStorage.setItem('publicSheetUrl', cleanUrl);
+    fetchSheetData(cleanUrl);
 };
 
-// 5. STARTUP LISTENER (Restores Link)
+// 5. Restore Link on Startup
 document.addEventListener('DOMContentLoaded', () => {
     const savedUrl = localStorage.getItem('publicSheetUrl');
-    const inputEl = document.getElementById('publicSheetInput');
-    
-    if (savedUrl && inputEl) {
-        inputEl.value = savedUrl;
-        // Trigger fetch immediately
-        fetchSheetData(savedUrl);
+    if (savedUrl) {
+        const input = document.getElementById('publicSheetInput');
+        if (input) {
+            input.value = savedUrl;
+            fetchSheetData(savedUrl);
+        }
     }
 });
