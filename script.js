@@ -1487,12 +1487,6 @@ document.addEventListener('DOMContentLoaded', async () => {
    // --- Auto-Load Sheet on Startup ---
     // Trigger the fetch immediately using the hardcoded URL
     fetchSheetData();
-    const inputEl = document.getElementById('publicSheetInput');
-    
-    if (savedUrl && inputEl) {
-        inputEl.value = savedUrl;
-        fetchSheetData(savedUrl);
-    }
 });
 
 // ======================================================
@@ -1501,10 +1495,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // 1. DATA FETCHER
 // 1. DATA FETCHER (Updated: Uses Hardcoded SHEET_URL)
+// 1. DATA FETCHER (Updated: Hardcoded Link + UI Fix)
 const fetchSheetData = async () => {
-    // Use the global constant we defined at the top
-    const url = SHEET_URL; 
-    
+    const url = SHEET_URL; // Uses the constant from the top
+
     if (!url || url.includes("Paste_Link_Here")) {
         console.warn("No Sheet URL configured.");
         return false;
@@ -1512,11 +1506,15 @@ const fetchSheetData = async () => {
 
     // Add timestamp to prevent caching old data
     const uniqueUrl = url + `&t=${Date.now()}`;
-    const statusEl = document.getElementById('sheetStatus'); // Ensure you have this element in HTML if you want to see status
-
-    // Update UI if element exists (Checking "Initializing..." status)
-    const initializingEl = document.querySelector('.initializing-text'); // Adjust selector if you use a different one for "Initializing..."
     
+    // Attempt to find the status element (handling different ID possibilities)
+    const statusEl = document.getElementById('sheetStatus') || document.querySelector('.initializing-text') || document.querySelector('div[style*="color: #666"]'); 
+
+    if(statusEl) {
+        statusEl.textContent = "⏳ Updating details...";
+        statusEl.style.color = "#d35400";
+    }
+
     try {
         const response = await fetch(uniqueUrl);
         if (!response.ok) throw new Error("Connection Failed");
@@ -1526,7 +1524,7 @@ const fetchSheetData = async () => {
         sheetDetailsCache.clear();
         
         rows.forEach(row => {
-            // Split by comma, handling quotes if necessary
+            // Robust CSV parsing (handles quotes)
             const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
             if (cols.length >= 2) {
                 const rawNo = cols[0].replace(/^"|"$/g, '').trim(); 
@@ -1541,21 +1539,22 @@ const fetchSheetData = async () => {
 
         console.log(`Loaded ${sheetDetailsCache.size} details.`);
         
-        // --- FIX FOR "INITIALIZING..." STUCK ---
-        // If you have a specific element showing "Initializing", hide it or update it here
-        if (initializingEl) {
-            initializingEl.textContent = `Active: ${sheetDetailsCache.size} Records`;
-            initializingEl.style.color = "green";
+        // Update the UI to show success
+        if(statusEl) {
+            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
+            statusEl.style.color = "green";
+            statusEl.style.fontWeight = "bold";
         }
-        
         return true;
     } catch (error) {
         console.error("Sheet Error:", error);
-        if (initializingEl) initializingEl.textContent = "Sheet Error (Check Console)";
+        if(statusEl) {
+            statusEl.textContent = "❌ Sheet Connection Failed";
+            statusEl.style.color = "red";
+        }
         return false;
     }
 };
-
 // 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
 const generateSortedImage = (loanList) => {
     if (!loanList || loanList.length === 0) {
