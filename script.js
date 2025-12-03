@@ -1614,6 +1614,7 @@ function parseCSV(text) {
 // UPDATED: GENERATE SORTED IMAGE
 // Fixes: Share on Mobile Only, No Cut-off, New Header Format, Yellow/Black Colors
 // UPDATED: GENERATE SORTED IMAGE (High Quality + Date + Correct Header)
+// UPDATED: GENERATE SORTED IMAGE (High-Res, No Overlap, Fixed Date)
 const generateSortedImage = () => {
     // 1. Get fresh data
     const loanList = getAvailableLoansFromTable();
@@ -1651,12 +1652,16 @@ const generateSortedImage = () => {
     // Layout Config (Logical Pixels)
     const rowHeight = 50;
     const dateHeaderHeight = 40; // Space for the date at top
-    const columnHeaderHeight = 50; // Space for SL/NO/AMOUNT
+    const columnHeaderHeight = 50; // Space for SL/NO/AMOUNT headers
     const totalHeaderHeight = dateHeaderHeight + columnHeaderHeight;
-    const padding = 150; 
+    const padding = 200; // Increased to prevent bottom cut-off
     
     const logicalWidth = 900;
-    const logicalHeight = totalHeaderHeight + (processedList.length * rowHeight) + padding;
+    // Calculate total height dynamically
+    // We assume roughly 1 header per 5 rows to estimate, 
+    // but canvas will resize if we need more. 
+    // For now, let's use a safe dynamic height + padding
+    const logicalHeight = totalHeaderHeight + (processedList.length * 60) + padding;
 
     // Set Actual Size (Multiplied by Scale)
     reportCanvas.width = logicalWidth * scale;
@@ -1674,15 +1679,13 @@ const generateSortedImage = () => {
     ctx.fillStyle = "#333";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText(today, logicalWidth - 20, 25); // Positioned top right
+    ctx.fillText(today, logicalWidth - 20, 25); 
 
     // E. Draw Column Headers
-    // Header Strip Background
     const headerY = dateHeaderHeight;
     ctx.fillStyle = "#f1f3f5";
     ctx.fillRect(0, headerY, logicalWidth, columnHeaderHeight);
 
-    // Header Text
     const textY = headerY + 32;
     const colX = { sl: 30, no: 130, amt: 450, date: 550, det: 800 };
 
@@ -1700,7 +1703,7 @@ const generateSortedImage = () => {
     ctx.fillText("DATE", colX.date, textY);
     ctx.fillText("DETAIL", colX.det, textY);
     
-    // Header Bottom Line (Thick)
+    // Header Bottom Line
     ctx.beginPath();
     ctx.moveTo(0, headerY + columnHeaderHeight);
     ctx.lineTo(logicalWidth, headerY + columnHeaderHeight);
@@ -1718,16 +1721,17 @@ const generateSortedImage = () => {
         if (item.detail !== currentCategory) {
             currentCategory = item.detail;
             
-            // Category Divider
+            // 1. Push y down to create a gap between previous row and header
+            y += 45; 
+            
+            // 2. Draw Header Box in that gap
             ctx.fillStyle = "#e9ecef";
-            ctx.fillRect(0, y - 25, logicalWidth, 30);
+            ctx.fillRect(0, y - 60, logicalWidth, 30);
             
             ctx.fillStyle = "#000";
             ctx.textAlign = "left";
             ctx.font = "bold 16px sans-serif";
-            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 5);
-            
-            y += 20; 
+            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 40);
         }
 
         // Row Content
@@ -1751,7 +1755,7 @@ const generateSortedImage = () => {
 
         // DETAIL COLOR LOGIC (Yellow & Black)
         let badgeColor = "#333";
-        if (item.detail === "G") badgeColor = "#f1c40f"; // Yellow
+        if (item.detail === "G") badgeColor = "#f1c40f"; // Golden Yellow
         else if (item.detail === "S") badgeColor = "#000000"; // Black
         else if (item.detail === "?") badgeColor = "#e74c3c"; // Red
 
@@ -1793,6 +1797,7 @@ const generateSortedImage = () => {
         }
     });
 };
+
 // 3. MAIN SCANNER (UPDATED: Captures Full Data)
 // Updated: Passes hidden amount/date to addSearchRow
 // NEW HELPER: Reads the current state of the table (handles manual edits)
