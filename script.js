@@ -1613,6 +1613,7 @@ function parseCSV(text) {
 // UPDATED: GENERATE SORTED IMAGE (Fixes: No Blue Header, Right-Align Amount, No Cut-off)
 // UPDATED: GENERATE SORTED IMAGE
 // Fixes: Share on Mobile Only, No Cut-off, New Header Format, Yellow/Black Colors
+// UPDATED: GENERATE SORTED IMAGE (High Quality + Date + Correct Header)
 const generateSortedImage = () => {
     // 1. Get fresh data
     const loanList = getAvailableLoansFromTable();
@@ -1640,56 +1641,75 @@ const generateSortedImage = () => {
         return a.no.localeCompare(b.no, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    // B. Create Canvas
+    // B. Create Canvas (High Definition Setup)
     const reportCanvas = document.createElement('canvas');
     const ctx = reportCanvas.getContext('2d');
     
-    // Layout Config
-    const rowHeight = 50;
-    const headerHeight = 60; // Reduced height (just for column headers)
-    const padding = 150; // HUGE padding to prevent bottom cut-off
+    // Scale factor for High DPI (Retina) screens
+    const scale = 2; 
     
-    reportCanvas.width = 900;
-    reportCanvas.height = headerHeight + (processedList.length * rowHeight) + padding;
+    // Layout Config (Logical Pixels)
+    const rowHeight = 50;
+    const dateHeaderHeight = 40; // Space for the date at top
+    const columnHeaderHeight = 50; // Space for SL/NO/AMOUNT
+    const totalHeaderHeight = dateHeaderHeight + columnHeaderHeight;
+    const padding = 150; 
+    
+    const logicalWidth = 900;
+    const logicalHeight = totalHeaderHeight + (processedList.length * rowHeight) + padding;
+
+    // Set Actual Size (Multiplied by Scale)
+    reportCanvas.width = logicalWidth * scale;
+    reportCanvas.height = logicalHeight * scale;
+
+    // Normalize coordinate system so we can write code using logical pixels
+    ctx.scale(scale, scale);
 
     // C. Draw White Background
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, reportCanvas.width, reportCanvas.height);
+    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
-    // D. Draw Column Headers (NO TITLE, JUST COLUMNS)
-    // Columns: SL NO | NO | AMOUNT | DATE | DETAIL
-    let y = 40;
-    const colX = { sl: 30, no: 130, amt: 450, date: 550, det: 800 };
+    // D. Draw Today's Date (Top Right)
+    const today = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    ctx.fillStyle = "#333";
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(today, logicalWidth - 20, 25); // Positioned top right
 
-    // Header Background Strip
+    // E. Draw Column Headers
+    // Header Strip Background
+    const headerY = dateHeaderHeight;
     ctx.fillStyle = "#f1f3f5";
-    ctx.fillRect(0, 0, reportCanvas.width, headerHeight);
+    ctx.fillRect(0, headerY, logicalWidth, columnHeaderHeight);
 
     // Header Text
+    const textY = headerY + 32;
+    const colX = { sl: 30, no: 130, amt: 450, date: 550, det: 800 };
+
     ctx.fillStyle = "#000";
-    ctx.font = "bold 20px sans-serif";
+    ctx.font = "bold 18px sans-serif";
+    
     ctx.textAlign = "left";
+    ctx.fillText("SL NO", colX.sl, textY);
+    ctx.fillText("NO", colX.no, textY);
     
-    ctx.fillText("SL NO", colX.sl, y);
-    ctx.fillText("NO", colX.no, y);
+    ctx.textAlign = "right"; 
+    ctx.fillText("AMOUNT", colX.amt, textY);
+    ctx.textAlign = "left";  
     
-    ctx.textAlign = "right"; // Align Amount Right
-    ctx.fillText("AMOUNT", colX.amt, y);
-    ctx.textAlign = "left";  // Reset
+    ctx.fillText("DATE", colX.date, textY);
+    ctx.fillText("DETAIL", colX.det, textY);
     
-    ctx.fillText("DATE", colX.date, y);
-    ctx.fillText("DETAIL", colX.det, y);
-    
-    // Header Line
+    // Header Bottom Line (Thick)
     ctx.beginPath();
-    ctx.moveTo(0, headerHeight);
-    ctx.lineTo(reportCanvas.width, headerHeight);
+    ctx.moveTo(0, headerY + columnHeaderHeight);
+    ctx.lineTo(logicalWidth, headerY + columnHeaderHeight);
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#333";
     ctx.stroke();
 
-    // E. Draw Rows
-    y = headerHeight + 40;
+    // F. Draw Rows
+    let y = totalHeaderHeight + 35;
     let currentCategory = null;
     let slCounter = 1;
 
@@ -1700,20 +1720,22 @@ const generateSortedImage = () => {
             
             // Category Divider
             ctx.fillStyle = "#e9ecef";
-            ctx.fillRect(0, y - 30, reportCanvas.width, 35);
+            ctx.fillRect(0, y - 25, logicalWidth, 30);
             
             ctx.fillStyle = "#000";
-            ctx.font = "bold 18px sans-serif";
-            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 6);
+            ctx.textAlign = "left";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 5);
             
             y += 20; 
         }
 
         // Row Content
-        ctx.font = "26px sans-serif";
+        ctx.font = "24px sans-serif";
         ctx.fillStyle = "#000000";
         
         // SL NO
+        ctx.textAlign = "left";
         ctx.fillText(slCounter++, colX.sl, y);
         
         // LOAN NO
@@ -1729,15 +1751,15 @@ const generateSortedImage = () => {
 
         // DETAIL COLOR LOGIC (Yellow & Black)
         let badgeColor = "#333";
-        if (item.detail === "G") badgeColor = "#d4ac0d"; // Darker Yellow (Readable on white)
+        if (item.detail === "G") badgeColor = "#f1c40f"; // Yellow
         else if (item.detail === "S") badgeColor = "#000000"; // Black
         else if (item.detail === "?") badgeColor = "#e74c3c"; // Red
 
         ctx.fillStyle = badgeColor;
-        ctx.font = "bold 28px sans-serif";
+        ctx.font = "bold 26px sans-serif";
         ctx.fillText(item.detail, colX.det, y);
 
-        // Divider
+        // Divider Line
         ctx.strokeStyle = "#eee";
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -1748,18 +1770,17 @@ const generateSortedImage = () => {
         y += rowHeight;
     });
 
-    // F. Mobile Share vs PC Download
+    // G. Mobile Share vs PC Download
     reportCanvas.toBlob((blob) => {
         const fileName = `Sorted_List_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: 'image/png' });
         
-        // Strict Mobile Detection
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
             navigator.share({
                 files: [file],
-                title: 'Sorted List'
+                title: 'Sorted Loan List'
             }).catch(console.error);
         } else {
             // PC: Force Download
