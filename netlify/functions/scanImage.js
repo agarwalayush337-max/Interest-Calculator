@@ -45,6 +45,7 @@ exports.handler = async function(event) {
            - Format strictly as DD/MM/YYYY.
            CRITICAL HANDWRITING RULES:
            - Writer's 2 in the MM coloumn Generally touches with The / so it looks like 4, Read it 2 only.
+           - If The Month is 04 Twice check it it might be 02.
 
         4. "box": An array of 4 integers [ymin, xmin, ymax, xmax] on a scale of 0 to 1000. 
            - IMPORTANT: The box must cover the ENTIRE WIDTH of the row (Number + Principal + Date).
