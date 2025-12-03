@@ -1,3 +1,19 @@
+// --- FORCE RESET: DELETE OLD SERVICE WORKERS ---
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+            console.log('Unregistering stuck Service Worker:', registration);
+            registration.unregister(); // Deletes the stuck brain
+        }
+    });
+    // Force reload if we detect we are running the old version
+    if (!localStorage.getItem('force_reset_v1')) {
+        localStorage.setItem('force_reset_v1', 'true');
+        window.location.reload();
+    }
+}
+// -----------------------------------------------
+
 // --- At the top of the file, BEFORE any other code ---
 // Register the Service Worker
 if ('serviceWorker' in navigator) {
