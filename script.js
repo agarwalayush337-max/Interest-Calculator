@@ -956,15 +956,15 @@ const buildLoanSearchCache = () => {
 };
 
 // UPDATED: addSearchRow now stores scan data (Principal/Date) for the report
+// Updated: Stores scan data in memory (row.scanData) but DOES NOT fill the UI cells
 const addSearchRow = (loanNo = '', box = null, extraData = null) => {
     const rowCount = loanSearchTableBody.rows.length;
     const row = loanSearchTableBody.insertRow();
     
-    if (box) {
-        row.eraseBox = box; // Store raw array
-    }
+    // 1. Store Coordinates (for Eraser)
+    if (box) row.eraseBox = box;
 
-    // Save extra data for the Generated Image (Amount/Date)
+    // 2. Store Extra Data (Hidden from UI, used for Download)
     if (extraData) {
         row.scanData = {
             principal: extraData.principal || '-',
@@ -974,6 +974,7 @@ const addSearchRow = (loanNo = '', box = null, extraData = null) => {
         row.scanData = { principal: '-', date: '-' };
     }
 
+    // 3. Render Row (Cells for Principal/Date are LEFT EMPTY purposely)
     row.innerHTML = `
         <td>${rowCount + 1}</td>
         <td class="read-only status-cell"></td>
@@ -998,6 +999,7 @@ const renumberSearchRows = () => {
     });
 };
 
+// Updated: Shows Sheet Detail (G/S/?) inside the Status Column
 const performLoanSearch = (inputElement) => {
     if (!inputElement) return;
     
@@ -1007,6 +1009,7 @@ const performLoanSearch = (inputElement) => {
     const dateCell = row.querySelector('.date-result');
     const statusCell = row.querySelector('.status-cell');
 
+    // Reset cells
     principalCell.textContent = '';
     dateCell.textContent = '';
     statusCell.innerHTML = '';
@@ -1014,21 +1017,39 @@ const performLoanSearch = (inputElement) => {
 
     if (!userInput) return;
 
-    const normalizedSearchTerm = normalizeLoanNo(userInput);
+    const normalizedKey = normalizeLoanNo(userInput);
 
-    if (loanSearchCache.has(normalizedSearchTerm)) {
-        const data = loanSearchCache.get(normalizedSearchTerm);
+    // Check if it's in the Finalised Database ("Not Available")
+    if (loanSearchCache.has(normalizedKey)) {
+        const data = loanSearchCache.get(normalizedKey);
         principalCell.textContent = data.principal;
         dateCell.textContent = data.reportDate;
         statusCell.classList.add('status-not-available');
         statusCell.innerHTML = `
             <span>Not Available</span>
             <button class="btn btn-secondary btn-sm btn-flat-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
-                View Report
+                View
             </button>`;
     } else {
+        // It is AVAILABLE. Now check for Annotation (G/S) from Sheet Cache
         statusCell.classList.add('status-available');
-        statusCell.textContent = 'Available';
+        
+        let annotationHtml = '';
+        if (sheetDetailsCache.has(normalizedKey)) {
+            const detail = sheetDetailsCache.get(normalizedKey);
+            // Color coding for the badge
+            let badgeClass = 'badge-default'; // You can add CSS for this later if you want specific colors
+            let colorStyle = '#333';
+            if(detail === 'G') colorStyle = '#27ae60'; // Green
+            if(detail === 'S') colorStyle = '#2980b9'; // Blue
+            
+            annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:${colorStyle};">[${detail}]</span>`;
+        } else {
+            // Optional: Show [?] if not found in sheet
+            annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:#e74c3c;">[?]</span>`;
+        }
+
+        statusCell.innerHTML = `<span>Available</span>${annotationHtml}`;
     }
 };
 
@@ -1681,6 +1702,7 @@ const generateSortedImage = (loanList) => {
 };
 
 // 3. MAIN SCANNER (UPDATED: Captures Full Data)
+// Updated: Passes hidden amount/date to addSearchRow
 const fillSearchTableFromScan = async (loanData) => {
     
     // A. Ensure Data is Loaded
@@ -1695,14 +1717,21 @@ const fillSearchTableFromScan = async (loanData) => {
         return;
     }
 
-    // Clear empty
+    // Clear empty rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
-    // Add rows with EXTRA DATA (Pass whole item)
+    // Helper for clean date
+    const cleanDate = (d) => d ? d.replace(/-/g, '/') : '-';
+
+    // Add rows with EXTRA DATA (Hidden in UI, stored in memory)
     loanData.forEach(item => {
-        addSearchRow(item.no, item.box, item);
+        const extraData = {
+            principal: item.principal ? String(item.principal) : '-',
+            date: cleanDate(item.date)
+        };
+        addSearchRow(item.no, item.box, extraData);
     });
 
     // Process & Collect
@@ -1713,6 +1742,8 @@ const fillSearchTableFromScan = async (loanData) => {
     inputs.forEach((input) => {
         const rawValue = input.value;
         const normalizedKey = normalizeLoanNo(rawValue);
+        
+        // This will now trigger the Annotation logic in performLoanSearch
         performLoanSearch(input); 
 
         const row = input.closest('tr');
@@ -1725,7 +1756,7 @@ const fillSearchTableFromScan = async (loanData) => {
                 erasedCount++;
             }
         }
-        // Collect Available (Fetch stored ScanData)
+        // Collect Available (Fetch the HIDDEN scanData)
         else if (statusCell && statusCell.classList.contains('status-available')) {
             const storedData = row.scanData || { principal: '-', date: '-' };
             availableLoans.push({ 
@@ -1738,6 +1769,7 @@ const fillSearchTableFromScan = async (loanData) => {
 
     renumberSearchRows();
     
+    // Setup Download Button
     const dlBtn = document.getElementById('downloadErasedBtn');
     if(dlBtn) {
         if (availableLoans.length > 0) {
