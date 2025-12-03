@@ -23,7 +23,9 @@ const firebaseConfig = {
     messagingSenderId: "187925519090",
     appId: "1:187925519090:web:c875d2fb788d02b5bf4e6b"
 };
-
+// --- CONFIGURATION ---
+// PASTE YOUR GOOGLE SHEET CSV LINK HERE
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1WPBX5uYqgd_zk6b06o7JH9r2G4-_w_kmQIt3aTnFvH0/edit?gid=0#gid=0";
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -1482,7 +1484,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // --- Auto-Load Saved Sheet on Startup ---
-    const savedUrl = localStorage.getItem('publicSheetUrl');
+   // --- Auto-Load Sheet on Startup ---
+    // Trigger the fetch immediately using the hardcoded URL
+    fetchSheetData();
     const inputEl = document.getElementById('publicSheetInput');
     
     if (savedUrl && inputEl) {
@@ -1496,23 +1500,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ======================================================
 
 // 1. DATA FETCHER
-const fetchSheetData = async (url) => {
-    // If no URL passed, grab from hidden input
-    if (!url) {
-        const input = document.getElementById('publicSheetInput');
-        if (input && input.value) url = input.value;
+// 1. DATA FETCHER (Updated: Uses Hardcoded SHEET_URL)
+const fetchSheetData = async () => {
+    // Use the global constant we defined at the top
+    const url = SHEET_URL; 
+    
+    if (!url || url.includes("Paste_Link_Here")) {
+        console.warn("No Sheet URL configured.");
+        return false;
     }
-    if (!url) return false;
 
-    // Add timestamp to force fresh data
+    // Add timestamp to prevent caching old data
     const uniqueUrl = url + `&t=${Date.now()}`;
-    const statusEl = document.getElementById('sheetStatus');
+    const statusEl = document.getElementById('sheetStatus'); // Ensure you have this element in HTML if you want to see status
 
-    if(statusEl) {
-        statusEl.textContent = "⏳ Updating details...";
-        statusEl.style.color = "#d35400";
-    }
-
+    // Update UI if element exists (Checking "Initializing..." status)
+    const initializingEl = document.querySelector('.initializing-text'); // Adjust selector if you use a different one for "Initializing..."
+    
     try {
         const response = await fetch(uniqueUrl);
         if (!response.ok) throw new Error("Connection Failed");
@@ -1522,27 +1526,32 @@ const fetchSheetData = async (url) => {
         sheetDetailsCache.clear();
         
         rows.forEach(row => {
+            // Split by comma, handling quotes if necessary
             const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
             if (cols.length >= 2) {
                 const rawNo = cols[0].replace(/^"|"$/g, '').trim(); 
                 const cleanNo = normalizeLoanNo(rawNo); 
                 const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
-                if (cleanNo && details) sheetDetailsCache.set(cleanNo, details);
+                
+                if (cleanNo && details) {
+                    sheetDetailsCache.set(cleanNo, details);
+                }
             }
         });
 
         console.log(`Loaded ${sheetDetailsCache.size} details.`);
-        if(statusEl) {
-            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
-            statusEl.style.color = "var(--success-color)";
+        
+        // --- FIX FOR "INITIALIZING..." STUCK ---
+        // If you have a specific element showing "Initializing", hide it or update it here
+        if (initializingEl) {
+            initializingEl.textContent = `Active: ${sheetDetailsCache.size} Records`;
+            initializingEl.style.color = "green";
         }
+        
         return true;
     } catch (error) {
         console.error("Sheet Error:", error);
-        if(statusEl) {
-            statusEl.textContent = "❌ Sheet Error.";
-            statusEl.style.color = "var(--danger-color)";
-        }
+        if (initializingEl) initializingEl.textContent = "Sheet Error (Check Console)";
         return false;
     }
 };
