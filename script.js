@@ -1497,6 +1497,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 1. DATA FETCHER (Updated: Uses Hardcoded SHEET_URL)
 // 1. DATA FETCHER (Updated: Hardcoded Link + UI Fix)
 // 1. DATA FETCHER (Robust CSV Parser - Fixes Partial Loading)
+// 1. DATA FETCHER (Robust CSV Parser)
 const fetchSheetData = async () => {
     const url = SHEET_URL; 
 
@@ -1521,7 +1522,7 @@ const fetchSheetData = async () => {
         if (!response.ok) throw new Error("Connection Failed");
         const text = await response.text();
         
-        // --- NEW: ROBUST PARSER (Handles newlines inside cells) ---
+        // --- USE THE NEW PARSER HERE ---
         const rows = parseCSV(text); 
         
         sheetDetailsCache.clear();
@@ -1602,6 +1603,7 @@ function parseCSV(text) {
     }
     return rows;
 }
+
 // 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
 const generateSortedImage = (loanList) => {
     if (!loanList || loanList.length === 0) {
