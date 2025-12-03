@@ -2,255 +2,250 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Interest Calculator PWA</title>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interest Calculator</title>
+    <meta name="theme-color" content="#E0E5EC">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#3D52D5">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
-
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="icon" href="icon-192x192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
-
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
-
-    <div id="loginOverlay" style="display: flex; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 9999;">
-        <div style="text-align: center; padding: 20px;">
-            <h1 style="margin-bottom: 20px;">Interest Calculator</h1>
-            <p>Secure Login Required</p>
-            <br>
-            <button id="googleSignInBtn" class="btn btn-primary" style="padding: 10px 20px;">
+    <div id="loginOverlay">
+        <div class="login-box">
+            <h1>Interest Calculator</h1>
+            <p id="loginMessage">Sign in to access your synced reports.</p>
+            <button class="btn" id="googleSignInBtn">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,5 12,5C14.6,5 16.14,6.35 16.81,7.02L18.83,5.18C17.11,3.76 14.85,3 12,3C7.5,3 4,6.58 4,12C4,17.42 7.5,21 12,21C17,21 20.7,17.5 20.7,12.33C20.7,11.67 20.7,11.34 20.7,11.1H21.35Z"/></svg>
                 Sign in with Google
             </button>
-            <p id="loginMessage" style="color: red; margin-top: 10px;"></p>
         </div>
     </div>
 
-    <div id="appContainer" style="display: none;">
-        
-        <header class="app-header">
-            <div class="header-content" style="display: flex; justify-content: space-between; align-items: center; padding: 10px;">
-                <div class="header-left">
-                    <h1 style="margin: 0; font-size: 1.2rem;">Interest Calc</h1>
-                    <div id="syncStatus" class="offline" style="font-size: 0.8rem;">Offline</div>
-                </div>
-                <div class="header-right">
-                    <span id="authStatus" class="user-email"></span>
-                    <button id="signOutBtn" class="btn-icon" aria-label="Sign Out">
-                        <i class="material-icons">logout</i>
-                    </button>
-                </div>
+    <div class="container" id="appContainer">
+        <header>
+            <h1>Interest Calculator</h1>
+            <div class="header-right">
+                <div id="syncStatus"></div>
+                <span id="authStatus"></span>
+                <button class="btn btn-secondary" id="signOutBtn">Sign Out</button>
             </div>
         </header>
 
-        <nav class="tab-nav">
-            <button class="tab-button" data-tab="dashboardTab">Dashboard</button>
+        <div class="tabs">
             <button class="tab-button active" data-tab="calculatorTab">Calculator</button>
-            <button class="tab-button" data-tab="recentTransactionsTab">Recent</button>
-            <button class="tab-button" data-tab="finalisedTransactionsTab">Finalised</button>
+            <button class="tab-button" data-tab="recentTransactionsTab">Recent Transactions</button>
+            <button class="tab-button" data-tab="finalisedTransactionsTab">Finalised Transactions</button>
+            <button class="tab-button" data-tab="dashboardTab">Dashboard</button>
             <button class="tab-button" data-tab="loanSearchTab">Loan Search</button>
-        </nav>
+        </div>
 
-        <main class="content-area">
-            
-            <div id="dashboardTab" class="tab-content">
-                <div class="dashboard-controls">
+        <div id="calculatorTab" class="tab-content active">
+            <div class="main-content">
+                <div class="input-group">
+                    <div class="input-field" id="todayDateContainer">
+                        <label for="todayDate">Today's Date</label>
+                        <input type="text" id="todayDate" placeholder="DD/MM/YYYY">
+                    </div>
+                    <div class="input-field" id="interestRateContainer">
+                        <label for="interestRate">Monthly Interest Rate (%)</label>
+                        <input type="number" id="interestRate" value="1.75" step="0.01">
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="loanTable">
+                        <thead>
+                            <tr>
+                                <th>SL NO</th>
+                                <th>No</th>
+                                <th>Principal</th>
+                                <th>Date</th>
+                                <th>Duration (Days)</th>
+                                <th>Interest</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div class="action-bar" id="mainActionBar">
+                    <button class="btn btn-primary" id="addRowBtn">Add Loan</button>
+                    <button class="btn btn-primary" id="scanImageBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
+                        Scan Image
+                    </button>
+                    <input type="file" id="imageUploadInput" accept="image/*" style="display: none;">
+                    <button class="btn btn-secondary" id="saveBtn">Save</button>
+                    <button class="btn btn-secondary" id="exportPdfBtn">Export PDF</button>
+                    <button class="btn btn-danger" id="clearSheetBtn">Clear Sheet</button>
+                </div>
+                 <div class="action-bar" id="viewModeActionBar" style="display: none;">
+                    <button class="btn btn-secondary" id="exitViewModeBtn">Back to Calculator</button>
+                    <button class="btn btn-primary" id="exportViewPdfBtn">Export PDF</button>
+                </div>
+
+                <div class="totals-summary">
+                    <div class="total-item">
+                        <h3>Total Principal</h3>
+                        <p id="totalPrincipal">0</p>
+                    </div>
+                    <div class="total-item">
+                        <h3>Total Interest</h3>
+                        <p id="totalInterest">0</p>
+                    </div>
+                    <div class="total-item">
+                        <h3>Final Total Amount</h3>
+                        <p id="finalTotal">0</p>
+                    </div>
+                </div>
+                
+                <div class="print-header">
+                    <h1 id="printTitle">Interest Report</h1>
+                    <p id="printDate"></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="recentTransactionsTab" class="tab-content">
+            <div class="main-content">
+                <h2>Recent Transactions</h2>
+                 <div class="input-field search-bar" id="recentSearchContainer">
+                    <label for="reportSearchInput">Search Reports</label>
+                    <input type="search" id="reportSearchInput" placeholder="Search by Date, No, or Amount...">
+                </div>
+                 <div id="recentTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                <ul id="recentTransactionsList"></ul>
+            </div>
+        </div>
+
+        <div id="finalisedTransactionsTab" class="tab-content">
+            <div class="main-content">
+                <h2>Finalised Transactions</h2>
+                <div class="input-field search-bar" id="finalisedSearchContainer">
+                    <label for="finalisedReportSearchInput">Search Finalised Reports</label>
+                    <input type="search" id="finalisedReportSearchInput" placeholder="Search by Report Name, Loan No, or Principal...">
+                </div>
+                <div id="finalisedTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                <ul id="finalisedTransactionsList"></ul>
+            </div>
+        </div>
+
+        <div id="dashboardTab" class="tab-content">
+            <div class="main-content">
+                <h2>Dashboard</h2>
+                <div class="dashboard-filters">
                     <div class="date-range-picker">
-                        <input type="text" id="dashboardStartDate" placeholder="DD/MM/YYYY" class="date-input">
-                        <span>to</span>
-                        <input type="text" id="dashboardEndDate" placeholder="DD/MM/YYYY" class="date-input">
-                        <button id="applyDateFilterBtn" class="btn btn-sm btn-primary">Go</button>
+                        <div class="input-field">
+                            <label for="dashboardStartDate">Start Date</label>
+                            <input type="text" id="dashboardStartDate" placeholder="DD/MM/YYYY">
+                        </div>
+                        <div class="input-field">
+                            <label for="dashboardEndDate">End Date</label>
+                            <input type="text" id="dashboardEndDate" placeholder="DD/MM/YYYY">
+                        </div>
                     </div>
-                    <div class="quick-filters">
-                        <button id="last30DaysBtn" class="chip">Last 30 Days</button>
-                        <button id="currentFyBtn" class="chip">Current FY</button>
-                        <button id="prevFyBtn" class="chip">Prev FY</button>
+                    <div class="quick-filter-buttons">
+                        <button class="btn btn-secondary" id="last30DaysBtn">Last 30 Days</button>
+                        <button class="btn btn-secondary" id="currentFyBtn">Current F.Y.</button>
+                        <button class="btn btn-secondary" id="prevFyBtn">Prev. F.Y.</button>
                     </div>
+                    <button class="btn btn-primary" id="applyDateFilterBtn">Apply Filter</button>
                 </div>
-
-                <div id="dashboardLoader" class="loader-container" style="display: none;">
-                    <div class="spinner"></div>
-                </div>
-                <div id="dashboardMessage" class="empty-state" style="display: none;"></div>
-
-                <div class="charts-grid">
-                    <div class="chart-card">
-                        <h3>Totals Breakdown</h3>
+                <div id="dashboardContent" class="dashboard-grid">
+                    <div class="chart-container">
+                        <h3>Principal vs. Interest (All Reports)</h3>
                         <canvas id="totalsPieChart"></canvas>
                     </div>
-                    <div class="chart-card">
-                        <h3>Principal Trend (Last 7 Reports)</h3>
+                    <div class="chart-container">
+                        <h3>Total Principal per Report (Last 7)</h3>
                         <canvas id="principalBarChart"></canvas>
                     </div>
                 </div>
+                 <div id="dashboardLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                 <p id="dashboardMessage" style="display: none;"></p>
             </div>
+        </div>
 
-            <div id="calculatorTab" class="tab-content active">
-                <div id="mainActionBar" class="action-bar">
-                    <div class="input-group-row">
-                        <div class="input-wrapper">
-                            <label>Date</label>
-                            <input type="text" id="todayDate" class="date-input-main" placeholder="DD/MM/YYYY">
-                        </div>
-                        <div class="input-wrapper">
-                            <label>Rate (%)</label>
-                            <input type="number" id="interestRate" class="rate-input-main" value="1.75" step="0.01">
-                        </div>
-                    </div>
-                    <div class="action-buttons">
-                        <button id="scanImageBtn" class="btn btn-primary">
-                            <i class="material-icons">camera_alt</i> Scan
-                        </button>
-                        <button id="saveBtn" class="btn btn-success">Save</button>
-                        <button id="exportPdfBtn" class="btn btn-secondary">PDF</button>
-                        <button id="clearSheetBtn" class="btn btn-danger">Clear</button>
-                    </div>
-                </div>
-
-                <div id="viewModeActionBar" class="action-bar warning-mode" style="display: none;">
-                    <span>Viewing Read-Only Report</span>
-                    <div class="view-buttons">
-                        <button id="exportViewPdfBtn" class="btn btn-secondary">PDF</button>
-                        <button id="exitViewModeBtn" class="btn btn-outline">Back</button>
-                    </div>
-                </div>
-
-                <div class="table-responsive">
-                    <table id="loanTable" class="calc-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 40px;">#</th>
-                                <th>Loan No</th>
-                                <th>Principal</th>
-                                <th>Date</th>
-                                <th>Days</th>
-                                <th>Interest</th>
-                                <th style="width: 50px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            </tbody>
-                    </table>
-                </div>
-
-                <button id="addRowBtn" class="btn btn-block btn-dashed">+ Add Row</button>
-
-                <div class="totals-section">
-                    <div class="total-row">
-                        <span>Total Principal:</span>
-                        <span id="totalPrincipal">0</span>
-                    </div>
-                    <div class="total-row">
-                        <span>Total Interest:</span>
-                        <span id="totalInterest">0</span>
-                    </div>
-                    <div class="total-row grand-total">
-                        <span>Final Amount:</span>
-                        <span id="finalTotal">0</span>
-                    </div>
-                </div>
-            </div>
-
-            <div id="recentTransactionsTab" class="tab-content">
-                <div class="search-bar">
-                    <input type="text" id="reportSearchInput" placeholder="Search saved reports...">
-                </div>
-                <div id="recentTransactionsLoader" class="loader-container" style="display: none;">
-                    <div class="spinner"></div>
-                </div>
-                <ul id="recentTransactionsList" class="report-list">
-                    </ul>
-            </div>
-
-            <div id="finalisedTransactionsTab" class="tab-content">
-                <div class="search-bar">
-                    <input type="text" id="finalisedReportSearchInput" placeholder="Search finalised reports...">
-                </div>
-                <div id="finalisedTransactionsLoader" class="loader-container" style="display: none;">
-                    <div class="spinner"></div>
-                </div>
-                <ul id="finalisedTransactionsList" class="report-list finalized">
-                    </ul>
-            </div>
-
-            <div id="loanSearchTab" class="tab-content">
-                <div class="search-header">
-                    <h2>Loan Number Availability Search</h2>
-                    <p class="subtitle">Check if a loan number exists in any finalised report.</p>
-                </div>
+        <div id="loanSearchTab" class="tab-content">
+            <div class="main-content">
+                <h2>Loan Number Availability Search</h2>
+                <p style="margin-top:-1rem; margin-bottom:1.5rem; color: var(--subtle-text-color);">Check if a loan number exists in any finalised report.</p>
 
                 <div class="search-filters">
-                    <button class="btn btn-sm active-filter" data-filter="all">All</button>
-                    <button class="btn btn-sm btn-success" data-filter="available">Available</button>
-                    <button class="btn btn-sm btn-warning" data-filter="not-available">Not Available</button>
+                    <button class="btn btn-secondary active-filter" data-filter="all">All</button>
+                    <button class="btn btn-success" data-filter="available">Available</button>
+                    <button class="btn btn-warning" data-filter="not-available">Not Available</button>
                 </div>
 
-                <div class="table-responsive">
-                    <table id="loanSearchTable" class="search-table">
+                <div class="table-container">
+                    <table id="loanSearchTable">
                         <thead>
                             <tr>
-                                <th style="width: 40px;">SL</th>
-                                <th style="width: 120px;">STATUS</th>
-                                <th>LOAN NO</th>
-                                <th>PRINCIPAL</th>
-                                <th>FINALISED DATE</th>
-                                <th style="width: 50px;"></th>
-                            </tr>
+                                <th>SL NO</th>
+                                <th>Status</th>
+                                <th>Loan No</th>
+                                <th>Principal</th>
+                                <th>Finalised Date</th>
+                                <th></th>
+                                </tr>
                         </thead>
-                        <tbody>
-                            </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
 
-                <div class="sheet-footer" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div class="sheet-actions" style="display: flex; gap: 10px;">
-                        <button id="downloadErasedBtn" class="btn btn-success" style="display: none;">Download Sorted List</button>
-                        <button id="addSearchRowBtn" class="btn btn-primary">Add Row</button>
-                        <button id="scanNumbersBtn" class="btn btn-primary">
-                             <i class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 5px;">camera_alt</i>
-                             Scan for Numbers
-                        </button>
-                        <button id="clearSearchSheetBtn" class="btn btn-danger">Clear Sheet</button>
-                    </div>
+                <div class="action-bar" id="searchActionBar">
+                    <!-- HARDCODED LINK INPUT (Hidden) -->
+                    <input type="hidden" id="publicSheetInput" 
+                           value="https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv">
                     
-                    <div id="sheetStatus" style="font-weight: 500;">
-                        <span class="initializing-text" style="color: #666;">Initializing sheet...</span>
-                    </div>
-                </div>
-            </div>
+                    <span id="sheetStatus" style="font-size: 0.8rem; color: var(--subtle-text-color); margin-right: auto; align-self: center;">
+                        Initializing sheet...
+                    </span>
 
-        </main>
+                    <!-- ORIGINAL BUTTON LAYOUT -->
+                    <button class="btn btn-primary" id="addSearchRowBtn">Add Row</button>
+                    <button class="btn btn-primary" id="scanNumbersBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
+                        Scan for Numbers
+                    </button>
+                    
+                    <!-- Download Button (Appears only after scan) -->
+                    <button class="btn btn-secondary" id="downloadErasedBtn" style="display:none;">Download List</button>
+                    
+                    <!-- Hidden Tools -->
+                    <canvas id="scanCanvas" style="display: none;"></canvas>
+                    <input type="file" id="numberImageUploadInput" accept="image/*" style="display: none;">
+                    <button class="btn btn-danger" id="clearSearchSheetBtn">Clear Sheet</button>
+                </div>
+                 <div id="loanSearchLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+            </div>
+        </div>
+
     </div>
 
     <div id="confirmModal" class="modal-overlay" style="display: none;">
-        <div class="modal-card">
-            <h3 id="confirmTitle">Confirm</h3>
+        <div class="modal-box">
+            <h2 id="confirmTitle">Confirmation</h2>
             <p id="confirmMessage">Are you sure?</p>
             <div class="modal-actions">
                 <button id="confirmCancelBtn" class="btn btn-secondary">Cancel</button>
-                <button id="confirmOkBtn" class="btn btn-primary">OK</button>
+                <button id="confirmOkBtn" class="btn btn-primary">Confirm</button>
             </div>
         </div>
     </div>
-
-    <input type="file" id="imageUploadInput" accept="image/*" style="display: none;">
-    <input type="file" id="numberImageUploadInput" accept="image/*" style="display: none;">
     
-    <input type="hidden" id="publicSheetInput">
-
-    <canvas id="scanCanvas" style="display: none;"></canvas>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-functions-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 
     <script src="script.js"></script>
 </body>
