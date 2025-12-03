@@ -1,19 +1,3 @@
-// --- FORCE RESET: DELETE OLD SERVICE WORKERS ---
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for(let registration of registrations) {
-            console.log('Unregistering stuck Service Worker:', registration);
-            registration.unregister(); // Deletes the stuck brain
-        }
-    });
-    // Force reload if we detect we are running the old version
-    if (!localStorage.getItem('force_reset_v1')) {
-        localStorage.setItem('force_reset_v1', 'true');
-        window.location.reload();
-    }
-}
-// -----------------------------------------------
-
 // ======================================================
 // INTEREST CALCULATOR PWA - FULL SCRIPT
 // Features: 360-Day Logic, AI OCR, Forensic Eraser, 
@@ -1288,22 +1272,9 @@ const renderDashboard = async () => {
 // --- Authentication ---
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    
-    // 1. Force Local Storage (Crucial for PWA)
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    .then(() => {
-        // 2. DETECT MOBILE
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
-        
-        if (isMobile) {
-            // MUST use Redirect on phones (Popup crashes PWAs)
-            return auth.signInWithRedirect(provider);
-        } else {
-            return auth.signInWithPopup(provider);
-        }
-    })
-    .catch(error => {
-        alert("Login Error: " + error.message);
+    auth.signInWithPopup(provider).catch(error => {
+        console.error("Google Sign-in failed: ", error);
+        showConfirm("Sign-In Failed", "Could not sign in with Google. Please ensure pop-ups are not blocked.", false);
     });
 };
 const signOut = () => auth.signOut();
