@@ -40,6 +40,25 @@ let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
+// Detect if running as an installed PWA / standalone app
+const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true; // iOS Safari
+
+auth.getRedirectResult()
+    .then(result => {
+        if (result && result.user) {
+            console.log("Signed in via redirect:", result.user);
+            // No need to manually set `user` here – onAuthStateChanged will fire as well.
+        }
+    })
+    .catch(error => {
+        if (error && error.code !== 'auth/no-auth-event') {
+            console.error("getRedirectResult error:", error);
+        }
+    });
+
+
 // --- GLOBALS FOR SCANNING & SHEETS ---
 let currentScanCoordinates = []; 
 let scanCanvas = null;           
@@ -1271,27 +1290,49 @@ const renderDashboard = async () => {
 
 // --- Authentication ---
 // UPDATED: Authentication with PWA Fixes
+// --- Authentication ---
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    
-    // 1. FORCE Local Persistence (Fixes PWA Session Loss)
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-        .then(() => {
-            // 2. Try Popup first (Better for Desktop/Android)
-            return auth.signInWithPopup(provider);
-        })
-        .catch(error => {
-            console.error("Login Error:", error);
-            
-            // 3. Fallback for strict mobile browsers (Optional, but helps if popup is blocked)
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-                 showConfirm("Login Notice", "Please ensure pop-ups are allowed for this site.", false);
-            } else {
-                 showConfirm("Sign-In Failed", error.message, false);
-            }
+
+    // In installed PWA / standalone mode (especially iOS): use redirect
+    if (isStandalone) {
+        auth.signInWithRedirect(provider).catch(error => {
+            console.error("Google Sign-in redirect failed: ", error);
+            showConfirm(
+                "Sign-In Failed",
+                "Could not sign in with Google in app mode. Please try again.",
+                false
+            );
         });
+        return;
+    }
+
+    // In normal browser: try popup first, fall back to redirect if environment doesn't support popups
+    auth.signInWithPopup(provider).catch(error => {
+        console.error("Google Sign-in popup failed: ", error);
+
+        if (error && error.code === 'auth/operation-not-supported-in-this-environment') {
+            // Fallback for weird environments
+            auth.signInWithRedirect(provider).catch(err2 => {
+                console.error("Google Sign-in redirect fallback failed: ", err2);
+                showConfirm(
+                    "Sign-In Failed",
+                    "Could not sign in with Google. Please try again.",
+                    false
+                );
+            });
+        } else {
+            showConfirm(
+                "Sign-In Failed",
+                "Could not sign in with Google. Please ensure pop-ups are not blocked.",
+                false
+            );
+        }
+    });
 };
+
 const signOut = () => auth.signOut();
+
 
 // --- Real-time Functions ---
 const updateLiveState = () => {
