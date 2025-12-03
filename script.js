@@ -1270,12 +1270,26 @@ const renderDashboard = async () => {
 };
 
 // --- Authentication ---
+// UPDATED: Authentication with PWA Fixes
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(error => {
-        console.error("Google Sign-in failed: ", error);
-        showConfirm("Sign-In Failed", "Could not sign in with Google. Please ensure pop-ups are not blocked.", false);
-    });
+    
+    // 1. FORCE Local Persistence (Fixes PWA Session Loss)
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .then(() => {
+            // 2. Try Popup first (Better for Desktop/Android)
+            return auth.signInWithPopup(provider);
+        })
+        .catch(error => {
+            console.error("Login Error:", error);
+            
+            // 3. Fallback for strict mobile browsers (Optional, but helps if popup is blocked)
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+                 showConfirm("Login Notice", "Please ensure pop-ups are allowed for this site.", false);
+            } else {
+                 showConfirm("Sign-In Failed", error.message, false);
+            }
+        });
 };
 const signOut = () => auth.signOut();
 
