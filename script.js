@@ -25,7 +25,7 @@ const firebaseConfig = {
 };
 // --- CONFIGURATION ---
 // PASTE YOUR GOOGLE SHEET CSV LINK HERE
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/1WPBX5uYqgd_zk6b06o7JH9r2G4-_w_kmQIt3aTnFvH0/edit?gid=0#gid=0";
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv";
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -1498,10 +1498,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 1. DATA FETCHER (Updated: Hardcoded Link + UI Fix)
 // 1. DATA FETCHER (Robust CSV Parser - Fixes Partial Loading)
 // 1. DATA FETCHER (Robust CSV Parser)
+// 1. DATA FETCHER (Updated with HTML Detection Guard)
 const fetchSheetData = async () => {
     const url = SHEET_URL; 
 
-    if (!url) {
+    if (!url || url.includes("PASTE_YOUR_NEW")) {
         console.warn("No Sheet URL configured.");
         return false;
     }
@@ -1513,7 +1514,7 @@ const fetchSheetData = async () => {
     const statusEl = document.querySelector('.initializing-text') || document.getElementById('sheetStatus');
 
     if(statusEl) {
-        statusEl.textContent = "⏳ Downloading 700+ records...";
+        statusEl.textContent = "⏳ Connecting to Sheet...";
         statusEl.style.color = "#d35400";
     }
 
@@ -1521,20 +1522,21 @@ const fetchSheetData = async () => {
         const response = await fetch(uniqueUrl);
         if (!response.ok) throw new Error("Connection Failed");
         const text = await response.text();
+
+        // 🛑 CRITICAL CHECK: Did we get a Website instead of Data?
+        if (text.trim().startsWith("<!DOCTYPE html") || text.includes("<html")) {
+            throw new Error("Wrong Link Type! You are using an '/edit' link. Please use 'File > Share > Publish to web > CSV'.");
+        }
         
-        // --- USE THE NEW PARSER HERE ---
+        // Use the Robust Parser
         const rows = parseCSV(text); 
         
         sheetDetailsCache.clear();
         
         rows.forEach(cols => {
-            // We expect at least 2 columns: [LoanNo, Detail]
             if (cols.length >= 2) {
                 const rawNo = cols[0].trim(); 
                 const cleanNo = normalizeLoanNo(rawNo); 
-                
-                // If there are multiple detail columns, join them or take the first valid one
-                // Assuming Col 2 is the detail (G/S/?)
                 const details = cols[1].trim(); 
                 
                 if (cleanNo && details) {
@@ -1554,9 +1556,12 @@ const fetchSheetData = async () => {
     } catch (error) {
         console.error("Sheet Error:", error);
         if(statusEl) {
-            statusEl.textContent = "❌ Sheet Error";
+            // Show the specific error message to the user
+            statusEl.textContent = `❌ ${error.message}`;
             statusEl.style.color = "red";
+            statusEl.style.fontSize = "12px"; // Make it readable
         }
+        showConfirm("Sheet Error", error.message, false); // Alert the user via modal
         return false;
     }
 };
