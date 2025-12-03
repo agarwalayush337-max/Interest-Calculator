@@ -26,17 +26,21 @@ exports.handler = async function(event) {
     
     let promptText;
     if (scanType === 'loan_numbers') {
-        // PROMPT: Extracts "no" with strict formatting rules AND "box" for the whole line
-        promptText = `From the provided image, identify all loan lines. 
-        Return a raw JSON array of objects. Each object must have two fields:
+        promptText = `
+        Analyze this handwritten list of loans. The format is usually "Number - Amount - Date".
+        Return a raw JSON array of objects. Each object must have 4 fields:
         
         1. "no": Extract the loan number.
            - Replace '1' with '/' if a 4-digit number starts with 1 (e.g., A153 -> A/53).
            - Ensure there is a '/' between the letter and number (e.g., B766 -> B/766).
-           - Replace any '.', ' ', or '-' with '/' (e.g., b.579 -> b/579, d.81 -> d/81)
+           - Replace any '.', ' ', or '-' with '/' (e.g., b.579 -> b/579, d.81 -> d/81).
            - Transcription must be perfect.
+        
+        2. "principal": Extract the amount (e.g., "15000", "25000"). Digits only.
+        
+        3. "date": Extract the date (e.g., "24/06/23"). Format as DD/MM/YYYY.
 
-        2. "box": An array of 4 integers [ymin, xmin, ymax, xmax] on a scale of 0 to 1000. 
+        4. "box": An array of 4 integers [ymin, xmin, ymax, xmax] on a scale of 0 to 1000. 
            - IMPORTANT: The box must cover the ENTIRE WIDTH of the row (Number + Principal + Date).
 
         Do not include markdown formatting. Just the JSON.`;
