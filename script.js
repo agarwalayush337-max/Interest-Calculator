@@ -1002,6 +1002,7 @@ const renumberSearchRows = () => {
 };
 
 // Updated: Shows Sheet Detail (G/S/?) inside the Status Column
+// UPDATED: UI COLORS (G=Yellow, S=Black)
 const performLoanSearch = (inputElement) => {
     if (!inputElement) return;
     
@@ -1021,7 +1022,7 @@ const performLoanSearch = (inputElement) => {
 
     const normalizedKey = normalizeLoanNo(userInput);
 
-    // Check if it's in the Finalised Database ("Not Available")
+    // 1. Check Finalised Reports
     if (loanSearchCache.has(normalizedKey)) {
         const data = loanSearchCache.get(normalizedKey);
         principalCell.textContent = data.principal;
@@ -1033,21 +1034,20 @@ const performLoanSearch = (inputElement) => {
                 View
             </button>`;
     } else {
-        // It is AVAILABLE. Now check for Annotation (G/S) from Sheet Cache
+        // 2. Check Available Sheet Data
         statusCell.classList.add('status-available');
         
         let annotationHtml = '';
         if (sheetDetailsCache.has(normalizedKey)) {
             const detail = sheetDetailsCache.get(normalizedKey);
-            // Color coding for the badge
-            let badgeClass = 'badge-default'; // You can add CSS for this later if you want specific colors
-            let colorStyle = '#333';
-            if(detail === 'G') colorStyle = '#27ae60'; // Green
-            if(detail === 'S') colorStyle = '#2980b9'; // Blue
             
-            annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:${colorStyle};">[${detail}]</span>`;
+            // COLOR LOGIC FOR APP UI
+            let colorStyle = '#333';
+            if(detail === 'G') colorStyle = '#f1c40f'; // Yellow
+            if(detail === 'S') colorStyle = '#000000'; // Black
+            
+            annotationHtml = `<span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${detail}]</span>`;
         } else {
-            // Optional: Show [?] if not found in sheet
             annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:#e74c3c;">[?]</span>`;
         }
 
@@ -1611,19 +1611,20 @@ function parseCSV(text) {
 
 // 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
 // UPDATED: GENERATE SORTED IMAGE (Fixes: No Blue Header, Right-Align Amount, No Cut-off)
+// UPDATED: GENERATE SORTED IMAGE
+// Fixes: Share on Mobile Only, No Cut-off, New Header Format, Yellow/Black Colors
 const generateSortedImage = () => {
-    // 1. Get fresh data from the table (handles manual edits)
+    // 1. Get fresh data
     const loanList = getAvailableLoansFromTable();
 
     if (!loanList || loanList.length === 0) {
-        showConfirm("Error", "No available loans found in the table to generate list.", false);
+        showConfirm("Error", "No available loans found.", false);
         return;
     }
 
     // A. Categorize and Sort
     const processedList = loanList.map(item => {
         const detail = sheetDetailsCache.get(item.no) || "?";
-        // Ensure principal is a string for rendering
         const principalStr = item.principal ? String(item.principal) : '-';
         return { 
             no: item.no, 
@@ -1633,7 +1634,6 @@ const generateSortedImage = () => {
         };
     });
 
-    // Sort: 1. Detail (G/S), 2. Loan Number
     processedList.sort((a, b) => {
         if (a.detail < b.detail) return -1;
         if (a.detail > b.detail) return 1;
@@ -1646,106 +1646,123 @@ const generateSortedImage = () => {
     
     // Layout Config
     const rowHeight = 50;
-    const headerHeight = 80;
-    const padding = 60; // INCREASED PADDING to stop bottom cut-off
+    const headerHeight = 60; // Reduced height (just for column headers)
+    const padding = 150; // HUGE padding to prevent bottom cut-off
     
-    reportCanvas.width = 700;
+    reportCanvas.width = 900;
     reportCanvas.height = headerHeight + (processedList.length * rowHeight) + padding;
 
     // C. Draw White Background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, reportCanvas.width, reportCanvas.height);
 
-    // D. Draw Main Header (Plain White style)
-    // Removed blue fillRect
-    ctx.fillStyle = "#333333"; // Dark text instead of white
-    ctx.font = "bold 32px sans-serif";
-    ctx.textBaseline = "middle";
-    ctx.fillText("Sorted Loan List", 30, headerHeight/2);
-    
-    const dateStr = new Date().toLocaleDateString('en-GB');
-    ctx.font = "20px sans-serif";
-    ctx.fillText(dateStr, reportCanvas.width - 150, headerHeight/2);
+    // D. Draw Column Headers (NO TITLE, JUST COLUMNS)
+    // Columns: SL NO | NO | AMOUNT | DATE | DETAIL
+    let y = 40;
+    const colX = { sl: 30, no: 130, amt: 450, date: 550, det: 800 };
 
-    // E. Draw Column Headers
-    let y = headerHeight;
-    // Define X coordinates (amt is now the RIGHT edge of the column)
-    const colX = { no: 50, amt: 380, det: 550 };
+    // Header Background Strip
+    ctx.fillStyle = "#f1f3f5";
+    ctx.fillRect(0, 0, reportCanvas.width, headerHeight);
 
-    ctx.fillStyle = "#666";
-    ctx.font = "bold 18px sans-serif";
-    ctx.fillText("LOAN NO", colX.no, y);
+    // Header Text
+    ctx.fillStyle = "#000";
+    ctx.font = "bold 20px sans-serif";
+    ctx.textAlign = "left";
     
-    ctx.textAlign = "right"; // Right align header too
+    ctx.fillText("SL NO", colX.sl, y);
+    ctx.fillText("NO", colX.no, y);
+    
+    ctx.textAlign = "right"; // Align Amount Right
     ctx.fillText("AMOUNT", colX.amt, y);
-    ctx.textAlign = "left"; // Reset
+    ctx.textAlign = "left";  // Reset
     
+    ctx.fillText("DATE", colX.date, y);
     ctx.fillText("DETAIL", colX.det, y);
     
-    // Thick header line
+    // Header Line
     ctx.beginPath();
-    ctx.moveTo(20, y + 15);
-    ctx.lineTo(reportCanvas.width - 20, y + 15);
+    ctx.moveTo(0, headerHeight);
+    ctx.lineTo(reportCanvas.width, headerHeight);
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#333";
     ctx.stroke();
 
-
-    // F. Draw Rows
-    y += 40;
+    // E. Draw Rows
+    y = headerHeight + 40;
     let currentCategory = null;
+    let slCounter = 1;
 
     processedList.forEach(item => {
-        // Category Header
+        // Draw Category Header if changed
         if (item.detail !== currentCategory) {
             currentCategory = item.detail;
-            y += 10; // Space before category
-            ctx.fillStyle = "#666";
+            
+            // Category Divider
+            ctx.fillStyle = "#e9ecef";
+            ctx.fillRect(0, y - 30, reportCanvas.width, 35);
+            
+            ctx.fillStyle = "#000";
             ctx.font = "bold 18px sans-serif";
-            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y);
-            y += 30; // Space after category
+            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 6);
+            
+            y += 20; 
         }
 
         // Row Content
-        ctx.font = "28px sans-serif";
+        ctx.font = "26px sans-serif";
         ctx.fillStyle = "#000000";
-        ctx.textAlign = "left";
+        
+        // SL NO
+        ctx.fillText(slCounter++, colX.sl, y);
+        
+        // LOAN NO
         ctx.fillText(item.no, colX.no, y);
 
         // AMOUNT (Right Aligned)
         ctx.textAlign = "right";
         ctx.fillText(item.principal, colX.amt, y);
-        ctx.textAlign = "left"; // Reset
+        ctx.textAlign = "left"; 
 
-        // Detail Badge
+        // DATE
+        ctx.fillText(item.date, colX.date, y);
+
+        // DETAIL COLOR LOGIC (Yellow & Black)
         let badgeColor = "#333";
-        if (item.detail === "G") badgeColor = "#27ae60";
-        else if (item.detail === "S") badgeColor = "#2980b9";
-        else if (item.detail === "?") badgeColor = "#e74c3c";
+        if (item.detail === "G") badgeColor = "#d4ac0d"; // Darker Yellow (Readable on white)
+        else if (item.detail === "S") badgeColor = "#000000"; // Black
+        else if (item.detail === "?") badgeColor = "#e74c3c"; // Red
 
         ctx.fillStyle = badgeColor;
         ctx.font = "bold 28px sans-serif";
         ctx.fillText(item.detail, colX.det, y);
 
-        // Light divider
+        // Divider
         ctx.strokeStyle = "#eee";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(40, y + 15);
-        ctx.lineTo(660, y + 15);
+        ctx.moveTo(20, y + 15);
+        ctx.lineTo(880, y + 15);
         ctx.stroke();
 
         y += rowHeight;
     });
 
-    // G. Download Logic
+    // F. Mobile Share vs PC Download
     reportCanvas.toBlob((blob) => {
         const fileName = `Sorted_List_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: 'image/png' });
         
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file], title: 'Sorted List' }).catch(console.error);
+        // Strict Mobile Detection
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({
+                files: [file],
+                title: 'Sorted List'
+            }).catch(console.error);
         } else {
+            // PC: Force Download
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = fileName;
