@@ -1610,55 +1610,58 @@ function parseCSV(text) {
 }
 
 // 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
-const generateSortedImage = (loanList) => {
+// UPDATED: GENERATE SORTED IMAGE (Fixes: No Blue Header, Right-Align Amount, No Cut-off)
+const generateSortedImage = () => {
+    // 1. Get fresh data from the table (handles manual edits)
+    const loanList = getAvailableLoansFromTable();
+
     if (!loanList || loanList.length === 0) {
-        showConfirm("Error", "No available loans to generate list.", false);
+        showConfirm("Error", "No available loans found in the table to generate list.", false);
         return;
     }
 
     // A. Categorize and Sort
     const processedList = loanList.map(item => {
-        // Get detail or default to "?"
         const detail = sheetDetailsCache.get(item.no) || "?";
+        // Ensure principal is a string for rendering
+        const principalStr = item.principal ? String(item.principal) : '-';
         return { 
             no: item.no, 
-            principal: item.principal || '-', 
+            principal: principalStr, 
             date: item.date || '-', 
             detail: detail 
         };
     });
 
-    // Sort Logic: 1. Detail (G/S), 2. Loan Number
+    // Sort: 1. Detail (G/S), 2. Loan Number
     processedList.sort((a, b) => {
         if (a.detail < b.detail) return -1;
         if (a.detail > b.detail) return 1;
         return a.no.localeCompare(b.no, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    // B. Create Canvas (Wider for 4 columns)
+    // B. Create Canvas
     const reportCanvas = document.createElement('canvas');
     const ctx = reportCanvas.getContext('2d');
     
     // Layout Config
     const rowHeight = 50;
     const headerHeight = 80;
-    const subHeaderHeight = 40; 
-    const padding = 20;
+    const padding = 60; // INCREASED PADDING to stop bottom cut-off
     
-    reportCanvas.width = 900; 
-    reportCanvas.height = headerHeight + subHeaderHeight + (processedList.length * rowHeight) + padding;
+    reportCanvas.width = 700;
+    reportCanvas.height = headerHeight + (processedList.length * rowHeight) + padding;
 
     // C. Draw White Background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, reportCanvas.width, reportCanvas.height);
 
-    // D. Draw Main Header
-    ctx.fillStyle = "#3D52D5"; 
-    ctx.fillRect(0, 0, reportCanvas.width, headerHeight);
-    ctx.fillStyle = "#ffffff";
+    // D. Draw Main Header (Plain White style)
+    // Removed blue fillRect
+    ctx.fillStyle = "#333333"; // Dark text instead of white
     ctx.font = "bold 32px sans-serif";
     ctx.textBaseline = "middle";
-    ctx.fillText("Loan Search Report", 30, headerHeight/2);
+    ctx.fillText("Sorted Loan List", 30, headerHeight/2);
     
     const dateStr = new Date().toLocaleDateString('en-GB');
     ctx.font = "20px sans-serif";
@@ -1666,93 +1669,83 @@ const generateSortedImage = (loanList) => {
 
     // E. Draw Column Headers
     let y = headerHeight;
-    ctx.fillStyle = "#e9ecef"; 
-    ctx.fillRect(0, y, reportCanvas.width, subHeaderHeight);
-    
-    ctx.fillStyle = "#495057";
+    // Define X coordinates (amt is now the RIGHT edge of the column)
+    const colX = { no: 50, amt: 380, det: 550 };
+
+    ctx.fillStyle = "#666";
     ctx.font = "bold 18px sans-serif";
+    ctx.fillText("LOAN NO", colX.no, y);
     
-    // Column Positions
-    const colX = { no: 50, amt: 300, date: 550, det: 780 };
+    ctx.textAlign = "right"; // Right align header too
+    ctx.fillText("AMOUNT", colX.amt, y);
+    ctx.textAlign = "left"; // Reset
     
-    ctx.fillText("LOAN NO", colX.no, y + 25);
-    ctx.fillText("AMOUNT", colX.amt, y + 25);
-    ctx.fillText("DATE", colX.date, y + 25);
-    ctx.fillText("DETAIL", colX.det, y + 25);
+    ctx.fillText("DETAIL", colX.det, y);
+    
+    // Thick header line
+    ctx.beginPath();
+    ctx.moveTo(20, y + 15);
+    ctx.lineTo(reportCanvas.width - 20, y + 15);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#333";
+    ctx.stroke();
+
 
     // F. Draw Rows
-    y += subHeaderHeight + 35;
+    y += 40;
     let currentCategory = null;
 
     processedList.forEach(item => {
-        // Draw Category Header if changed
+        // Category Header
         if (item.detail !== currentCategory) {
             currentCategory = item.detail;
-            
-            ctx.fillStyle = "#f1f3f5";
-            ctx.fillRect(0, y - 30, reportCanvas.width, 35);
-            
-            ctx.fillStyle = "#333";
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 8);
-            
-            y += 20; 
+            y += 10; // Space before category
+            ctx.fillStyle = "#666";
+            ctx.font = "bold 18px sans-serif";
+            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y);
+            y += 30; // Space after category
         }
 
         // Row Content
+        ctx.font = "28px sans-serif";
         ctx.fillStyle = "#000000";
-        ctx.font = "24px sans-serif";
-        
+        ctx.textAlign = "left";
         ctx.fillText(item.no, colX.no, y);
+
+        // AMOUNT (Right Aligned)
+        ctx.textAlign = "right";
         ctx.fillText(item.principal, colX.amt, y);
-        ctx.fillText(item.date, colX.date, y);
+        ctx.textAlign = "left"; // Reset
 
         // Detail Badge
         let badgeColor = "#333";
-        if (item.detail === "G") badgeColor = "#27ae60"; 
-        else if (item.detail === "S") badgeColor = "#2980b9"; 
-        else if (item.detail === "?") badgeColor = "#e74c3c"; 
+        if (item.detail === "G") badgeColor = "#27ae60";
+        else if (item.detail === "S") badgeColor = "#2980b9";
+        else if (item.detail === "?") badgeColor = "#e74c3c";
 
         ctx.fillStyle = badgeColor;
-        ctx.font = "bold 24px sans-serif";
+        ctx.font = "bold 28px sans-serif";
         ctx.fillText(item.detail, colX.det, y);
 
-        // Divider
+        // Light divider
         ctx.strokeStyle = "#eee";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(40, y + 15);
-        ctx.lineTo(860, y + 15);
+        ctx.lineTo(660, y + 15);
         ctx.stroke();
 
         y += rowHeight;
     });
 
-    // G. Download Logic (Strict PC vs Mobile)
+    // G. Download Logic
     reportCanvas.toBlob((blob) => {
-        const fileName = `Loan_List_${Date.now()}.png`;
+        const fileName = `Sorted_List_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: 'image/png' });
         
-        // Mobile Detect
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        // Mobile: Share
-        if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({
-                files: [file],
-                title: 'Sorted Loan List',
-                text: 'Here is the scanned loan list.'
-            }).catch((error) => {
-                console.error('Share failed', error);
-                // Fallback
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = fileName;
-                link.click();
-            });
-        } 
-        // PC: Download
-        else {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file], title: 'Sorted List' }).catch(console.error);
+        } else {
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = fileName;
@@ -1762,16 +1755,37 @@ const generateSortedImage = (loanList) => {
         }
     });
 };
-
 // 3. MAIN SCANNER (UPDATED: Captures Full Data)
 // Updated: Passes hidden amount/date to addSearchRow
+// NEW HELPER: Reads the current state of the table (handles manual edits)
+const getAvailableLoansFromTable = () => {
+    const availableLoans = [];
+    const rows = document.querySelectorAll('#loanSearchTable tbody tr');
+    
+    rows.forEach(row => {
+        const statusCell = row.querySelector('.status-cell');
+        const input = row.querySelector('.search-no');
+        
+        // Only grab rows marked as "Available"
+        if (statusCell && statusCell.classList.contains('status-available') && input.value.trim()) {
+            const normalizedKey = normalizeLoanNo(input.value.trim().toUpperCase());
+            // Use stored scan data if it exists, otherwise default
+            const storedData = row.scanData || { principal: '-', date: '-' };
+            
+            availableLoans.push({ 
+                no: normalizedKey,
+                principal: storedData.principal,
+                date: storedData.date
+            });
+        }
+    });
+    return availableLoans;
+};
+
+// UPDATED: MAIN SCANNER (Uses new download logic)
 const fillSearchTableFromScan = async (loanData) => {
     
-    // A. Ensure Data is Loaded
-    if (sheetDetailsCache.size === 0) {
-        await fetchSheetData();
-    }
-
+    if (sheetDetailsCache.size === 0) await fetchSheetData();
     buildLoanSearchCache(); 
 
     if (!loanData || loanData.length === 0) {
@@ -1779,15 +1793,12 @@ const fillSearchTableFromScan = async (loanData) => {
         return;
     }
 
-    // Clear empty rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
         if (!input.value.trim()) input.closest('tr').remove();
     });
 
-    // Helper for clean date
     const cleanDate = (d) => d ? d.replace(/-/g, '/') : '-';
 
-    // Add rows with EXTRA DATA (Hidden in UI, stored in memory)
     loanData.forEach(item => {
         const extraData = {
             principal: item.principal ? String(item.principal) : '-',
@@ -1796,48 +1807,35 @@ const fillSearchTableFromScan = async (loanData) => {
         addSearchRow(item.no, item.box, extraData);
     });
 
-    // Process & Collect
+    // Process & Erase
     const inputs = document.querySelectorAll('#loanSearchTable .search-no');
     let erasedCount = 0;
-    let availableLoans = []; 
+    let foundAvailable = false;
 
     inputs.forEach((input) => {
-        const rawValue = input.value;
-        const normalizedKey = normalizeLoanNo(rawValue);
-        
-        // This will now trigger the Annotation logic in performLoanSearch
         performLoanSearch(input); 
-
         const row = input.closest('tr');
         const statusCell = row.querySelector('.status-cell');
         
-        // Erase Not Available
-        if (statusCell && statusCell.classList.contains('status-not-available')) {
+        if (statusCell.classList.contains('status-not-available')) {
             if (row.eraseBox) {
                 eraseRegion(row.eraseBox);
                 erasedCount++;
             }
-        }
-        // Collect Available (Fetch the HIDDEN scanData)
-        else if (statusCell && statusCell.classList.contains('status-available')) {
-            const storedData = row.scanData || { principal: '-', date: '-' };
-            availableLoans.push({ 
-                no: normalizedKey,
-                principal: storedData.principal,
-                date: storedData.date
-            });
+        } else if (statusCell.classList.contains('status-available')) {
+            foundAvailable = true;
         }
     });
 
     renumberSearchRows();
     
-    // Setup Download Button
+    // Setup Download Button (Points to new generation function)
     const dlBtn = document.getElementById('downloadErasedBtn');
     if(dlBtn) {
-        if (availableLoans.length > 0) {
+        if (foundAvailable) {
             dlBtn.style.display = 'inline-flex';
-            dlBtn.textContent = "Download Sorted List";
-            dlBtn.onclick = () => generateSortedImage(availableLoans);
+            // IMPORTANT: Call the function directly, don't pass old list
+            dlBtn.onclick = generateSortedImage; 
         } else {
             dlBtn.style.display = 'none';
         }
