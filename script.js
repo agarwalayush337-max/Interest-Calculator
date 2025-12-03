@@ -1496,22 +1496,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 1. DATA FETCHER
 // 1. DATA FETCHER (Updated: Uses Hardcoded SHEET_URL)
 // 1. DATA FETCHER (Updated: Hardcoded Link + UI Fix)
+// 1. DATA FETCHER (Robust CSV Parser - Fixes Partial Loading)
 const fetchSheetData = async () => {
-    const url = SHEET_URL; // Uses the constant from the top
+    const url = SHEET_URL; 
 
-    if (!url || url.includes("Paste_Link_Here")) {
+    if (!url) {
         console.warn("No Sheet URL configured.");
         return false;
     }
 
-    // Add timestamp to prevent caching old data
+    // Timestamp to prevent caching
     const uniqueUrl = url + `&t=${Date.now()}`;
     
-    // Attempt to find the status element (handling different ID possibilities)
-    const statusEl = document.getElementById('sheetStatus') || document.querySelector('.initializing-text') || document.querySelector('div[style*="color: #666"]'); 
+    // Status UI
+    const statusEl = document.querySelector('.initializing-text') || document.getElementById('sheetStatus');
 
     if(statusEl) {
-        statusEl.textContent = "⏳ Updating details...";
+        statusEl.textContent = "⏳ Downloading 700+ records...";
         statusEl.style.color = "#d35400";
     }
 
@@ -1520,16 +1521,20 @@ const fetchSheetData = async () => {
         if (!response.ok) throw new Error("Connection Failed");
         const text = await response.text();
         
-        const rows = text.split('\n');
+        // --- NEW: ROBUST PARSER (Handles newlines inside cells) ---
+        const rows = parseCSV(text); 
+        
         sheetDetailsCache.clear();
         
-        rows.forEach(row => {
-            // Robust CSV parsing (handles quotes)
-            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+        rows.forEach(cols => {
+            // We expect at least 2 columns: [LoanNo, Detail]
             if (cols.length >= 2) {
-                const rawNo = cols[0].replace(/^"|"$/g, '').trim(); 
+                const rawNo = cols[0].trim(); 
                 const cleanNo = normalizeLoanNo(rawNo); 
-                const details = cols.slice(1).join(',').replace(/^"|"$/g, '').trim();
+                
+                // If there are multiple detail columns, join them or take the first valid one
+                // Assuming Col 2 is the detail (G/S/?)
+                const details = cols[1].trim(); 
                 
                 if (cleanNo && details) {
                     sheetDetailsCache.set(cleanNo, details);
@@ -1539,7 +1544,6 @@ const fetchSheetData = async () => {
 
         console.log(`Loaded ${sheetDetailsCache.size} details.`);
         
-        // Update the UI to show success
         if(statusEl) {
             statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
             statusEl.style.color = "green";
@@ -1549,12 +1553,55 @@ const fetchSheetData = async () => {
     } catch (error) {
         console.error("Sheet Error:", error);
         if(statusEl) {
-            statusEl.textContent = "❌ Sheet Connection Failed";
+            statusEl.textContent = "❌ Sheet Error";
             statusEl.style.color = "red";
         }
         return false;
     }
 };
+
+// --- HELPER: ROBUST CSV PARSER ---
+// Add this function directly below fetchSheetData
+function parseCSV(text) {
+    const rows = [];
+    let currentRow = [];
+    let currentCell = '';
+    let insideQuotes = false;
+    
+    // Iterate character by character
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+        
+        if (char === '"') {
+            if (insideQuotes && nextChar === '"') {
+                currentCell += '"'; // Handle escaped quote ("")
+                i++; // Skip the next quote
+            } else {
+                insideQuotes = !insideQuotes; // Toggle quote state
+            }
+        } else if (char === ',' && !insideQuotes) {
+            // End of cell
+            currentRow.push(currentCell);
+            currentCell = '';
+        } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+            // End of row (Handle CRLF or LF)
+            if (char === '\r' && nextChar === '\n') i++;
+            currentRow.push(currentCell);
+            if (currentRow.length > 0) rows.push(currentRow); // Add row
+            currentRow = [];
+            currentCell = '';
+        } else {
+            currentCell += char;
+        }
+    }
+    // Push the very last row if exists
+    if (currentCell || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+    }
+    return rows;
+}
 // 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
 const generateSortedImage = (loanList) => {
     if (!loanList || loanList.length === 0) {
