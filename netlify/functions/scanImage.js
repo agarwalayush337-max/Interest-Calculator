@@ -54,7 +54,7 @@ exports.handler = async function(event) {
         4. "box": An array of 4 integers [ymin, xmin, ymax, xmax] on a scale of 0 to 1000. 
            - IMPORTANT: The box must cover the ENTIRE WIDTH of the row (Number + Principal + Date).
 
-        Do not include markdown formatting. Just the JSON.`;
+        Return strictly raw JSON.`;
     } else {
         // ... existing calculator prompt ...
         promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 4-digit numbers starting with it (A1666->A/666) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." 
