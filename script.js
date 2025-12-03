@@ -1,5 +1,10 @@
-// --- At the top of the file, BEFORE any other code ---
-// Register the Service Worker
+// ======================================================
+// INTEREST CALCULATOR PWA - FULL SCRIPT
+// Features: 360-Day Logic, AI OCR, Forensic Eraser, 
+// Sorted List Gen (Mobile/PC Smart Export)
+// ======================================================
+
+// --- 1. SERVICE WORKER & CONFIG ---
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
         .then(registration => {
@@ -10,7 +15,6 @@ if ('serviceWorker' in navigator) {
         });
 }
 
-// --- Firebase Configuration ---
 const firebaseConfig = {
     apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
     authDomain: "interest-calculator-8d997.firebaseapp.com",
@@ -19,7 +23,9 @@ const firebaseConfig = {
     messagingSenderId: "187925519090",
     appId: "1:187925519090:web:c875d2fb788d02b5bf4e6b"
 };
-
+// --- CONFIGURATION ---
+// PASTE YOUR GOOGLE SHEET CSV LINK HERE
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv";
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -33,6 +39,12 @@ let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
+
+// --- GLOBALS FOR SCANNING & SHEETS ---
+let currentScanCoordinates = []; 
+let scanCanvas = null;           
+let scanCtx = null;              
+let sheetDetailsCache = new Map(); // Stores Sheet Data
 
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
@@ -277,22 +289,33 @@ const cleanAndSortTable = () => {
     renumberRows();
 };
 
-// --- Image Scanning ---
+// --- Image Scanning (Calculator Tab) ---
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
         return;
     }
+    
     const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
         !r.querySelector('.principal').value && !r.querySelector('.no').value
     );
+    
     let emptyRowIndex = 0;
+    
     loans.forEach((loan) => {
+        // Formatting: B.673 -> B/673
+        let cleanNo = String(loan.no).toUpperCase();
+        cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]+(\d)/g, '$1/$2');
+        if (/^[A-Z]\d+$/.test(cleanNo)) {
+             cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
+        }
+
         const formattedLoan = {
-            no: loan.no,
+            no: cleanNo,
             principal: String(loan.principal).replace(/,/g, ''),
             date: formatDateToDDMMYYYY(parseDate(loan.date))
         };
+        
         if (emptyRowIndex < emptyRows.length) {
             const targetRow = emptyRows[emptyRowIndex];
             targetRow.querySelector('.no').value = formattedLoan.no;
@@ -303,6 +326,7 @@ const fillTableFromScan = (loans) => {
             addRow(formattedLoan);
         }
     });
+    
     updateAllCalculations();
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
@@ -389,7 +413,6 @@ const showTab = (tabId) => {
     }
 };
 
-// --- New helper function to reset the calculator state ---
 const resetCalculatorState = () => {
     if (!user) return;
     const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
@@ -472,35 +495,21 @@ const generatePDF = async (action = 'save') => {
     const fileName = `Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`;
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-    // First, check if the browser supports the Web Share API for files
     if (isMobile && navigator.share && navigator.canShare) {
-        // Convert the jsPDF document into a blob, then a File object
         const pdfBlob = doc.output('blob');
         const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-        // Check if the browser can share this specific file
         if (navigator.canShare({ files: [pdfFile] })) {
             try {
-                // Open the native share dialog with only the file
-                await navigator.share({
-                    files: [pdfFile]
-                });
-                // The return statement exits the function so the fallback code doesn't run
+                await navigator.share({ files: [pdfFile] });
                 return; 
-            } catch (error) {
-                console.error('Share API failed:', error);
-                // If sharing fails (e.g., user cancels), we'll proceed to the fallback.
-            }
+            } catch (error) { console.error('Share API failed:', error); }
         }
     }
 
-    // --- FALLBACK LOGIC ---
-    // This code runs if the Share API isn't supported or fails.
     if (action === 'print' && !isMobile) {
         doc.autoPrint();
         doc.output('dataurlnewwindow');
     } else {
-        // Standard download for desktops or older mobile browsers
         doc.save(fileName);
     }
 };
@@ -552,9 +561,6 @@ const saveReport = async (silent = false) => {
         if (navigator.onLine && reportsCollection) {
             try {
                 await reportsCollection.doc(currentlyEditingReportId).update(report);
-                if (!silent) {
-                    // Success message is part of the confirmation to clear
-                }
                 success = true;
             } catch (error) {
                 console.error("Error updating report:", error);
@@ -579,9 +585,6 @@ const saveReport = async (silent = false) => {
             try {
                 report.isDeleted = false;
                 await reportsCollection.add(report);
-                if (!silent) {
-                    // Success message is part of the confirmation to clear
-                }
                 success = true;
             } catch (error) { console.error("Error saving online:", error); }
         } else {
@@ -598,7 +601,6 @@ const saveReport = async (silent = false) => {
     
     if (success) {
         loadRecentTransactions();
-
         let shouldClear = false;
         if (silent) {
             shouldClear = true;
@@ -608,25 +610,19 @@ const saveReport = async (silent = false) => {
                 "Your report has been saved. Would you like to clear the sheet for a new entry?"
             );
         }
-
         if (shouldClear) {
             resetCalculatorState();
         }
-        
         listenForLiveStateChanges();
     }
     return success;
 };
 
 const exportToPDF = async () => {
-    // Check if the view-mode action bar is currently visible.
     const isViewMode = viewModeActionBar.style.display !== 'none';
-
     if (isViewMode) {
-        // If in view-only mode, just generate the PDF from the visible data.
         generatePDF('save');
     } else {
-        // If in edit mode, save silently first, then generate the PDF.
         const wasSaved = await saveReport(true); 
         if (wasSaved) {
             generatePDF('save');
@@ -642,16 +638,13 @@ const clearSheet = async () => {
     }
 };
 
-// NEW function to add to script.js
 const clearSearchTable = async () => {
     const confirmed = await showConfirm(
         "Clear Search Sheet", 
         "Are you sure you want to clear all search rows?"
     );
     if (confirmed) {
-        // Clear the existing rows
         loanSearchTableBody.innerHTML = '';
-        // Add 5 new empty rows to start with
         for (let i = 0; i < 5; i++) {
             addSearchRow();
         }
@@ -925,49 +918,65 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 
 // --- Loan Search Feature Functions ---
-// NEW: Helper function to normalize loan numbers (e.g., A/052 -> A/52)
+// Aggressive Normalizer (Fixes Matching Issues) e.g., A/052 -> A/52
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
-    // This regex finds a non-digit prefix and a digit suffix.
     const match = loanNo.match(/^(\D*)(\d+)$/);
     if (match) {
-        const prefix = match[1]; // e.g., "A/"
-        const numericPart = parseInt(match[2], 10).toString(); // e.g., "052" -> 52 -> "52"
+        const prefix = match[1]; 
+        const numericPart = parseInt(match[2], 10).toString(); 
         return prefix + numericPart;
     }
-    return loanNo; // Return original if it doesn't match the pattern
+    return loanNo; 
 };
 
 const buildLoanSearchCache = () => {
     loanSearchCache.clear();
     if (cachedFinalisedReports.length === 0) return;
 
+    console.log("Building Cache..."); 
+
     cachedFinalisedReports.forEach(report => {
         if (report.loans && Array.isArray(report.loans)) {
             report.loans.forEach(loan => {
-                const originalLoanNo = loan.no?.trim().toUpperCase();
+                const originalLoanNo = loan.no?.trim();
                 if (originalLoanNo) {
-                    const normalizedKey = normalizeLoanNo(originalLoanNo);
-                    if (!loanSearchCache.has(normalizedKey)) {
-                        loanSearchCache.set(normalizedKey, {
+                    const key = normalizeLoanNo(originalLoanNo);
+                    
+                    if (!loanSearchCache.has(key)) {
+                        loanSearchCache.set(key, {
                             principal: loan.principal,
                             reportDate: report.reportDate,
-                            originalNo: originalLoanNo,
-                            reportId: report.id // Add the report ID to the cache
+                            reportId: report.id
                         });
                     }
                 }
             });
         }
     });
-    document.querySelectorAll('#loanSearchTable tbody tr').forEach(row => {
-        performLoanSearch(row.querySelector('.search-no'));
-    });
+    console.log(`Cache Built. Total unique loans in DB: ${loanSearchCache.size}`);
 };
 
-const addSearchRow = (loanNo = '') => {
+// UPDATED: addSearchRow now stores scan data (Principal/Date) for the report
+// Updated: Stores scan data in memory (row.scanData) but DOES NOT fill the UI cells
+const addSearchRow = (loanNo = '', box = null, extraData = null) => {
     const rowCount = loanSearchTableBody.rows.length;
     const row = loanSearchTableBody.insertRow();
+    
+    // 1. Store Coordinates (for Eraser)
+    if (box) row.eraseBox = box;
+
+    // 2. Store Extra Data (Hidden from UI, used for Download)
+    if (extraData) {
+        row.scanData = {
+            principal: extraData.principal || '-',
+            date: extraData.date || '-'
+        };
+    } else {
+        row.scanData = { principal: '-', date: '-' };
+    }
+
+    // 3. Render Row (Cells for Principal/Date are LEFT EMPTY purposely)
     row.innerHTML = `
         <td>${rowCount + 1}</td>
         <td class="read-only status-cell"></td>
@@ -992,6 +1001,8 @@ const renumberSearchRows = () => {
     });
 };
 
+// Updated: Shows Sheet Detail (G/S/?) inside the Status Column
+// UPDATED: UI COLORS (G=Yellow, S=Black)
 const performLoanSearch = (inputElement) => {
     if (!inputElement) return;
     
@@ -1001,6 +1012,7 @@ const performLoanSearch = (inputElement) => {
     const dateCell = row.querySelector('.date-result');
     const statusCell = row.querySelector('.status-cell');
 
+    // Reset cells
     principalCell.textContent = '';
     dateCell.textContent = '';
     statusCell.innerHTML = '';
@@ -1008,74 +1020,160 @@ const performLoanSearch = (inputElement) => {
 
     if (!userInput) return;
 
-    const normalizedSearchTerm = normalizeLoanNo(userInput);
+    const normalizedKey = normalizeLoanNo(userInput);
 
-    if (loanSearchCache.has(normalizedSearchTerm)) {
-        const data = loanSearchCache.get(normalizedSearchTerm);
+    // 1. Check Finalised Reports
+    if (loanSearchCache.has(normalizedKey)) {
+        const data = loanSearchCache.get(normalizedKey);
         principalCell.textContent = data.principal;
         dateCell.textContent = data.reportDate;
         statusCell.classList.add('status-not-available');
         statusCell.innerHTML = `
             <span>Not Available</span>
             <button class="btn btn-secondary btn-sm btn-flat-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
-                View Report
+                View
             </button>`;
     } else {
+        // 2. Check Available Sheet Data
         statusCell.classList.add('status-available');
-        statusCell.textContent = 'Available';
+        
+        let annotationHtml = '';
+        if (sheetDetailsCache.has(normalizedKey)) {
+            const detail = sheetDetailsCache.get(normalizedKey);
+            
+            // COLOR LOGIC FOR APP UI
+            let colorStyle = '#333';
+            if(detail === 'G') colorStyle = '#f1c40f'; // Yellow
+            if(detail === 'S') colorStyle = '#000000'; // Black
+            
+            annotationHtml = `<span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${detail}]</span>`;
+        } else {
+            annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:#e74c3c;">[?]</span>`;
+        }
+
+        statusCell.innerHTML = `<span>Available</span>${annotationHtml}`;
     }
 };
 
+// Handle Image Scan for Loan Search Tab
 const handleNumberScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-    showConfirm('Scanning for Numbers...', 'Please wait while the document is being analyzed.', false);
-    try {
-        const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                const base64Image = reader.result.split(',')[1];
-                const response = await fetch('/.netlify/functions/scanImage', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
-                });
-                closeConfirm();
-                if (!response.ok) {
-                    const errorInfo = await response.json();
-                    throw new Error(errorInfo.error || 'The scan failed.');
-                }
-                const result = await response.json();
-                fillSearchTableFromScan(result.loanNumbers);
-            } catch (fetchError) {
-                closeConfirm();
-                await showConfirm('Scan Error', fetchError.message, false);
-            }
-        };
-        reader.readAsDataURL(file);
-    } catch (error) {
-        closeConfirm();
-        await showConfirm('File Error', 'Could not read the selected image file.', false);
-    }
+
+    // 1. Setup Canvas
+    scanCanvas = document.getElementById('scanCanvas');
+    scanCtx = scanCanvas.getContext('2d');
+    const img = new Image();
+    
+    showConfirm('Scanning...', 'Analyzing document structure...', false);
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+        try {
+            // Load image into Image Object and Canvas
+            img.src = reader.result;
+            await new Promise(r => img.onload = r);
+            
+            // Resize canvas to match image
+            scanCanvas.width = img.width;
+            scanCanvas.height = img.height;
+            scanCtx.drawImage(img, 0, 0);
+
+            // Send to Gemini
+            const base64Image = reader.result.split(',')[1];
+            const response = await fetch('/.netlify/functions/scanImage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
+            });
+            
+            closeConfirm();
+            if (!response.ok) throw new Error((await response.json()).error);
+            
+            const result = await response.json();
+            
+            currentScanCoordinates = result.loanNumbers || [];
+            
+            fillSearchTableFromScan(result.loanNumbers);
+            
+        } catch (error) {
+            closeConfirm();
+            await showConfirm('Error', error.message, false);
+        }
+    };
+    reader.readAsDataURL(file);
     numberImageUploadInput.value = '';
 };
 
-const fillSearchTableFromScan = (loanNumbers) => {
-    if (!loanNumbers || loanNumbers.length === 0) {
-        showConfirm('Scan Results', 'Could not find any loan numbers in the image.', false);
-        return;
-    }
-    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (!input.value.trim()) {
-            input.closest('tr').remove();
+// "Smart Edge Detector" (Solves Black Bars & Streaks)
+const eraseRegion = (box) => {
+    if (!scanCtx || !scanCanvas || !box) return;
+
+    // 1. Coordinates
+    const ymin = Math.max(0, box[0]);
+    const ymax = Math.min(1000, box[2]);
+    if (ymax <= ymin) return;
+
+    // 2. Dimensions & Adaptive Padding
+    const width = scanCanvas.width;
+    const height = scanCanvas.height;
+    const y = Math.floor((ymin / 1000) * height);
+    const h = Math.ceil(((ymax - ymin) / 1000) * height);
+    const padding = Math.ceil(h * 0.12); 
+    const drawY = Math.max(0, y - padding);
+    const drawH = h + (padding * 2);
+
+    try {
+        // STEP 1: FIND THE PAPER (Avoid the Black Border)
+        // We start at the far right edge and walk left until we find bright paper.
+        let safeX = width - 10; 
+        const minX = width * 0.80; 
+        let foundCleanPaper = false;
+
+        const getAverageBrightness = (imageData) => {
+            let sum = 0;
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 16) { 
+                sum += (data[i] + data[i+1] + data[i+2]) / 3;
+            }
+            return sum / (data.length / 16);
+        };
+
+        while (safeX > minX) {
+            const sample = scanCtx.getImageData(safeX, drawY, 5, drawH);
+            const brightness = getAverageBrightness(sample);
+            if (brightness > 120) {
+                foundCleanPaper = true;
+                break; 
+            }
+            safeX -= 10;
         }
-    });
-    loanNumbers.forEach(no => addSearchRow(no));
-    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (input.value) performLoanSearch(input);
-    });
-    renumberSearchRows();
-    showConfirm('Scan Complete', `${loanNumbers.length} loan number(s) were found and added to the search list.`, false);
+
+        // STEP 2: ERASE
+        if (foundCleanPaper) {
+            // Capture and Stretch
+            const texture = scanCtx.getImageData(safeX, drawY, 5, drawH);
+            const tempC = document.createElement('canvas');
+            tempC.width = 5;
+            tempC.height = drawH;
+            tempC.getContext('2d').putImageData(texture, 0, 0);
+            scanCtx.drawImage(tempC, 0, 0, 5, drawH, 0, drawY, width, drawH);
+        } else {
+            // Fallback: Solid Fill
+            try {
+                const p = scanCtx.getImageData(20, 20, 1, 1).data;
+                scanCtx.fillStyle = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+            } catch (e) {
+                scanCtx.fillStyle = '#f5f5f5'; 
+            }
+            scanCtx.fillRect(0, drawY, width, drawH);
+        }
+
+    } catch (e) {
+        console.warn("Eraser failed, using white fallback");
+        scanCtx.fillStyle = '#fff';
+        scanCtx.fillRect(0, drawY, width, drawH);
+    }
 };
 
 const filterSearchResults = (filter) => {
@@ -1361,7 +1459,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     addSearchRowBtn.addEventListener('click', () => addSearchRow());
     scanNumbersBtn.addEventListener('click', () => numberImageUploadInput.click());
     numberImageUploadInput.addEventListener('change', handleNumberScan);
-   clearSearchSheetBtn.addEventListener('click', clearSearchTable);
+    clearSearchSheetBtn.addEventListener('click', clearSearchTable);
     
     loanSearchTableBody.addEventListener('input', (e) => {
         if (e.target.matches('.search-no')) {
@@ -1384,4 +1482,407 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
+
+    // --- Auto-Load Saved Sheet on Startup ---
+   // --- Auto-Load Sheet on Startup ---
+    // Trigger the fetch immediately using the hardcoded URL
+    fetchSheetData();
 });
+
+// ======================================================
+// EXTERNAL INTEGRATION LOGIC (Sheet & Report Gen)
+// ======================================================
+
+// 1. DATA FETCHER
+// 1. DATA FETCHER (Updated: Uses Hardcoded SHEET_URL)
+// 1. DATA FETCHER (Updated: Hardcoded Link + UI Fix)
+// 1. DATA FETCHER (Robust CSV Parser - Fixes Partial Loading)
+// 1. DATA FETCHER (Robust CSV Parser)
+// 1. DATA FETCHER (Updated with HTML Detection Guard)
+const fetchSheetData = async () => {
+    const url = SHEET_URL; 
+
+    if (!url || url.includes("PASTE_YOUR_NEW")) {
+        console.warn("No Sheet URL configured.");
+        return false;
+    }
+
+    // Timestamp to prevent caching
+    const uniqueUrl = url + `&t=${Date.now()}`;
+    
+    // Status UI
+    const statusEl = document.querySelector('.initializing-text') || document.getElementById('sheetStatus');
+
+    if(statusEl) {
+        statusEl.textContent = "⏳ Connecting to Sheet...";
+        statusEl.style.color = "#d35400";
+    }
+
+    try {
+        const response = await fetch(uniqueUrl);
+        if (!response.ok) throw new Error("Connection Failed");
+        const text = await response.text();
+
+        // 🛑 CRITICAL CHECK: Did we get a Website instead of Data?
+        if (text.trim().startsWith("<!DOCTYPE html") || text.includes("<html")) {
+            throw new Error("Wrong Link Type! You are using an '/edit' link. Please use 'File > Share > Publish to web > CSV'.");
+        }
+        
+        // Use the Robust Parser
+        const rows = parseCSV(text); 
+        
+        sheetDetailsCache.clear();
+        
+        rows.forEach(cols => {
+            if (cols.length >= 2) {
+                const rawNo = cols[0].trim(); 
+                const cleanNo = normalizeLoanNo(rawNo); 
+                const details = cols[1].trim(); 
+                
+                if (cleanNo && details) {
+                    sheetDetailsCache.set(cleanNo, details);
+                }
+            }
+        });
+
+        console.log(`Loaded ${sheetDetailsCache.size} details.`);
+        
+        if(statusEl) {
+            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
+            statusEl.style.color = "green";
+            statusEl.style.fontWeight = "bold";
+        }
+        return true;
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        if(statusEl) {
+            // Show the specific error message to the user
+            statusEl.textContent = `❌ ${error.message}`;
+            statusEl.style.color = "red";
+            statusEl.style.fontSize = "12px"; // Make it readable
+        }
+        showConfirm("Sheet Error", error.message, false); // Alert the user via modal
+        return false;
+    }
+};
+
+// --- HELPER: ROBUST CSV PARSER ---
+// Add this function directly below fetchSheetData
+function parseCSV(text) {
+    const rows = [];
+    let currentRow = [];
+    let currentCell = '';
+    let insideQuotes = false;
+    
+    // Iterate character by character
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+        
+        if (char === '"') {
+            if (insideQuotes && nextChar === '"') {
+                currentCell += '"'; // Handle escaped quote ("")
+                i++; // Skip the next quote
+            } else {
+                insideQuotes = !insideQuotes; // Toggle quote state
+            }
+        } else if (char === ',' && !insideQuotes) {
+            // End of cell
+            currentRow.push(currentCell);
+            currentCell = '';
+        } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+            // End of row (Handle CRLF or LF)
+            if (char === '\r' && nextChar === '\n') i++;
+            currentRow.push(currentCell);
+            if (currentRow.length > 0) rows.push(currentRow); // Add row
+            currentRow = [];
+            currentCell = '';
+        } else {
+            currentCell += char;
+        }
+    }
+    // Push the very last row if exists
+    if (currentCell || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+    }
+    return rows;
+}
+
+// 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
+// UPDATED: GENERATE SORTED IMAGE (Fixes: No Blue Header, Right-Align Amount, No Cut-off)
+// UPDATED: GENERATE SORTED IMAGE
+// Fixes: Share on Mobile Only, No Cut-off, New Header Format, Yellow/Black Colors
+// UPDATED: GENERATE SORTED IMAGE (High Quality + Date + Correct Header)
+// UPDATED: GENERATE SORTED IMAGE (High-Res, No Overlap, Fixed Date)
+const generateSortedImage = () => {
+    // 1. Get fresh data
+    const loanList = getAvailableLoansFromTable();
+
+    if (!loanList || loanList.length === 0) {
+        showConfirm("Error", "No available loans found.", false);
+        return;
+    }
+
+    // A. Categorize and Sort
+    const processedList = loanList.map(item => {
+        const detail = sheetDetailsCache.get(item.no) || "?";
+        const principalStr = item.principal ? String(item.principal) : '-';
+        return { 
+            no: item.no, 
+            principal: principalStr, 
+            date: item.date || '-', 
+            detail: detail 
+        };
+    });
+
+    processedList.sort((a, b) => {
+        if (a.detail < b.detail) return -1;
+        if (a.detail > b.detail) return 1;
+        return a.no.localeCompare(b.no, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    // B. Create Canvas (High Definition Setup)
+    const reportCanvas = document.createElement('canvas');
+    const ctx = reportCanvas.getContext('2d');
+    
+    // Scale factor for High DPI (Retina) screens
+    const scale = 2; 
+    
+    // Layout Config (Logical Pixels)
+    const rowHeight = 50;
+    const dateHeaderHeight = 40; // Space for the date at top
+    const columnHeaderHeight = 50; // Space for SL/NO/AMOUNT headers
+    const totalHeaderHeight = dateHeaderHeight + columnHeaderHeight;
+    const padding = 200; // Increased to prevent bottom cut-off
+    
+    const logicalWidth = 900;
+    // Calculate total height dynamically
+    // We assume roughly 1 header per 5 rows to estimate, 
+    // but canvas will resize if we need more. 
+    // For now, let's use a safe dynamic height + padding
+    const logicalHeight = totalHeaderHeight + (processedList.length * 60) + padding;
+
+    // Set Actual Size (Multiplied by Scale)
+    reportCanvas.width = logicalWidth * scale;
+    reportCanvas.height = logicalHeight * scale;
+
+    // Normalize coordinate system so we can write code using logical pixels
+    ctx.scale(scale, scale);
+
+    // C. Draw White Background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+
+    // D. Draw Today's Date (Top Right)
+    const today = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    ctx.fillStyle = "#333";
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(today, logicalWidth - 20, 25); 
+
+    // E. Draw Column Headers
+    const headerY = dateHeaderHeight;
+    ctx.fillStyle = "#f1f3f5";
+    ctx.fillRect(0, headerY, logicalWidth, columnHeaderHeight);
+
+    const textY = headerY + 32;
+    const colX = { sl: 30, no: 130, amt: 450, date: 550, det: 800 };
+
+    ctx.fillStyle = "#000";
+    ctx.font = "bold 18px sans-serif";
+    
+    ctx.textAlign = "left";
+    ctx.fillText("SL NO", colX.sl, textY);
+    ctx.fillText("NO", colX.no, textY);
+    
+    ctx.textAlign = "right"; 
+    ctx.fillText("AMOUNT", colX.amt, textY);
+    ctx.textAlign = "left";  
+    
+    ctx.fillText("DATE", colX.date, textY);
+    ctx.fillText("DETAIL", colX.det, textY);
+    
+    // Header Bottom Line
+    ctx.beginPath();
+    ctx.moveTo(0, headerY + columnHeaderHeight);
+    ctx.lineTo(logicalWidth, headerY + columnHeaderHeight);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#333";
+    ctx.stroke();
+
+    // F. Draw Rows
+    let y = totalHeaderHeight + 35;
+    let currentCategory = null;
+    let slCounter = 1;
+
+    processedList.forEach(item => {
+        // Draw Category Header if changed
+        if (item.detail !== currentCategory) {
+            currentCategory = item.detail;
+            
+            // 1. Push y down to create a gap between previous row and header
+            y += 45; 
+            
+            // 2. Draw Header Box in that gap
+            ctx.fillStyle = "#e9ecef";
+            ctx.fillRect(0, y - 60, logicalWidth, 30);
+            
+            ctx.fillStyle = "#000";
+            ctx.textAlign = "left";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 40);
+        }
+
+        // Row Content
+        ctx.font = "24px sans-serif";
+        ctx.fillStyle = "#000000";
+        
+        // SL NO
+        ctx.textAlign = "left";
+        ctx.fillText(slCounter++, colX.sl, y);
+        
+        // LOAN NO
+        ctx.fillText(item.no, colX.no, y);
+
+        // AMOUNT (Right Aligned)
+        ctx.textAlign = "right";
+        ctx.fillText(item.principal, colX.amt, y);
+        ctx.textAlign = "left"; 
+
+        // DATE
+        ctx.fillText(item.date, colX.date, y);
+
+        // DETAIL COLOR LOGIC (Yellow & Black)
+        let badgeColor = "#333";
+        if (item.detail === "G") badgeColor = "#f1c40f"; // Golden Yellow
+        else if (item.detail === "S") badgeColor = "#000000"; // Black
+        else if (item.detail === "?") badgeColor = "#e74c3c"; // Red
+
+        ctx.fillStyle = badgeColor;
+        ctx.font = "bold 26px sans-serif";
+        ctx.fillText(item.detail, colX.det, y);
+
+        // Divider Line
+        ctx.strokeStyle = "#eee";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(20, y + 15);
+        ctx.lineTo(880, y + 15);
+        ctx.stroke();
+
+        y += rowHeight;
+    });
+
+    // G. Mobile Share vs PC Download
+    reportCanvas.toBlob((blob) => {
+        const fileName = `Sorted_List_${Date.now()}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+        
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({
+                files: [file],
+                title: 'Sorted Loan List'
+            }).catch(console.error);
+        } else {
+            // PC: Force Download
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    });
+};
+
+// 3. MAIN SCANNER (UPDATED: Captures Full Data)
+// Updated: Passes hidden amount/date to addSearchRow
+// NEW HELPER: Reads the current state of the table (handles manual edits)
+const getAvailableLoansFromTable = () => {
+    const availableLoans = [];
+    const rows = document.querySelectorAll('#loanSearchTable tbody tr');
+    
+    rows.forEach(row => {
+        const statusCell = row.querySelector('.status-cell');
+        const input = row.querySelector('.search-no');
+        
+        // Only grab rows marked as "Available"
+        if (statusCell && statusCell.classList.contains('status-available') && input.value.trim()) {
+            const normalizedKey = normalizeLoanNo(input.value.trim().toUpperCase());
+            // Use stored scan data if it exists, otherwise default
+            const storedData = row.scanData || { principal: '-', date: '-' };
+            
+            availableLoans.push({ 
+                no: normalizedKey,
+                principal: storedData.principal,
+                date: storedData.date
+            });
+        }
+    });
+    return availableLoans;
+};
+
+// UPDATED: MAIN SCANNER (Uses new download logic)
+const fillSearchTableFromScan = async (loanData) => {
+    
+    if (sheetDetailsCache.size === 0) await fetchSheetData();
+    buildLoanSearchCache(); 
+
+    if (!loanData || loanData.length === 0) {
+        showConfirm('Scan Results', 'No numbers found.', false);
+        return;
+    }
+
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (!input.value.trim()) input.closest('tr').remove();
+    });
+
+    const cleanDate = (d) => d ? d.replace(/-/g, '/') : '-';
+
+    loanData.forEach(item => {
+        const extraData = {
+            principal: item.principal ? String(item.principal) : '-',
+            date: cleanDate(item.date)
+        };
+        addSearchRow(item.no, item.box, extraData);
+    });
+
+    // Process & Erase
+    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
+    let erasedCount = 0;
+    let foundAvailable = false;
+
+    inputs.forEach((input) => {
+        performLoanSearch(input); 
+        const row = input.closest('tr');
+        const statusCell = row.querySelector('.status-cell');
+        
+        if (statusCell.classList.contains('status-not-available')) {
+            if (row.eraseBox) {
+                eraseRegion(row.eraseBox);
+                erasedCount++;
+            }
+        } else if (statusCell.classList.contains('status-available')) {
+            foundAvailable = true;
+        }
+    });
+
+    renumberSearchRows();
+    
+    // Setup Download Button (Points to new generation function)
+    const dlBtn = document.getElementById('downloadErasedBtn');
+    if(dlBtn) {
+        if (foundAvailable) {
+            dlBtn.style.display = 'inline-flex';
+            // IMPORTANT: Call the function directly, don't pass old list
+            dlBtn.onclick = generateSortedImage; 
+        } else {
+            dlBtn.style.display = 'none';
+        }
+    }
+    
+    showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
+};

@@ -197,15 +197,31 @@
                     </table>
                 </div>
 
-                <div class="action-bar" id="searchActionBar">
-                    <button class="btn btn-primary" id="addSearchRowBtn">Add Row</button>
-                    <button class="btn btn-primary" id="scanNumbersBtn">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
-                        Scan for Numbers
-                    </button>
-                    <input type="file" id="numberImageUploadInput" accept="image/*" style="display: none;">
-                    <button class="btn btn-danger" id="clearSearchSheetBtn">Clear Sheet</button>
+                <div class="action-bar" id="searchActionBar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-primary" id="addSearchRowBtn">Add Row</button>
+                        <button class="btn btn-primary" id="scanNumbersBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
+                            Scan for Numbers
+                        </button>
+                        <button class="btn btn-secondary" id="downloadErasedBtn" style="display:none;">Download List</button>
+                        <button class="btn btn-danger" id="clearSearchSheetBtn">Clear Sheet</button>
+                    </div>
+
+                    <div style="display: flex; align-items: center;">
+                        <input type="hidden" id="publicSheetInput" 
+                               value="https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv">
+                        
+                        <span id="sheetStatus" style="font-size: 0.9rem; font-weight: 500; color: #666; white-space: nowrap;">
+                            Initializing sheet...
+                        </span>
+                        
+                        <canvas id="scanCanvas" style="display: none;"></canvas>
+                        <input type="file" id="numberImageUploadInput" accept="image/*" style="display: none;">
+                    </div>
                 </div>
+
                  <div id="loanSearchLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
             </div>
         </div>
@@ -235,4 +251,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-
