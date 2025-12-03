@@ -27,16 +27,10 @@ exports.handler = async function(event) {
     let promptText;
     if (scanType === 'loan_numbers') {
         promptText = `
-        You are an expert OCR system for handwritten Indian finance ledgers.
-        Analyze this image and extract a JSON array of loans. Structure: "Number - Amount - Date".
-
-        CRITICAL HANDWRITING RULES:
-        1. **Date Ambiguity**: The writer's '7' often has a long downward stroke (resembling a 'y' or '4'). If a date looks like "04/0y/24" or "04/04/24" but the stroke curves down, it is likely "07" (July).
-        2. **Digit '1' vs '4'**: The digit '1' can sometimes be messy. "21" might look like "24". Look closely at the top of the digit.
-        3. **Context**: Loan dates are sequential. If surrounding dates are in July (07), an ambiguous date is likely also July.
-
-        Extraction Logic:
-         1. "no": Extract the loan number.
+        Analyze this handwritten list of loans. The format is usually "Number - Amount - Date".
+        Return a raw JSON array of objects. Each object must have 4 fields:
+        
+        1. "no": Extract the loan number.
            - Replace '1' with '/' if a 4-digit number starts with 1 (e.g., A153 -> A/53).
            - Ensure there is a '/' between the letter and number (e.g., B766 -> B/766).
            - Replace any '.', ' ', or '-' with '/' (e.g., b.579 -> B/579, d.81 -> D/81).
@@ -48,13 +42,14 @@ exports.handler = async function(event) {
            - CONTEXT: Years are usually 2023, 2024, or 2025. 
            - Date Format are Usually in DD//MM/YYYY.
            - If year is written as '23', '24', convert to '2023', '2024'.
-           - FIX: If you see '04' but it could be '07', prefer '07' if the stroke is long/curved.
            - Format strictly as DD/MM/YYYY.
+           CRITICAL HANDWRITING RULES:
+           - Writer's 2 in the MM coloumn Generally touches with The / so it looks like 4, Read it 2 only.
 
         4. "box": An array of 4 integers [ymin, xmin, ymax, xmax] on a scale of 0 to 1000. 
            - IMPORTANT: The box must cover the ENTIRE WIDTH of the row (Number + Principal + Date).
 
-        Return strictly raw JSON.`;
+        Do not include markdown formatting. Just the JSON.`;
     } else {
         // ... existing calculator prompt ...
         promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 4-digit numbers starting with it (A1666->A/666) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." 
