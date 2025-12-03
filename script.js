@@ -33,9 +33,7 @@ let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
-let currentScanCoordinates = []; // Stores the box data from AI
-let scanCanvas = null;           // Reference to the canvas
-let scanCtx = null;              // Canvas context
+
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
 let isUpdatingFromListener = false;
@@ -280,39 +278,21 @@ const cleanAndSortTable = () => {
 };
 
 // --- Image Scanning ---
-// Updated: fix formatting (B.673 -> B/673) for Calculator Tab
 const fillTableFromScan = (loans) => {
     if (!loans || loans.length === 0) {
         showConfirm('Scan Results', 'The custom model did not find any complete loan entries.', false);
         return;
     }
-    
     const emptyRows = Array.from(loanTableBody.querySelectorAll('tr')).filter(r => 
         !r.querySelector('.principal').value && !r.querySelector('.no').value
     );
-    
     let emptyRowIndex = 0;
-    
     loans.forEach((loan) => {
-        // --- FORMATTING FIX ---
-        // 1. Force Uppercase
-        let cleanNo = String(loan.no).toUpperCase();
-
-        // 2. Replace Dot/Space/Dash between Letter and Number with '/'
-        // Matches "B.673", "A. 617", "B-673", "B 673"
-        cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]+(\d)/g, '$1/$2');
-
-        // 3. (Safety) If it is just "A617" (no separator), add the slash
-        if (/^[A-Z]\d+$/.test(cleanNo)) {
-             cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
-        }
-
         const formattedLoan = {
-            no: cleanNo,
+            no: loan.no,
             principal: String(loan.principal).replace(/,/g, ''),
             date: formatDateToDDMMYYYY(parseDate(loan.date))
         };
-        
         if (emptyRowIndex < emptyRows.length) {
             const targetRow = emptyRows[emptyRowIndex];
             targetRow.querySelector('.no').value = formattedLoan.no;
@@ -323,7 +303,6 @@ const fillTableFromScan = (loans) => {
             addRow(formattedLoan);
         }
     });
-    
     updateAllCalculations();
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
@@ -947,7 +926,6 @@ const deleteReport = async (docId, isFinalised = false) => {
 
 // --- Loan Search Feature Functions ---
 // NEW: Helper function to normalize loan numbers (e.g., A/052 -> A/52)
-// Updated: Aggressive Normalizer (Fixes Matching Issues)
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
     // This regex finds a non-digit prefix and a digit suffix.
@@ -960,45 +938,36 @@ const normalizeLoanNo = (loanNo) => {
     return loanNo; // Return original if it doesn't match the pattern
 };
 
-// Updated: Rebuilds cache using the new Normalizer
 const buildLoanSearchCache = () => {
     loanSearchCache.clear();
     if (cachedFinalisedReports.length === 0) return;
 
-    console.log("Building Cache..."); // Debug Log
-
     cachedFinalisedReports.forEach(report => {
         if (report.loans && Array.isArray(report.loans)) {
             report.loans.forEach(loan => {
-                const originalLoanNo = loan.no?.trim();
+                const originalLoanNo = loan.no?.trim().toUpperCase();
                 if (originalLoanNo) {
-                    // Use the NEW normalizer
-                    const key = normalizeLoanNo(originalLoanNo);
-                    
-                    if (!loanSearchCache.has(key)) {
-                        loanSearchCache.set(key, {
+                    const normalizedKey = normalizeLoanNo(originalLoanNo);
+                    if (!loanSearchCache.has(normalizedKey)) {
+                        loanSearchCache.set(normalizedKey, {
                             principal: loan.principal,
                             reportDate: report.reportDate,
-                            reportId: report.id
+                            originalNo: originalLoanNo,
+                            reportId: report.id // Add the report ID to the cache
                         });
                     }
                 }
             });
         }
     });
-    console.log(`Cache Built. Total unique loans in DB: ${loanSearchCache.size}`);
+    document.querySelectorAll('#loanSearchTable tbody tr').forEach(row => {
+        performLoanSearch(row.querySelector('.search-no'));
+    });
 };
 
-// Updated: addSearchRow saves coordinates in memory
-const addSearchRow = (loanNo = '', box = null) => {
+const addSearchRow = (loanNo = '') => {
     const rowCount = loanSearchTableBody.rows.length;
     const row = loanSearchTableBody.insertRow();
-    
-    // SAVE COORDINATES DIRECTLY TO THE ROW OBJECT
-    if (box) {
-        row.eraseBox = box; // Store raw array
-    }
-
     row.innerHTML = `
         <td>${rowCount + 1}</td>
         <td class="read-only status-cell"></td>
@@ -1057,217 +1026,58 @@ const performLoanSearch = (inputElement) => {
     }
 };
 
-// Updated: Handle Image Scan to draw on Canvas
 const handleNumberScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
-    // 1. Setup Canvas
-    scanCanvas = document.getElementById('scanCanvas');
-    scanCtx = scanCanvas.getContext('2d');
-    const img = new Image();
-    
-    showConfirm('Scanning...', 'Analyzing document structure...', false);
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-        try {
-            // Load image into Image Object and Canvas
-            img.src = reader.result;
-            await new Promise(r => img.onload = r);
-            
-            // Resize canvas to match image
-            scanCanvas.width = img.width;
-            scanCanvas.height = img.height;
-            scanCtx.drawImage(img, 0, 0);
-
-            // Send to Gemini
-            const base64Image = reader.result.split(',')[1];
-            const response = await fetch('/.netlify/functions/scanImage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
-            });
-            
-            closeConfirm();
-            if (!response.ok) throw new Error((await response.json()).error);
-            
-            const result = await response.json();
-            
-            // Store coordinates for erasing later
-            currentScanCoordinates = result.loanNumbers || [];
-            
-            fillSearchTableFromScan(result.loanNumbers);
-            
-            // Show the download button
-            document.getElementById('downloadErasedBtn').style.display = 'inline-flex';
-
-        } catch (error) {
-            closeConfirm();
-            await showConfirm('Error', error.message, false);
-        }
-    };
-    reader.readAsDataURL(file);
+    showConfirm('Scanning for Numbers...', 'Please wait while the document is being analyzed.', false);
+    try {
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const base64Image = reader.result.split(',')[1];
+                const response = await fetch('/.netlify/functions/scanImage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
+                });
+                closeConfirm();
+                if (!response.ok) {
+                    const errorInfo = await response.json();
+                    throw new Error(errorInfo.error || 'The scan failed.');
+                }
+                const result = await response.json();
+                fillSearchTableFromScan(result.loanNumbers);
+            } catch (fetchError) {
+                closeConfirm();
+                await showConfirm('Scan Error', fetchError.message, false);
+            }
+        };
+        reader.readAsDataURL(file);
+    } catch (error) {
+        closeConfirm();
+        await showConfirm('File Error', 'Could not read the selected image file.', false);
+    }
     numberImageUploadInput.value = '';
 };
 
-// Updated: Uses row.eraseBox to find what to erase
-// Updated: Main Logic with Debugging
-// Updated: Restored original "Scan Complete" message format
-const fillSearchTableFromScan = (loanData) => {
-    // 1. Force a Cache Rebuild to ensure rules match
-    buildLoanSearchCache(); 
-
-    if (!loanData || loanData.length === 0) {
-        showConfirm('Scan Results', 'No numbers found.', false);
+const fillSearchTableFromScan = (loanNumbers) => {
+    if (!loanNumbers || loanNumbers.length === 0) {
+        showConfirm('Scan Results', 'Could not find any loan numbers in the image.', false);
         return;
     }
-
-    // 2. Clear empty rows
     document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
-        if (!input.value.trim()) input.closest('tr').remove();
-    });
-
-    // 3. Add new rows
-    loanData.forEach(item => {
-        addSearchRow(item.no, item.box);
-    });
-
-    // 4. Search & Erase Logic
-    const inputs = document.querySelectorAll('#loanSearchTable .search-no');
-    let erasedCount = 0;
-
-    inputs.forEach((input) => {
-        // Run Search
-        performLoanSearch(input); 
-
-        const row = input.closest('tr');
-        const statusCell = row.querySelector('.status-cell');
-        
-        // If "Not Available" (Orange) -> Erase
-        if (statusCell && statusCell.classList.contains('status-not-available')) {
-            if (row.eraseBox) {
-                eraseRegion(row.eraseBox);
-                erasedCount++;
-            }
+        if (!input.value.trim()) {
+            input.closest('tr').remove();
         }
     });
-
+    loanNumbers.forEach(no => addSearchRow(no));
+    document.querySelectorAll('#loanSearchTable .search-no').forEach(input => {
+        if (input.value) performLoanSearch(input);
+    });
     renumberSearchRows();
-    
-    // --- RESTORED EARLIER MESSAGE FORMAT ---
-    if (erasedCount > 0) {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers. Auto-erased ${erasedCount} finished loans from the image.`, false);
-    } else {
-        showConfirm('Scan Complete', `Found ${loanData.length} numbers.`, false);
-    }
+    showConfirm('Scan Complete', `${loanNumbers.length} loan number(s) were found and added to the search list.`, false);
 };
-// NEW: Function to draw white box over coordinates
-// NEW: Intelligent Erase with Background Color Matching
-// NEW: "Clone Stamp" Eraser (Copies background texture instead of painting solid color)
-// NEW: "Full Width" Paper Texture Cloner
-// Updated: "Full Width" Texture Cloner with Safety Checks
-// FIXED: Robust "Full Width" Eraser (Uses Image Stretching)
-// FIXED: "Smart Edge" Eraser (Avoids black borders)
-// NEW: "Pixel-by-Pixel" Vertical Healing (The Perfectionist Method)
 
-// FIXED: "Safe Stretch" Eraser (Reverted to best logic + Safety Adjustments)
-// FIXED: "Adaptive Stretch" Eraser (Scales perfectly to line size)
-const eraseRegion = (box) => {
-    if (!scanCtx || !scanCanvas || !box) return;
-
-    // 1. Get Coordinates
-    const ymin = Math.max(0, box[0]);
-    const ymax = Math.min(1000, box[2]);
-    if (ymax <= ymin) return;
-
-    // 2. Convert to pixels
-    const y = Math.floor((ymin / 1000) * scanCanvas.height);
-    const h = Math.ceil(((ymax - ymin) / 1000) * scanCanvas.height);
-
-    // --- ADAPTIVE PADDING ---
-    // Instead of a huge fixed number (like 35px), we take a percentage.
-    // We add 12% padding to the top and bottom.
-    // If the line is 50px tall, this adds 6px. It scales automatically.
-    const padding = Math.ceil(h * 0.12); 
-    
-    // Apply the calculated padding
-    const drawY = Math.max(0, y - padding);
-    const drawH = h + (padding * 2);
-
-    try {
-        // --- SAFE ZONE STRATEGY ---
-        // Sample from 92% width (Safe from black borders, but still empty paper)
-        const safeMargin = Math.floor(scanCanvas.width * 0.92); 
-        const sampleW = 30;
-
-        // Capture clean paper texture
-        const texture = scanCtx.getImageData(safeMargin, drawY, sampleW, drawH);
-        
-        const tempC = document.createElement('canvas');
-        tempC.width = sampleW;
-        tempC.height = drawH;
-        tempC.getContext('2d').putImageData(texture, 0, 0);
-
-        // Stretch it across the line
-        scanCtx.drawImage(
-            tempC, 
-            0, 0, sampleW, drawH, 
-            0, drawY, scanCanvas.width, drawH 
-        );
-
-    } catch (e) {
-        // Fallback
-        scanCtx.fillStyle = '#fff';
-        scanCtx.fillRect(0, drawY, scanCanvas.width, drawH);
-    }
-};
-// Remove any old event listeners (safety)
-const downloadBtn = document.getElementById('downloadErasedBtn');
-if (downloadBtn) {
-    // We use .onclick = function ... this overwrites any previous clicks!
-    downloadBtn.onclick = function() {
-        if (!scanCanvas) {
-            showConfirm("Error", "No image to download.", false);
-            return;
-        }
-
-        scanCanvas.toBlob((blob) => {
-            if (!blob) return;
-
-            const fileName = `Erased_List_${Date.now()}.png`;
-            const file = new File([blob], fileName, { type: 'image/png' });
-            
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-            if (isMobile) {
-                // MOBILE LOGIC: Share Sheet
-                if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                    navigator.share({
-                        files: [file],
-                        title: 'Filtered Loan List'
-                    }).catch(console.error);
-                } else {
-                    // Mobile Fallback
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = fileName;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-            } else {
-                // PC LOGIC: Direct Download ONLY
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = fileName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-        }, 'image/png', 1.0);
-    };
-}
 const filterSearchResults = (filter) => {
     const rows = document.querySelectorAll('#loanSearchTable tbody tr');
     rows.forEach(row => {
