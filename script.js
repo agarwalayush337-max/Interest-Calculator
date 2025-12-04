@@ -1270,21 +1270,34 @@ const renderDashboard = async () => {
 };
 
 // --- Authentication ---
+// --- Authentication ---
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
     
-    // 1. Force LOCAL persistence (Critical for iOS PWA)
+    // Detect if running in Standalone (PWA) mode on iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator.standalone === true);
+    const isIosPwa = isIOS && isStandalone;
+
+    // Set Persistence to LOCAL (Required for PWA to remember login after redirect)
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
         .then(() => {
-            // 2. Use Redirect instead of Popup
-            // This prevents the PWA from losing the context when Safari takes over for login
-            return auth.signInWithRedirect(provider);
+            if (isIosPwa) {
+                // Scenario: iPhone PWA (App Mode)
+                // MUST use Redirect, because Popups open in a separate Safari instance that can't talk back to the app.
+                return auth.signInWithRedirect(provider);
+            } else {
+                // Scenario: Laptop, Android, or iPhone Safari (Browser)
+                // MUST use Popup. Redirects often fail here due to Safari ITP (Intelligent Tracking Prevention).
+                return auth.signInWithPopup(provider);
+            }
         })
         .catch(error => {
-            console.error("Login Error: ", error);
-            showConfirm("Sign-In Failed", "Could not initiate login: " + error.message, false);
+            console.error("Login Flow Error:", error);
+            showConfirm("Login Error", error.message, false);
         });
 };
+
 const signOut = () => auth.signOut();
 
 // --- Real-time Functions ---
@@ -1364,30 +1377,53 @@ const listenForLiveStateChanges = () => {
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
+    // --- UPDATED AUTH LISTENER ---
     auth.onAuthStateChanged(async (firebaseUser) => {
         if (firebaseUser) {
-            user = firebaseUser;
-            reportsCollection = db.collection('sharedReports');
-            authStatusEl.textContent = user.displayName || user.email;
-            loginOverlay.style.display = 'none';
-            appContainer.style.display = 'block';
-            
-            listenForLiveStateChanges(); 
-            syncData();
-
+            // User is signed in.
+            handleUserLogin(firebaseUser);
         } else {
-            user = null;
-            currentlyEditingReportId = null;
-            reportsCollection = null;
-            cachedReports = [];
-            loginOverlay.style.display = 'flex';
-            appContainer.style.display = 'none';
-            if (liveStateUnsubscribe) {
-                liveStateUnsubscribe();
-                liveStateUnsubscribe = null;
-            }
+            // No user is signed in. Check if we are returning from a Redirect Login (PWA)
+            auth.getRedirectResult().then((result) => {
+                if (result.user) {
+                    handleUserLogin(result.user);
+                } else {
+                    // No user, and no redirect result -> Show Login
+                    handleUserLogout();
+                }
+            }).catch((error) => {
+                console.error("Redirect Result Error:", error);
+                // Even if error, show login screen
+                handleUserLogout();
+            });
         }
     });
+
+    // Helper to consolidate login logic
+    function handleUserLogin(firebaseUser) {
+        user = firebaseUser;
+        reportsCollection = db.collection('sharedReports');
+        authStatusEl.textContent = user.displayName || user.email;
+        loginOverlay.style.display = 'none';
+        appContainer.style.display = 'block';
+        
+        listenForLiveStateChanges(); 
+        syncData();
+    }
+
+    // Helper to consolidate logout logic
+    function handleUserLogout() {
+        user = null;
+        currentlyEditingReportId = null;
+        reportsCollection = null;
+        cachedReports = [];
+        loginOverlay.style.display = 'flex';
+        appContainer.style.display = 'none';
+        if (liveStateUnsubscribe) {
+            liveStateUnsubscribe();
+            liveStateUnsubscribe = null;
+        }
+    }
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
