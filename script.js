@@ -1272,6 +1272,7 @@ const renderDashboard = async () => {
 // --- Authentication ---
 // --- Authentication ---
 // --- Authentication ---
+// --- Authentication ---
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
     
@@ -1284,17 +1285,17 @@ const signInWithGoogle = () => {
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
         .then(() => {
             if (isIosPwa) {
-                // PWA: Set a flag so we know to wait for the result after reload
+                // PWA: Set flag to handle the redirect on reload
                 localStorage.setItem('isPwaLoggingIn', 'true');
                 return auth.signInWithRedirect(provider);
             } else {
-                // Browser: Use Popup
+                // Browser: Use Popup (Faster for laptops/Android)
                 return auth.signInWithPopup(provider);
             }
         })
         .catch(error => {
             console.error("Login Flow Error:", error);
-            localStorage.removeItem('isPwaLoggingIn'); // Clear flag on error
+            localStorage.removeItem('isPwaLoggingIn'); 
             showConfirm("Login Error", error.message, false);
         });
 };
@@ -1377,42 +1378,35 @@ const listenForLiveStateChanges = () => {
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
-    // --- 1. Define Login/Logout Helpers (Paste this inside DOMContentLoaded) ---
-   // --- UPDATED AUTH LISTENER WITH PWA FLAG CHECK ---
+   // --- FINAL PRODUCTION AUTH LISTENER ---
     
-    // 1. Check if we are waiting for a PWA redirect
- // --- DEBUG VERSION: AUTH LISTENER ---
-    
-    // Check flag immediately for UI feedback
+    // 1. Show a loading message if we know we are coming back from a PWA login
     if (localStorage.getItem('isPwaLoggingIn') === 'true') {
-        loginMessage.textContent = "Verifying secure login... (Please wait)";
+        loginMessage.textContent = "Verifying secure login...";
+        // Optional: You could show a spinner here if you wanted
     }
 
-    // Call this INDEPENDENTLY of onAuthStateChanged to catch the result early
+    // 2. Check for Redirect Result (PWA Mode)
     if (localStorage.getItem('isPwaLoggingIn') === 'true') {
         auth.getRedirectResult()
             .then((result) => {
                 localStorage.removeItem('isPwaLoggingIn'); // Clear flag
                 if (result.user) {
-                    // SUCCESS: We have a user!
                     handleUserLogin(result.user);
                 } else {
-                    // FAILURE: Google returned, but gave us no User.
-                    alert("Debug: Login failed. Google returned no user info. Check Authorized Domains.");
                     handleUserLogout();
                 }
             })
             .catch((error) => {
-                localStorage.removeItem('isPwaLoggingIn'); 
-                // ERROR: Show the specific technical error
-                alert("Debug Error: " + error.code + " - " + error.message);
+                localStorage.removeItem('isPwaLoggingIn');
+                console.error("Redirect Error:", error);
                 handleUserLogout();
             });
     }
 
-    // Normal Listener for when you are already logged in
+    // 3. Standard Listener (Browser Mode / Already Logged In)
     auth.onAuthStateChanged((firebaseUser) => {
-        // Only handle if we aren't currently processing a redirect (to avoid double-firing)
+        // Only run this if we aren't currently processing a redirect to avoid conflicts
         if (!localStorage.getItem('isPwaLoggingIn')) {
             if (firebaseUser) {
                 handleUserLogin(firebaseUser);
@@ -1422,7 +1416,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // --- Keep your handleUserLogin / handleUserLogout helpers here ---
+    // --- Helpers ---
     function handleUserLogin(firebaseUser) {
         user = firebaseUser;
         reportsCollection = db.collection('sharedReports');
@@ -1439,7 +1433,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentlyEditingReportId = null;
         reportsCollection = null;
         cachedReports = [];
-        loginMessage.textContent = "Sign in to access your synced reports."; // Reset message
+        loginMessage.textContent = "Sign in to access your synced reports.";
         loginOverlay.style.display = 'flex';
         appContainer.style.display = 'none';
         if (liveStateUnsubscribe) {
