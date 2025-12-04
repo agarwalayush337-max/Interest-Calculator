@@ -17,7 +17,7 @@ if ('serviceWorker' in navigator) {
 
 const firebaseConfig = {
     apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
-    authDomain: "interest-calculator-8d997.firebaseapp.com",
+    authDomain: "ayush337.netlify.app",
     projectId: "interest-calculator-8d997",
     storageBucket: "interest-calculator-8d997.appspot.com",
     messagingSenderId: "187925519090",
