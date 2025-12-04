@@ -1271,6 +1271,7 @@ const renderDashboard = async () => {
 
 // --- Authentication ---
 // --- Authentication ---
+// --- Authentication ---
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
     
@@ -1279,21 +1280,21 @@ const signInWithGoogle = () => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator.standalone === true);
     const isIosPwa = isIOS && isStandalone;
 
-    // Set Persistence to LOCAL (Required for PWA to remember login after redirect)
+    // Set Persistence to LOCAL
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
         .then(() => {
             if (isIosPwa) {
-                // Scenario: iPhone PWA (App Mode)
-                // MUST use Redirect, because Popups open in a separate Safari instance that can't talk back to the app.
+                // PWA: Set a flag so we know to wait for the result after reload
+                localStorage.setItem('isPwaLoggingIn', 'true');
                 return auth.signInWithRedirect(provider);
             } else {
-                // Scenario: Laptop, Android, or iPhone Safari (Browser)
-                // MUST use Popup. Redirects often fail here due to Safari ITP (Intelligent Tracking Prevention).
+                // Browser: Use Popup
                 return auth.signInWithPopup(provider);
             }
         })
         .catch(error => {
             console.error("Login Flow Error:", error);
+            localStorage.removeItem('isPwaLoggingIn'); // Clear flag on error
             showConfirm("Login Error", error.message, false);
         });
 };
@@ -1377,7 +1378,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
     updateSyncStatus();
     // --- 1. Define Login/Logout Helpers (Paste this inside DOMContentLoaded) ---
-    const handleUserLogin = (firebaseUser) => {
+   // --- UPDATED AUTH LISTENER WITH PWA FLAG CHECK ---
+    
+    // 1. Check if we are waiting for a PWA redirect
+    if (localStorage.getItem('isPwaLoggingIn') === 'true') {
+        loginMessage.textContent = "Verifying secure login..."; // Feedback for user
+    }
+
+    auth.onAuthStateChanged(async (firebaseUser) => {
+        if (firebaseUser) {
+            // Case A: User found immediately
+            localStorage.removeItem('isPwaLoggingIn'); // Clear flag
+            handleUserLogin(firebaseUser);
+        } else {
+            // Case B: No user found yet. 
+            // Are we expecting a redirect result?
+            if (localStorage.getItem('isPwaLoggingIn') === 'true') {
+                console.log("Waiting for Redirect Result...");
+                
+                auth.getRedirectResult()
+                    .then((result) => {
+                        localStorage.removeItem('isPwaLoggingIn'); // Clear flag
+                        if (result.user) {
+                            handleUserLogin(result.user);
+                        } else {
+                            // Redirect happened, but no user? (Cancelled or failed)
+                            handleUserLogout();
+                        }
+                    })
+                    .catch((error) => {
+                        localStorage.removeItem('isPwaLoggingIn'); // Clear flag
+                        console.error("Redirect Error:", error);
+                        // Optional: Show error to help debug
+                        alert("PWA Login Error: " + error.message); 
+                        handleUserLogout();
+                    });
+            } else {
+                // Not expecting a login, so just show the login screen
+                handleUserLogout();
+            }
+        }
+    });
+
+    // --- Keep your handleUserLogin / handleUserLogout helpers here ---
+    function handleUserLogin(firebaseUser) {
         user = firebaseUser;
         reportsCollection = db.collection('sharedReports');
         authStatusEl.textContent = user.displayName || user.email;
@@ -1386,45 +1430,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         listenForLiveStateChanges(); 
         syncData();
-    };
+    }
 
-    const handleUserLogout = () => {
+    function handleUserLogout() {
         user = null;
         currentlyEditingReportId = null;
         reportsCollection = null;
         cachedReports = [];
+        loginMessage.textContent = "Sign in to access your synced reports."; // Reset message
         loginOverlay.style.display = 'flex';
         appContainer.style.display = 'none';
         if (liveStateUnsubscribe) {
             liveStateUnsubscribe();
             liveStateUnsubscribe = null;
         }
-    };
-
-    // --- 2. Updated Listener with Redirect Support ---
-    auth.onAuthStateChanged(async (firebaseUser) => {
-        if (firebaseUser) {
-            // Case A: Standard Login (User is found immediately)
-            handleUserLogin(firebaseUser);
-        } else {
-            // Case B: No user found yet. 
-            // Check if we are returning from a Redirect (Critical for iOS PWA)
-            auth.getRedirectResult()
-                .then((result) => {
-                    if (result.user) {
-                        // Success! We just came back from Google.
-                        handleUserLogin(result.user);
-                    } else {
-                        // No user, and no redirect result -> Truly logged out.
-                        handleUserLogout();
-                    }
-                })
-                .catch((error) => {
-                    console.error("Redirect Check Error:", error);
-                    handleUserLogout();
-                });
-        }
-    });
+    }
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
