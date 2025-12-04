@@ -1,3 +1,9 @@
 # netlify.toml
 [functions]
   directory = "netlify/functions"
+# --- Fix for iOS PWA Login (Reverse Proxy) ---
+[[redirects]]
+  from = "/__/auth/*"
+  to = "https://interest-calculator-8d997.firebaseapp.com/__/auth/:splat"
+  status = 200
+  force = true
