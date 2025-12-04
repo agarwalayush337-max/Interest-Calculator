@@ -1272,10 +1272,18 @@ const renderDashboard = async () => {
 // --- Authentication ---
 const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(error => {
-        console.error("Google Sign-in failed: ", error);
-        showConfirm("Sign-In Failed", "Could not sign in with Google. Please ensure pop-ups are not blocked.", false);
-    });
+    
+    // 1. Force LOCAL persistence (Critical for iOS PWA)
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .then(() => {
+            // 2. Use Redirect instead of Popup
+            // This prevents the PWA from losing the context when Safari takes over for login
+            return auth.signInWithRedirect(provider);
+        })
+        .catch(error => {
+            console.error("Login Error: ", error);
+            showConfirm("Sign-In Failed", "Could not initiate login: " + error.message, false);
+        });
 };
 const signOut = () => auth.signOut();
 
