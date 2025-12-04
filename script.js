@@ -1381,40 +1381,42 @@ document.addEventListener('DOMContentLoaded', async () => {
    // --- UPDATED AUTH LISTENER WITH PWA FLAG CHECK ---
     
     // 1. Check if we are waiting for a PWA redirect
+ // --- DEBUG VERSION: AUTH LISTENER ---
+    
+    // Check flag immediately for UI feedback
     if (localStorage.getItem('isPwaLoggingIn') === 'true') {
-        loginMessage.textContent = "Verifying secure login..."; // Feedback for user
+        loginMessage.textContent = "Verifying secure login... (Please wait)";
     }
 
-    auth.onAuthStateChanged(async (firebaseUser) => {
-        if (firebaseUser) {
-            // Case A: User found immediately
-            localStorage.removeItem('isPwaLoggingIn'); // Clear flag
-            handleUserLogin(firebaseUser);
-        } else {
-            // Case B: No user found yet. 
-            // Are we expecting a redirect result?
-            if (localStorage.getItem('isPwaLoggingIn') === 'true') {
-                console.log("Waiting for Redirect Result...");
-                
-                auth.getRedirectResult()
-                    .then((result) => {
-                        localStorage.removeItem('isPwaLoggingIn'); // Clear flag
-                        if (result.user) {
-                            handleUserLogin(result.user);
-                        } else {
-                            // Redirect happened, but no user? (Cancelled or failed)
-                            handleUserLogout();
-                        }
-                    })
-                    .catch((error) => {
-                        localStorage.removeItem('isPwaLoggingIn'); // Clear flag
-                        console.error("Redirect Error:", error);
-                        // Optional: Show error to help debug
-                        alert("PWA Login Error: " + error.message); 
-                        handleUserLogout();
-                    });
+    // Call this INDEPENDENTLY of onAuthStateChanged to catch the result early
+    if (localStorage.getItem('isPwaLoggingIn') === 'true') {
+        auth.getRedirectResult()
+            .then((result) => {
+                localStorage.removeItem('isPwaLoggingIn'); // Clear flag
+                if (result.user) {
+                    // SUCCESS: We have a user!
+                    handleUserLogin(result.user);
+                } else {
+                    // FAILURE: Google returned, but gave us no User.
+                    alert("Debug: Login failed. Google returned no user info. Check Authorized Domains.");
+                    handleUserLogout();
+                }
+            })
+            .catch((error) => {
+                localStorage.removeItem('isPwaLoggingIn'); 
+                // ERROR: Show the specific technical error
+                alert("Debug Error: " + error.code + " - " + error.message);
+                handleUserLogout();
+            });
+    }
+
+    // Normal Listener for when you are already logged in
+    auth.onAuthStateChanged((firebaseUser) => {
+        // Only handle if we aren't currently processing a redirect (to avoid double-firing)
+        if (!localStorage.getItem('isPwaLoggingIn')) {
+            if (firebaseUser) {
+                handleUserLogin(firebaseUser);
             } else {
-                // Not expecting a login, so just show the login screen
                 handleUserLogout();
             }
         }
