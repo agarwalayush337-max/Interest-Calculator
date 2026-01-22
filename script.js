@@ -1135,27 +1135,6 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
     updateAllCalculations();
 };
 
-const finaliseReport = async (docId) => {
-    const confirmed = await showConfirm("Finalise Report", "Are you sure you want to finalise this report? This action cannot be undone.");
-    if (!confirmed) return;
-    if (navigator.onLine && reportsCollection) {
-        try {
-            const reportDoc = await reportsCollection.doc(docId).get();
-            if (!reportDoc.exists) throw new Error("Report not found.");
-            const reportData = reportDoc.data();
-            const newName = `Final Hisab of ${reportData.reportDate}`;
-            await reportsCollection.doc(docId).update({ status: 'finalised', reportName: newName });
-            await showConfirm("Success", "The report has been finalised.", false);
-            loadRecentTransactions();
-            loadFinalisedTransactions();
-        } catch (error) {
-            console.error("Error finalising report:", error);
-            await showConfirm("Error", "Could not finalise the report.", false);
-        }
-    } else {
-        await showConfirm("Offline", "You must be online to finalise a report.", false);
-    }
-};
 
 const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
@@ -1690,24 +1669,38 @@ const listenForLiveStateChanges = () => {
 
 // --- DUES FINALISE LOGIC ---
 const finaliseReport = (docId) => {
+    // 1. Store the ID
     pendingReportIdToFinalise = docId;
+    
+    // 2. Clear & Open Dues Modal IMMEDIATELY
     document.getElementById('duesInput').value = ''; 
     document.getElementById('duesModal').style.display = 'flex';
+    
+    // 3. Auto-focus input
     setTimeout(() => document.getElementById('duesInput').focus(), 100);
 };
-
 const confirmFinaliseWithDues = async () => {
     const duesVal = document.getElementById('duesInput').value;
     const newDues = parseFloat(duesVal) || 0;
     const docId = pendingReportIdToFinalise;
 
+    // 1. Close the Input Box
     document.getElementById('duesModal').style.display = 'none';
 
     if (!docId) return;
 
+    // 2. NOW Ask for Confirmation (The "Are you sure?" Popup)
+    const confirmed = await showConfirm(
+        "Finalise Report", 
+        "Are you sure you want to finalise this report? This action cannot be undone."
+    );
+    
+    if (!confirmed) return; // If they click Cancel, stop everything.
+
+    // 3. Proceed with Saving
     if (navigator.onLine && reportsCollection) {
         try {
-            showConfirm("Processing...", "Finalising...", false);
+            showConfirm("Processing...", "Finalising report...", false);
             
             const reportDoc = await reportsCollection.doc(docId).get();
             if (!reportDoc.exists) throw new Error("Report not found.");
@@ -1715,34 +1708,34 @@ const confirmFinaliseWithDues = async () => {
             const reportData = reportDoc.data();
             const newName = `Final Hisab of ${reportData.reportDate}`;
             
-            // 1. Finalise Report
+            // A. Finalise the Report
             await reportsCollection.doc(docId).update({ 
                 status: 'finalised', 
                 reportName: newName,
                 finalisedDues: newDues 
             });
 
-            // 2. Save Dues Silently for Next Calculator Session
+            // B. Save Dues Silently for Next Session
             await db.collection('liveCalculatorState').doc(user.uid).set({
                 previousDues: newDues
             }, { merge: true });
 
-            // 3. Update Local Variable Immediately
+            // C. Update Local Variable
             currentPreviousDues = newDues;
 
             await showConfirm("Success", `Report Finalised.`, false);
+            
             loadRecentTransactions();
             loadFinalisedTransactions();
 
         } catch (error) {
-            console.error("Error finalising:", error);
-            await showConfirm("Error", "Could not finalise.", false);
+            console.error("Error finalising report:", error);
+            await showConfirm("Error", "Could not finalise the report.", false);
         }
     } else {
-        await showConfirm("Offline", "You must be online to finalise.", false);
+        await showConfirm("Offline", "You must be online to finalise a report.", false);
     }
 };
-
 
 // --- Initial Load & Event Listeners ---
 document.addEventListener('DOMContentLoaded', async () => {
