@@ -661,9 +661,11 @@ const getCurrentLoans = () => Array.from(document.querySelectorAll('#loanTable t
     })).filter(loan => loan.principal && parseFloat(loan.principal) > 0);
 
 const generatePDF = async (action = 'save') => {
+    // 1. Prepare Data
     cleanAndSortTable();
     updateAllCalculations(); 
     const loans = getCurrentLoans();
+    
     if (loans.length === 0) {
         showConfirm("Cannot Generate PDF", "Please add loan data to generate a report.", false);
         return;
@@ -672,25 +674,29 @@ const generatePDF = async (action = 'save') => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
+    // 2. Header
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
 
+    // 3. Table Data (FIX: Added .toUpperCase() here)
     const tableBodyData = loans.map((loan, i) => {
         const principal = parseFloat(loan.principal) || 0;
         const interest = parseFloat(loan.interest) || 0;
         const total = Math.round(principal + interest);
-        return [i + 1, loan.no, loan.principal, loan.date, loan.duration, loan.interest, String(total)];
+        
+        return [
+            i + 1, 
+            loan.no.toUpperCase(), // <--- FIX: Forces Upper Case
+            loan.principal, 
+            loan.date, 
+            loan.duration, 
+            loan.interest, 
+            String(total)
+        ];
     });
 
-    tableBodyData.push([
-        { content: 'TOTAL', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
-        { content: totalPrincipalEl.textContent, styles: { halign: 'center', fontStyle: 'bold', fontSize: 11 } },
-        '', '',
-        { content: totalInterestEl.textContent, styles: { halign: 'center', fontStyle: 'bold', fontSize: 11 } },
-        ''
-    ]);
-
+    // 4. Draw Table
     doc.autoTable({
         startY: 30,
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
@@ -700,45 +706,50 @@ const generatePDF = async (action = 'save') => {
         styles: { halign: 'center' }
     });
 
-    // ... inside generatePDF ...
-    
     const finalY = doc.autoTable.previous.finalY;
 
+    // 5. Totals Section (FIX: Added Previous Dues Logic)
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     const numberColumnX = 160;
     const labelColumnX = 165;
 
-    // 1. Get Values
+    // Get Values
     const tPrincipal = parseFloat(totalPrincipalEl.textContent) || 0;
     const tInterest = parseFloat(totalInterestEl.textContent) || 0;
-    const pDues = parseFloat(currentPreviousDues) || 0; // <--- The Silent Variable
     
-    // 2. Calculate PDF-Only Total
+    // Grab the silent variable (Global variable from script.js)
+    const pDues = parseFloat(currentPreviousDues) || 0; 
+
+    // Calculate The Real Paper Total
     const pdfFinalTotal = Math.round(tPrincipal + tInterest + pDues);
 
-    // 3. Draw Text
+    // Print Lines
+    // A. Principal
     doc.text(String(tPrincipal), numberColumnX, finalY + 17, { align: 'right' });
     doc.text('Total Principal', labelColumnX, finalY + 17, { align: 'left' });
     
+    // B. Interest
     doc.text(String(tInterest), numberColumnX, finalY + 24, { align: 'right' });
     doc.text('Total Interest', labelColumnX, finalY + 24, { align: 'left' });
 
-    // --- NEW: Add Previous Dues Line ---
+    // C. Previous Dues (Only print if it exists)
     if (pDues > 0) {
         doc.text(String(pDues), numberColumnX, finalY + 31, { align: 'right' });
         doc.text('Previous Dues', labelColumnX, finalY + 31, { align: 'left' });
 
+        // Final Total (Shifted Down)
         doc.setFont("helvetica", "bold");
         doc.text(String(pdfFinalTotal), numberColumnX, finalY + 40, { align: 'right' });
         doc.text('Total Amount', labelColumnX, finalY + 40, { align: 'left' });
     } else {
-        // If no dues, print standard total at normal position
+        // Final Total (Normal Position)
         doc.setFont("helvetica", "bold");
         doc.text(String(pdfFinalTotal), numberColumnX, finalY + 31, { align: 'right' });
         doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
     }
 
+    // 6. Save/Share Logic
     const fileName = `Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`;
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
@@ -760,7 +771,6 @@ const generatePDF = async (action = 'save') => {
         doc.save(fileName);
     }
 };
-
 const isDuplicateReport = (newReport, reportList) => {
     const normalizeLoansForComparison = (loans) => {
         return loans.map(l => ({
