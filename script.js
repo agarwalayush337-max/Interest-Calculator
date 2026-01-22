@@ -1223,7 +1223,7 @@ const performLoanSearch = (inputElement) => {
 
     const normalizedKey = normalizeLoanNo(userInput);
 
-    // 1. Check Finalised Reports
+    // --- CHECK 1: FINALIZED REPORTS (Sold/Closed) ---
     if (loanSearchCache.has(normalizedKey)) {
         const data = loanSearchCache.get(normalizedKey);
         principalCell.textContent = data.principal;
@@ -1234,26 +1234,47 @@ const performLoanSearch = (inputElement) => {
             <button class="btn btn-secondary btn-sm btn-flat-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
                 View
             </button>`;
-    } else {
-        // 2. Check Available Sheet Data
+        return; // Stop here if found
+    }
+
+    // --- CHECK 2: ACTIVE INVENTORY (Your New Entries) ---
+    // We try to match exact No OR normalized No (e.g. G/101 vs G101)
+    const inventoryMatch = activeInventory.find(item => 
+        item.no === userInput || normalizeLoanNo(item.no) === normalizedKey
+    );
+
+    if (inventoryMatch) {
         statusCell.classList.add('status-available');
         
-        let annotationHtml = '';
-        if (sheetDetailsCache.has(normalizedKey)) {
-            const detail = sheetDetailsCache.get(normalizedKey);
-            
-            // COLOR LOGIC FOR APP UI
-            let colorStyle = '#333';
-            if(detail === 'G') colorStyle = '#f1c40f'; // Yellow
-            if(detail === 'S') colorStyle = '#000000'; // Black
-            
-            annotationHtml = `<span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${detail}]</span>`;
-        } else {
-            annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:#e74c3c;">[?]</span>`;
-        }
+        // Show Principal & Date from your saved entry
+        principalCell.textContent = inventoryMatch.principal || '-';
+        dateCell.textContent = inventoryMatch.date || '-';
 
-        statusCell.innerHTML = `<span>Available</span>${annotationHtml}`;
+        // Color Logic for G/S
+        let colorStyle = '#333';
+        if(inventoryMatch.type === 'G') colorStyle = '#f1c40f'; // Yellow
+        if(inventoryMatch.type === 'S') colorStyle = '#000000'; // Black
+
+        statusCell.innerHTML = `<span>Available</span><span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${inventoryMatch.type}]</span>`;
+        return; // Stop here if found
     }
+
+    // --- CHECK 3: OLD SHEET DATA (CSV) ---
+    // If not found above, we check the sheet
+    statusCell.classList.add('status-available');
+    let annotationHtml = '';
+    
+    if (sheetDetailsCache.has(normalizedKey)) {
+        const detail = sheetDetailsCache.get(normalizedKey);
+        let colorStyle = '#333';
+        if(detail === 'G') colorStyle = '#f1c40f'; 
+        if(detail === 'S') colorStyle = '#000000'; 
+        annotationHtml = `<span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${detail}]</span>`;
+    } else {
+        annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:#e74c3c;">[?]</span>`;
+    }
+
+    statusCell.innerHTML = `<span>Available</span>${annotationHtml}`;
 };
 
 // Handle Image Scan for Loan Search Tab
@@ -1627,6 +1648,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         listenForLiveStateChanges(); 
         syncData();
+        loadInventory();
     }
 
     function handleUserLogout() {
