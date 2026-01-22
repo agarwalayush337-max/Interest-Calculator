@@ -531,3 +531,33 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 /* --- Auto-Fill Highlights --- */
 input.found-gold { background-color: #fcf4cf !important; color: #333; font-weight: 700; border: 1px solid #f1c40f; }
 input.found-silver { background-color: #e0e0e0 !important; color: #000; font-weight: 700; border: 1px solid #999; }
+
+
+/* --- Fix Mobile Tabs to 2x2 Grid --- */
+.tabs {
+    display: flex;
+    flex-wrap: wrap; 
+    justify-content: center;
+}
+
+.tab-button {
+    flex: 0 0 50%; /* Forces 2 items per row */
+    box-sizing: border-box;
+    text-align: center;
+    border-bottom: 2px solid transparent; 
+}
+
+/* --- Entry Table & Batch Header Styles --- */
+.entry-header {
+    background-color: #f1f3f5;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid #ddd;
+    box-shadow: inset 2px 2px 5px #ccc, inset -2px -2px 5px #fff;
+}
+#batchTable th { font-size: 0.8rem; letter-spacing: 0.5px; text-transform: uppercase; }
+#batchTable select { 
+    width: 100%; padding: 8px; border: none; background: transparent; 
+    font-weight: 600; cursor: pointer;
+}
