@@ -1694,9 +1694,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             liveStateUnsubscribe = null;
         }
     }
-    googleSignInBtn.addEventListener('click', signInWithGoogle);
-    signOutBtn.addEventListener('click', signOut);
-    addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
+    // --- SAFE AUTH & LOAN LISTENERS ---
+    if (googleSignInBtn) googleSignInBtn.addEventListener('click', signInWithGoogle);
+    if (signOutBtn) signOutBtn.addEventListener('click', signOut);
+    if (addRowBtn) addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
     // Wrap it in a check to prevent the crash
     // 1. Calculator Tab Save Button
     const calculatorSaveBtn = document.getElementById('saveBtn');
