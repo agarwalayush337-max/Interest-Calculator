@@ -1750,7 +1750,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // --- Event Listeners for Loan Search Tab ---
-    addSearchRowBtn.addEventListener('click', () => addSearchRow());
+    const addSearchRowBtn = document.getElementById('addSearchRowBtn');
+    if (addSearchRowBtn) {
+        addSearchRowBtn.addEventListener('click', () => addSearchRow());
+    }
     scanNumbersBtn.addEventListener('click', () => numberImageUploadInput.click());
     numberImageUploadInput.addEventListener('change', handleNumberScan);
     clearSearchSheetBtn.addEventListener('click', clearSearchTable);
