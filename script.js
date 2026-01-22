@@ -1698,13 +1698,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
     // Wrap it in a check to prevent the crash
-    const saveBtn = document.getElementById('saveBatchBtn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', saveBatchEntries);
-    } else {
-        console.warn("Save Button not found in HTML");
+    // 1. Calculator Tab Save Button
+    const calculatorSaveBtn = document.getElementById('saveBtn');
+    if (calculatorSaveBtn) {
+        calculatorSaveBtn.addEventListener('click', () => saveReport(false));
     }
-    saveBtn.addEventListener('click', () => saveReport(false));
+    
+    // 2. Inventory Tab Save Button
+    const inventorySaveBtn = document.getElementById('saveBatchBtn');
+    if (inventorySaveBtn) {
+        inventorySaveBtn.addEventListener('click', saveBatchEntries);
+    }
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
     exportPdfBtn.addEventListener('click', exportToPDF);
