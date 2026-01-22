@@ -39,7 +39,6 @@ let activeInventory = []; // NEW: Stores active stock
 let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
-const FINALISED_DELETE_KEY = 'DELETE-FINAL-2025';
 
 // --- GLOBALS FOR SCANNING & SHEETS ---
 let currentScanCoordinates = []; 
@@ -771,13 +770,13 @@ const generatePDF = async (action = 'save') => {
         }
 
         // Line 6: Final Total Amount
-        currentY += 10; // Extra gap before final total
+        currentY += 7; // Extra gap before final total
         doc.setFont("helvetica", "bold");
         doc.text(String(pdfFinalTotal), numberColumnX, currentY, { align: 'right' });
         doc.text('Total Amount', labelColumnX, currentY, { align: 'left' });
     } else {
         // If no dues, just show the Final Total (same as subtotal)
-        currentY += 10;
+        currentY += 7;
         doc.setFont("helvetica", "bold");
         doc.text(String(pdfFinalTotal), numberColumnX, currentY, { align: 'right' });
         doc.text('Total Amount', labelColumnX, currentY, { align: 'left' });
@@ -1185,12 +1184,33 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
 const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
         const key = prompt("This is a finalised transaction. Please enter the security key to delete.");
-        if (key !== FINALISED_DELETE_KEY) {
-            if (key !== null) { 
+        
+        if (key === null) return; // User clicked Cancel on prompt
+
+        // --- NEW: Verify Key Securely via Netlify Function ---
+        try {
+            showConfirm("Verifying...", "Checking security key...", false);
+            
+            const response = await fetch('/.netlify/functions/verifyKey', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: key })
+            });
+
+            // Close the "Verifying..." popup
+            document.getElementById('confirmModal').style.display = 'none';
+
+            if (!response.ok) {
                 await showConfirm("Access Denied", "The security key is incorrect. Deletion cancelled.", false);
+                return;
             }
+
+        } catch (error) {
+            console.error("Verification Error:", error);
+            await showConfirm("Error", "Could not verify security key. Check internet.", false);
             return;
         }
+        // -----------------------------------------------------
     }
 
     const confirmed = await showConfirm("Delete Report", "Are you sure you want to permanently delete this report?");
