@@ -414,16 +414,24 @@ const showTab = (tabId) => {
 
         // 4. NEW: Inventory Tab (Renamed from loanSearchTab)
         if (tabId === 'inventoryTab') {
-            // Load your new Active Stock list
-            loadInventory(); 
+            loadInventory();
+            
+            // Default to Search View
+            toggleInventoryView('search'); 
 
-            // Initialize the table rows (kept for manual checks)
+            // Initialize Search Table (Manual Search)
             if (loanSearchTableBody.rows.length === 0) {
                 for (let i = 0; i < 5; i++) addSearchRow();
             }
-            
-            // Rebuild cache for the "Search" bar to work
-            if (cachedFinalisedReports.length === 0) {
+
+            // Initialize Batch Table (Stock Entry)
+            const batchBody = document.querySelector('#batchTable tbody');
+            if (batchBody && batchBody.rows.length === 0) {
+                for(let i=0; i<3; i++) addBatchRow();
+            }
+
+            // ... cache logic ...
+             if (cachedFinalisedReports.length === 0) {
                 loadFinalisedTransactions().then(buildLoanSearchCache);
             } else {
                 buildLoanSearchCache();
@@ -441,6 +449,52 @@ const toggleTxView = (mode) => {
     document.getElementById('pendingView').style.display = isPending ? 'block' : 'none';
     document.getElementById('finalisedView').style.display = !isPending ? 'block' : 'none';
 };
+
+// NEW: Toggle between Search and Entry Views
+const toggleInventoryView = (mode) => {
+    const isSearch = (mode === 'search');
+    document.getElementById('invSearch').checked = isSearch;
+    document.getElementById('invEntry').checked = !isSearch;
+    
+    document.getElementById('invSearchView').style.display = isSearch ? 'block' : 'none';
+    document.getElementById('invEntryView').style.display = !isSearch ? 'block' : 'none';
+
+    // If switching to Entry, auto-fill today's date
+    if (!isSearch && !document.getElementById('batchDate').value) {
+        document.getElementById('batchDate').value = formatDateToDDMMYYYY(new Date());
+    }
+};
+
+// NEW: Batch Table Logic
+const batchTableBody = document.querySelector('#batchTable tbody');
+
+const addBatchRow = () => {
+    const rowCount = batchTableBody ? batchTableBody.rows.length : 0;
+    const row = batchTableBody.insertRow();
+    row.innerHTML = `
+        <td>${rowCount + 1}</td>
+        <td><input type="text" class="batch-no" placeholder="A/53"></td>
+        <td><input type="number" class="batch-principal" placeholder="0"></td>
+        <td>
+            <select class="batch-type">
+                <option value="G">G</option>
+                <option value="S">S</option>
+            </select>
+        </td>
+        <td><input type="text" class="batch-note" placeholder="Optional"></td>
+        <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows();">X</button></td>
+    `;
+};
+
+const renumberBatchRows = () => {
+    Array.from(batchTableBody.rows).forEach((row, index) => {
+        row.cells[0].textContent = index + 1;
+    });
+};
+
+// Listeners (Ensure these run after DOM load)
+const addBatchBtn = document.getElementById('addBatchRowBtn');
+if(addBatchBtn) addBatchBtn.addEventListener('click', addBatchRow);
 
 // NEW: Load Inventory from DB
 const loadInventory = async () => {
