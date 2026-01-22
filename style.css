@@ -616,7 +616,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         width: 100% !important;
         display: flex !important;
         justify-content: space-between !important;
-        gap: 5px !important; /* Reduced gap to save space */
+        gap: 15px !important; /* Reduced gap to save space */
     }
 
     /* 4. Make buttons equal size & touch-friendly */
@@ -624,7 +624,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         flex: 1 !important;        /* Grow to fill space */
         text-align: center !important;
         padding: 8px 2px !important; /* Less side padding */
-        font-size: 11px !important;  /* Smaller font to fit "Finalise" */
+        font-size: 16px !important;  /* Smaller font to fit "Finalise" */
         white-space: nowrap !important; /* Prevent text wrapping */
         min-width: 0 !important;   /* Prevent flex overflow */
     }
