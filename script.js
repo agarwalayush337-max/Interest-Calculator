@@ -421,7 +421,7 @@ const showTab = (tabId) => {
 
             // Initialize Search Table (Manual Search)
             if (loanSearchTableBody.rows.length === 0) {
-                for (let i = 0; i < 5; i++) addSearchRow();
+                for (let i = 0; i < 3; i++) addSearchRow();
             }
 
             // Initialize Batch Table (Stock Entry)
@@ -636,7 +636,7 @@ if (batchTable) {
 
 const resetCalculatorState = () => {
     if (!user) return;
-    const defaultLoans = Array(5).fill({ no: '', principal: '', date: '' });
+    const defaultLoans = Array(3).fill({ no: '', principal: '', date: '' });
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
 
     liveStateRef.set({
@@ -866,7 +866,7 @@ const clearSearchTable = async () => {
     );
     if (confirmed) {
         loanSearchTableBody.innerHTML = '';
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 3; i++) {
             addSearchRow();
         }
     }
