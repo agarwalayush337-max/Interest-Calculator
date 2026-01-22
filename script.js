@@ -1224,21 +1224,21 @@ const performLoanSearch = (inputElement) => {
     const normalizedKey = normalizeLoanNo(userInput);
 
     // --- CHECK 1: FINALIZED REPORTS (Sold/Closed) ---
+    // Here we DO show the date because it is the "Finalised Date"
     if (loanSearchCache.has(normalizedKey)) {
         const data = loanSearchCache.get(normalizedKey);
         principalCell.textContent = data.principal;
-        dateCell.textContent = data.reportDate;
+        dateCell.textContent = data.reportDate; // <--- KEEP THIS (It's the finalised date)
         statusCell.classList.add('status-not-available');
         statusCell.innerHTML = `
             <span>Not Available</span>
             <button class="btn btn-secondary btn-sm btn-flat-sm" onclick="viewReport('${data.reportId}', false, true, 'loanSearchTab')">
                 View
             </button>`;
-        return; // Stop here if found
+        return; 
     }
 
     // --- CHECK 2: ACTIVE INVENTORY (Your New Entries) ---
-    // We try to match exact No OR normalized No (e.g. G/101 vs G101)
     const inventoryMatch = activeInventory.find(item => 
         item.no === userInput || normalizeLoanNo(item.no) === normalizedKey
     );
@@ -1246,9 +1246,10 @@ const performLoanSearch = (inputElement) => {
     if (inventoryMatch) {
         statusCell.classList.add('status-available');
         
-        // Show Principal & Date from your saved entry
+        // Show Principal ONLY. 
+        // We leave the date BLANK or put a dash '-' because it is not finalised yet.
         principalCell.textContent = inventoryMatch.principal || '-';
-        dateCell.textContent = inventoryMatch.date || '-';
+        dateCell.textContent = '';  // <--- CHANGED: Forces date to be empty/dash
 
         // Color Logic for G/S
         let colorStyle = '#333';
@@ -1256,11 +1257,10 @@ const performLoanSearch = (inputElement) => {
         if(inventoryMatch.type === 'S') colorStyle = '#000000'; // Black
 
         statusCell.innerHTML = `<span>Available</span><span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${inventoryMatch.type}]</span>`;
-        return; // Stop here if found
+        return; 
     }
 
     // --- CHECK 3: OLD SHEET DATA (CSV) ---
-    // If not found above, we check the sheet
     statusCell.classList.add('status-available');
     let annotationHtml = '';
     
@@ -1276,7 +1276,6 @@ const performLoanSearch = (inputElement) => {
 
     statusCell.innerHTML = `<span>Available</span>${annotationHtml}`;
 };
-
 // Handle Image Scan for Loan Search Tab
 const handleNumberScan = async (event) => {
     const file = event.target.files[0];
