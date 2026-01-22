@@ -37,10 +37,9 @@
 
         <div class="tabs">
             <button class="tab-button active" data-tab="calculatorTab">Calculator</button>
-            <button class="tab-button" data-tab="recentTransactionsTab">Recent Transactions</button>
-            <button class="tab-button" data-tab="finalisedTransactionsTab">Finalised Transactions</button>
+            <button class="tab-button" data-tab="transactionsTab">Transactions</button>
+            <button class="tab-button" data-tab="inventoryTab">Search/Entry</button>
             <button class="tab-button" data-tab="dashboardTab">Dashboard</button>
-            <button class="tab-button" data-tab="loanSearchTab">Loan Search</button>
         </div>
 
         <div id="calculatorTab" class="tab-content active">
@@ -110,27 +109,35 @@
             </div>
         </div>
 
-        <div id="recentTransactionsTab" class="tab-content">
+        <div id="transactionsTab" class="tab-content">
             <div class="main-content">
-                <h2>Recent Transactions</h2>
-                 <div class="input-field search-bar" id="recentSearchContainer">
-                    <label for="reportSearchInput">Search Reports</label>
-                    <input type="search" id="reportSearchInput" placeholder="Search by Date, No, or Amount...">
+                <div class="toggle-container">
+                    <div class="segment-control">
+                        <input type="radio" name="txType" id="txPending" value="pending" checked onclick="toggleTxView('pending')">
+                        <label for="txPending">Pending</label>
+                        <input type="radio" name="txType" id="txFinalised" value="finalised" onclick="toggleTxView('finalised')">
+                        <label for="txFinalised">Finalised</label>
+                        <div class="segment-marker"></div>
+                    </div>
                 </div>
-                 <div id="recentTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
-                <ul id="recentTransactionsList"></ul>
-            </div>
-        </div>
-
-        <div id="finalisedTransactionsTab" class="tab-content">
-            <div class="main-content">
-                <h2>Finalised Transactions</h2>
-                <div class="input-field search-bar" id="finalisedSearchContainer">
-                    <label for="finalisedReportSearchInput">Search Finalised Reports</label>
-                    <input type="search" id="finalisedReportSearchInput" placeholder="Search by Report Name, Loan No, or Principal...">
+        
+                <div id="pendingView">
+                    <div class="input-field search-bar" id="recentSearchContainer">
+                        <label>Search Reports</label>
+                        <input type="search" id="reportSearchInput" placeholder="Search Pending...">
+                    </div>
+                    <div id="recentTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                    <ul id="recentTransactionsList"></ul>
                 </div>
-                <div id="finalisedTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
-                <ul id="finalisedTransactionsList"></ul>
+        
+                <div id="finalisedView" style="display: none;">
+                    <div class="input-field search-bar" id="finalisedSearchContainer">
+                        <label>Search Finalised</label>
+                        <input type="search" id="finalisedReportSearchInput" placeholder="Search Finalised...">
+                    </div>
+                    <div id="finalisedTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                    <ul id="finalisedTransactionsList"></ul>
+                </div>
             </div>
         </div>
 
@@ -170,11 +177,15 @@
             </div>
         </div>
 
-        <div id="loanSearchTab" class="tab-content">
+        <div id="inventoryTab" class="tab-content">
             <div class="main-content">
-                <h2>Loan Number Availability Search</h2>
-                <p style="margin-top:-1rem; margin-bottom:1.5rem; color: var(--subtle-text-color);">Check if a loan number exists in any finalised report.</p>
-
+                <button class="btn btn-primary big-btn" id="scanBatchBtn" style="width:100%; padding:1.2rem; margin-bottom:1.5rem; justify-content:center;">
+                    <svg viewBox="0 0 24 24" width="24" height="24" style="margin-right:8px"><path fill="currentColor" d="M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4zm6 9l-4 5h12l-3-4-2.03 2.71L10 13zm7-4.5c0-.83-.67-1.5-1.5-1.5S14 7.67 14 8.5s.67 1.5 1.5 1.5S17 9.33 17 8.5zM20 2h-7v2h7v7h2V4c0-1.1-.9-2-2-2zm0 18h-7v2h7c1.1 0 2-.9 2-2v-7h-2v7zM4 13H2v7c0 1.1.9 2 2 2h7v-2H4v-7z"/></svg>
+                    Scan New Batch
+                </button>
+        
+                <h2>Inventory Search</h2>
+                
                 <div class="search-filters">
                     <button class="btn btn-secondary active-filter" data-filter="all">All</button>
                     <button class="btn btn-success" data-filter="available">Available</button>
@@ -251,3 +262,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
