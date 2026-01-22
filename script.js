@@ -35,6 +35,7 @@ let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
 let cachedFinalisedReports = [];
+let activeInventory = []; // NEW: Stores active stock
 let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
@@ -378,20 +379,30 @@ const handleImageScan = async (fileOrEvent) => {
 };
 
 // --- Tabs ---
+// REPLACE your entire existing showTab function with this:
 const showTab = (tabId) => {
+    // 1. Standard UI Toggle (No changes here)
     document.querySelectorAll('.tab-content, .tab-button').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
 
     if (user) {
-        if (tabId === 'recentTransactionsTab') {
+        // 2. NEW: Merged Transactions Tab
+        if (tabId === 'transactionsTab') {
+            // Always start on the "Pending" view
+            toggleTxView('pending');
+            
+            // Load both lists so the toggle works instantly
             recentTransactionsListEl.innerHTML = '';
-            loadRecentTransactions();
+            loadRecentTransactions(); 
+            
+            // We load finalised in background if empty
+            if (cachedFinalisedReports.length === 0) {
+                 loadFinalisedTransactions();
+            }
         }
-        if (tabId === 'finalisedTransactionsTab') {
-            document.getElementById('finalisedTransactionsList').innerHTML = '';
-            loadFinalisedTransactions();
-        }
+
+        // 3. Dashboard (Kept mostly the same)
         if (tabId === 'dashboardTab') {
             if (!dashboardStartDateEl.value || !dashboardEndDateEl.value) {
                 const { startDate, endDate } = getFinancialYear();
@@ -400,10 +411,18 @@ const showTab = (tabId) => {
             }
             renderDashboard();
         }
-        if (tabId === 'loanSearchTab') {
+
+        // 4. NEW: Inventory Tab (Renamed from loanSearchTab)
+        if (tabId === 'inventoryTab') {
+            // Load your new Active Stock list
+            loadInventory(); 
+
+            // Initialize the table rows (kept for manual checks)
             if (loanSearchTableBody.rows.length === 0) {
                 for (let i = 0; i < 5; i++) addSearchRow();
             }
+            
+            // Rebuild cache for the "Search" bar to work
             if (cachedFinalisedReports.length === 0) {
                 loadFinalisedTransactions().then(buildLoanSearchCache);
             } else {
@@ -412,6 +431,27 @@ const showTab = (tabId) => {
         }
     }
 };
+
+
+const toggleTxView = (mode) => {
+    const isPending = (mode === 'pending');
+    document.getElementById('txPending').checked = isPending;
+    document.getElementById('txFinalised').checked = !isPending;
+    
+    document.getElementById('pendingView').style.display = isPending ? 'block' : 'none';
+    document.getElementById('finalisedView').style.display = !isPending ? 'block' : 'none';
+};
+
+// NEW: Load Inventory from DB
+const loadInventory = async () => {
+    if (!user) return;
+    try {
+        const snapshot = await db.collection('activeInventory').where('userId', '==', user.uid).get();
+        activeInventory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Optional: Update dashboard stats here
+    } catch (e) { console.error("Inventory Load Error:", e); }
+};
+
 
 const resetCalculatorState = () => {
     if (!user) return;
@@ -1471,6 +1511,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
     loanTableBody.addEventListener('input', e => {
+        // NEW: Auto-Fill Logic
+        if (e.target.classList.contains('no')) {
+            const row = e.target.closest('tr');
+            const val = e.target.value.trim().toUpperCase(); // Basic normalize
+            
+            // 1. Check Active Inventory
+            const match = activeInventory.find(item => item.no === val); // You can use normalizeLoanNo(val) here later
+            
+            const principalInput = row.querySelector('.principal');
+            const dateInput = row.querySelector('.date');
+            
+            // Reset styles
+            e.target.classList.remove('found-gold', 'found-silver');
+
+            if (match) {
+                // Fill if empty
+                if(!principalInput.value) principalInput.value = match.principal;
+                if(!dateInput.value) dateInput.value = match.date;
+                
+                // Visual Cue
+                if (match.type === 'G') e.target.classList.add('found-gold');
+                else if (match.type === 'S') e.target.classList.add('found-silver');
+            }
+        }
+        
         if (e.target.matches('input')) {
             updateAllCalculations();
         }
