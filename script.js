@@ -47,6 +47,7 @@ let scanCanvas = null;
 let scanCtx = null;              
 let sheetDetailsCache = new Map(); // Stores Sheet Data
 let currentPreviousDues = 0; // Stored silently
+let currentPreviousDuesDate = ''; // NEW: Stores the date of the dues
 let pendingReportIdToFinalise = null;
 
 // --- Real-time Sync Variables ---
@@ -641,12 +642,12 @@ const resetCalculatorState = () => {
     const defaultLoans = Array(3).fill({ no: '', principal: '', date: '' });
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
 
-    // FIX: We must include 'previousDues' here so it doesn't get wiped out!
     liveStateRef.set({
         todayDate: formatDateToDDMMYYYY(new Date()),
         interestRate: '1.75',
         loans: defaultLoans,
-        previousDues: currentPreviousDues, // <--- IMPORTANT: KEEP THE DUES
+        previousDues: currentPreviousDues,      // Keep Amount
+        previousDuesDate: currentPreviousDuesDate, // <--- Keep Date
         lastUpdatedBy: sessionClientId + '_reset'
     });
     currentlyEditingReportId = null;
@@ -681,7 +682,7 @@ const generatePDF = async (action = 'save') => {
     doc.setFont("helvetica", "normal");
     doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
 
-    // 3. Table Data (Forces Uppercase)
+    // 3. Table Data
     const tableBodyData = loans.map((loan, i) => {
         const principal = parseFloat(loan.principal) || 0;
         const interest = parseFloat(loan.interest) || 0;
@@ -689,7 +690,7 @@ const generatePDF = async (action = 'save') => {
         
         return [
             i + 1, 
-            String(loan.no).toUpperCase(), // <--- FORCE UPPERCASE
+            String(loan.no).toUpperCase(), 
             loan.principal, 
             loan.date, 
             loan.duration, 
@@ -710,48 +711,79 @@ const generatePDF = async (action = 'save') => {
 
     const finalY = doc.autoTable.previous.finalY;
 
-    // 5. Totals Section
+    // ==========================================
+    // 5. NEW TOTALS SECTION (6-Line Layout)
+    // ==========================================
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     const numberColumnX = 160;
     const labelColumnX = 165;
+    
+    // Base Y Position
+    let currentY = finalY + 10;
 
     // Get Values
     const tPrincipal = parseFloat(totalPrincipalEl.textContent) || 0;
     const tInterest = parseFloat(totalInterestEl.textContent) || 0;
+    const pDues = parseFloat(currentPreviousDues) || 0;
     
-    // Grab the silent variable correctly
-    const pDues = parseFloat(currentPreviousDues) || 0; 
+    // Calculated Totals
+    const subTotal = Math.round(tPrincipal + tInterest); // Total (Principal + Interest)
+    const pdfFinalTotal = Math.round(subTotal + pDues);  // Final Amount
 
-    // Calculate Final Total
-    const pdfFinalTotal = Math.round(tPrincipal + tInterest + pDues);
-
-    // Print Lines
-    // A. Principal
-    doc.text(String(tPrincipal), numberColumnX, finalY + 17, { align: 'right' });
-    doc.text('Total Principal', labelColumnX, finalY + 17, { align: 'left' });
+    // Line 1: Total Principal
+    currentY += 7;
+    doc.text(String(tPrincipal), numberColumnX, currentY, { align: 'right' });
+    doc.text('Total Principal', labelColumnX, currentY, { align: 'left' });
     
-    // B. Interest
-    doc.text(String(tInterest), numberColumnX, finalY + 24, { align: 'right' });
-    doc.text('Total Interest', labelColumnX, finalY + 24, { align: 'left' });
+    // Line 2: Total Interest
+    currentY += 7;
+    doc.text(String(tInterest), numberColumnX, currentY, { align: 'right' });
+    doc.text('Total Interest', labelColumnX, currentY, { align: 'left' });
 
-    // C. Previous Dues (Check if > 0)
+    // Line 3: Total (Subtotal)
+    currentY += 7;
+    doc.setFont("helvetica", "bold");
+    doc.text(String(subTotal), numberColumnX, currentY, { align: 'right' });
+    doc.text('Total', labelColumnX, currentY, { align: 'left' });
+    doc.setFont("helvetica", "normal"); // Reset font
+
+    // Lines 4 & 5: Previous Dues & Date
     if (pDues > 0) {
-        doc.text(String(pDues), numberColumnX, finalY + 31, { align: 'right' });
-        doc.text('Previous Dues', labelColumnX, finalY + 31, { align: 'left' });
+        // Line 4: Previous Dues Amount
+        currentY += 7;
+        doc.text(String(pDues), numberColumnX, currentY, { align: 'right' });
+        doc.text('Previous Dues', labelColumnX, currentY, { align: 'left' });
 
-        // Final Total (Shifted Down)
+        // Line 5: "of [Date]"
+        if (currentPreviousDuesDate) {
+            currentY += 5; // Smaller gap for description
+            doc.setFontSize(10); // Smaller font for date
+            doc.setTextColor(100); // Gray color
+            doc.text(`of ${currentPreviousDuesDate}`, labelColumnX, currentY, { align: 'left' });
+            
+            // Reset Styles
+            doc.setFontSize(12);
+            doc.setTextColor(0);
+        } else {
+            // Just a spacer if no date is found
+            currentY += 2; 
+        }
+
+        // Line 6: Final Total Amount
+        currentY += 10; // Extra gap before final total
         doc.setFont("helvetica", "bold");
-        doc.text(String(pdfFinalTotal), numberColumnX, finalY + 40, { align: 'right' });
-        doc.text('Total Amount', labelColumnX, finalY + 40, { align: 'left' });
+        doc.text(String(pdfFinalTotal), numberColumnX, currentY, { align: 'right' });
+        doc.text('Total Amount', labelColumnX, currentY, { align: 'left' });
     } else {
-        // Final Total (Normal Position)
+        // If no dues, just show the Final Total (same as subtotal)
+        currentY += 10;
         doc.setFont("helvetica", "bold");
-        doc.text(String(pdfFinalTotal), numberColumnX, finalY + 31, { align: 'right' });
-        doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
+        doc.text(String(pdfFinalTotal), numberColumnX, currentY, { align: 'right' });
+        doc.text('Total Amount', labelColumnX, currentY, { align: 'left' });
     }
 
-    // 6. Save/Share
+    // 6. Save/Share Logic
     const fileName = `Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`;
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
@@ -773,6 +805,7 @@ const generatePDF = async (action = 'save') => {
         doc.save(fileName);
     }
 };
+
 
 const isDuplicateReport = (newReport, reportList) => {
     const normalizeLoansForComparison = (loans) => {
@@ -1618,6 +1651,7 @@ const updateLiveState = () => {
         interestRate: interestRateEl.value,
         loans: loans,
         previousDues: currentPreviousDues, // <--- ADD THIS LINE (Safety Net)
+        previousDuesDate: currentPreviousDuesDate, // <--- ADD THIS
         lastUpdatedBy: sessionClientId
     };
 
@@ -1647,6 +1681,7 @@ const listenForLiveStateChanges = () => {
 
             // --- CHANGED: Load Silently ---
             currentPreviousDues = parseFloat(state.previousDues) || 0;
+            currentPreviousDuesDate = state.previousDuesDate || ''; // <--- Load Date
             // We DO NOT update the UI here.
             // -----------------------------
 
@@ -1733,12 +1768,13 @@ const confirmFinaliseWithDues = async () => {
 
             // B. Save Dues Silently for Next Session
             await db.collection('liveCalculatorState').doc(user.uid).set({
-                previousDues: newDues
+                previousDues: newDues,
+                previousDuesDate: reportData.reportDate // <--- SAVE THE DATE
             }, { merge: true });
 
             // C. Update Local Variable
             currentPreviousDues = newDues;
-
+            currentPreviousDuesDate = reportData.reportDate; // <--- Update Local
             await showConfirm("Success", `Report Finalised.`, false);
             
             loadRecentTransactions();
