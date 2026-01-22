@@ -587,8 +587,8 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     background: transparent; 
     font-weight: 600; 
     cursor: pointer;
-    font-size: 0.8rem !important; /* Forces smaller text size */
-    text-indent: 4px; /* distinct indent for the letter G/S */
+    font-size: 1.1rem !important; /* Forces smaller text size */
+    text-indent: 2px; /* distinct indent for the letter G/S */
 }
 
 /* ADD THIS to make the Search/Entry toggle move */
