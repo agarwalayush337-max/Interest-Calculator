@@ -506,3 +506,28 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     background-color: #f5f5f5; /* A light grey for hover */
     box-shadow: none !important;
 }
+
+/* --- Transaction Toggle Styles --- */
+.toggle-container { display: flex; justify-content: center; margin-bottom: 1.5rem; }
+.segment-control {
+    background: #e0e5ec; position: relative; display: flex;
+    border-radius: 8px; padding: 4px; 
+    box-shadow: inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff;
+}
+.segment-control input { display: none; }
+.segment-control label {
+    padding: 8px 25px; cursor: pointer; z-index: 2; font-weight: 600; 
+    font-size: 0.9rem; color: #777; transition: color 0.3s;
+}
+.segment-control input:checked + label { color: #3D52D5; }
+.segment-marker {
+    position: absolute; top: 4px; bottom: 4px; left: 4px; width: 50%;
+    background: #e0e5ec; border-radius: 6px;
+    box-shadow: 3px 3px 6px #a3b1c6, -3px -3px 6px #ffffff;
+    transition: transform 0.3s ease; z-index: 1;
+}
+#txFinalised:checked ~ .segment-marker { transform: translateX(100%); }
+
+/* --- Auto-Fill Highlights --- */
+input.found-gold { background-color: #fcf4cf !important; color: #333; font-weight: 700; border: 1px solid #f1c40f; }
+input.found-silver { background-color: #e0e0e0 !important; color: #000; font-weight: 700; border: 1px solid #999; }
