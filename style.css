@@ -588,12 +588,45 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 /* ADD THIS to make the Search/Entry toggle move */
 #invEntry:checked ~ .segment-marker { transform: translateX(100%); }
 
-/* --- Fix Mobile Buttons (Make them smaller to fit) --- */
+/* =========================================
+   MOBILE FIX: TRANSACTION CARDS
+   (Stacks text on top, buttons below)
+   ========================================= */
 @media (max-width: 768px) {
-    /* Target buttons inside the transaction cards */
-    .transaction-card button, 
-    .summary-card button { 
-        padding: 5px 8px !important;  /* Reduce padding significantly */
-        font-size: 0.75rem !important; /* Make text smaller */
+    /* 1. Force the card to stack vertically */
+    #recentTransactionsList li, 
+    #finalisedTransactionsList li {
+        flex-direction: column !important; 
+        align-items: flex-start !important;
+        gap: 12px !important;
+        padding: 15px !important;
+        height: auto !important; /* Let it grow */
+    }
+
+    /* 2. Make the text full width */
+    #recentTransactionsList li span,
+    #finalisedTransactionsList li span {
+        width: 100% !important;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    /* 3. Stretch the button container */
+    .button-group {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        gap: 5px !important; /* Reduced gap to save space */
+    }
+
+    /* 4. Make buttons equal size & touch-friendly */
+    .button-group button {
+        flex: 1 !important;        /* Grow to fill space */
+        text-align: center !important;
+        padding: 8px 2px !important; /* Less side padding */
+        font-size: 11px !important;  /* Smaller font to fit "Finalise" */
+        white-space: nowrap !important; /* Prevent text wrapping */
+        min-width: 0 !important;   /* Prevent flex overflow */
     }
 }
+
