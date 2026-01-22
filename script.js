@@ -535,6 +535,64 @@ const loadInventory = async () => {
         // Optional: Update dashboard stats here
     } catch (e) { console.error("Inventory Load Error:", e); }
 };
+
+// --- Add this to your script.js ---
+
+const saveBatchEntries = async () => {
+    if (!user) return showConfirm("Error", "You must be logged in to save.", false);
+    
+    const batchBody = document.querySelector('#batchTable tbody');
+    const rows = Array.from(batchBody.querySelectorAll('tr'));
+    
+    // 1. Prepare Data
+    const entries = [];
+    rows.forEach(row => {
+        const no = row.querySelector('.batch-no').value.trim().toUpperCase();
+        const principal = row.querySelector('.batch-principal').value;
+        const type = row.querySelector('.batch-type').value; // 'G' or 'S'
+        const details = row.querySelector('.batch-note').value.trim();
+
+        if (no && principal) {
+            entries.push({
+                no: no, // Ensure standard format (e.g., G/123)
+                principal: principal,
+                type: type,
+                details: details,
+                date: document.getElementById('batchDate').value || formatDateToDDMMYYYY(new Date()),
+                userId: user.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    });
+
+    if (entries.length === 0) {
+        return showConfirm("Empty Batch", "Please enter at least one loan number and principal.", false);
+    }
+
+    // 2. Send to Firestore (Batch Write for efficiency)
+    showConfirm("Saving...", "Uploading inventory to cloud...", false);
+    const batch = db.batch();
+    
+    entries.forEach(entry => {
+        // Create a unique ID so we don't duplicate (e.g., "UserID_LoanNo")
+        const docRef = db.collection('activeInventory').doc(`${user.uid}_${entry.no.replace(/\//g, '-')}`);
+        batch.set(docRef, entry);
+    });
+
+    try {
+        await batch.commit();
+        
+        // 3. Cleanup
+        await showConfirm("Success", `Saved ${entries.length} items to Inventory.`, false);
+        batchBody.innerHTML = ''; // Clear table
+        for(let i=0; i<3; i++) addBatchRow(); // Add fresh rows
+        loadInventory(); // Refresh local memory immediately
+    } catch (error) {
+        console.error("Batch Save Error:", error);
+        await showConfirm("Error", "Failed to save batch. Check internet connection.", false);
+    }
+};
+
 // NEW: Auto-Add Row Logic for Batch Table
 const batchTable = document.querySelector('#batchTable tbody');
 
@@ -1587,6 +1645,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
+    document.getElementById('saveBatchBtn').addEventListener('click', saveBatchEntries);
     saveBtn.addEventListener('click', () => saveReport(false));
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
