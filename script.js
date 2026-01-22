@@ -641,10 +641,12 @@ const resetCalculatorState = () => {
     const defaultLoans = Array(3).fill({ no: '', principal: '', date: '' });
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
 
+    // FIX: We must include 'previousDues' here so it doesn't get wiped out!
     liveStateRef.set({
         todayDate: formatDateToDDMMYYYY(new Date()),
         interestRate: '1.75',
         loans: defaultLoans,
+        previousDues: currentPreviousDues, // <--- IMPORTANT: KEEP THE DUES
         lastUpdatedBy: sessionClientId + '_reset'
     });
     currentlyEditingReportId = null;
@@ -679,7 +681,7 @@ const generatePDF = async (action = 'save') => {
     doc.setFont("helvetica", "normal");
     doc.text(`Date- ${todayDateEl.value}`, 190, 20, { align: 'right' });
 
-    // 3. Table Data (FIX: Added .toUpperCase() here)
+    // 3. Table Data (Forces Uppercase)
     const tableBodyData = loans.map((loan, i) => {
         const principal = parseFloat(loan.principal) || 0;
         const interest = parseFloat(loan.interest) || 0;
@@ -687,7 +689,7 @@ const generatePDF = async (action = 'save') => {
         
         return [
             i + 1, 
-            loan.no.toUpperCase(), // <--- FIX: Forces Upper Case
+            String(loan.no).toUpperCase(), // <--- FORCE UPPERCASE
             loan.principal, 
             loan.date, 
             loan.duration, 
@@ -708,7 +710,7 @@ const generatePDF = async (action = 'save') => {
 
     const finalY = doc.autoTable.previous.finalY;
 
-    // 5. Totals Section (FIX: Added Previous Dues Logic)
+    // 5. Totals Section
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     const numberColumnX = 160;
@@ -718,10 +720,10 @@ const generatePDF = async (action = 'save') => {
     const tPrincipal = parseFloat(totalPrincipalEl.textContent) || 0;
     const tInterest = parseFloat(totalInterestEl.textContent) || 0;
     
-    // Grab the silent variable (Global variable from script.js)
+    // Grab the silent variable correctly
     const pDues = parseFloat(currentPreviousDues) || 0; 
 
-    // Calculate The Real Paper Total
+    // Calculate Final Total
     const pdfFinalTotal = Math.round(tPrincipal + tInterest + pDues);
 
     // Print Lines
@@ -733,7 +735,7 @@ const generatePDF = async (action = 'save') => {
     doc.text(String(tInterest), numberColumnX, finalY + 24, { align: 'right' });
     doc.text('Total Interest', labelColumnX, finalY + 24, { align: 'left' });
 
-    // C. Previous Dues (Only print if it exists)
+    // C. Previous Dues (Check if > 0)
     if (pDues > 0) {
         doc.text(String(pDues), numberColumnX, finalY + 31, { align: 'right' });
         doc.text('Previous Dues', labelColumnX, finalY + 31, { align: 'left' });
@@ -749,7 +751,7 @@ const generatePDF = async (action = 'save') => {
         doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
     }
 
-    // 6. Save/Share Logic
+    // 6. Save/Share
     const fileName = `Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`;
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
@@ -771,6 +773,7 @@ const generatePDF = async (action = 'save') => {
         doc.save(fileName);
     }
 };
+
 const isDuplicateReport = (newReport, reportList) => {
     const normalizeLoansForComparison = (loans) => {
         return loans.map(l => ({
@@ -1614,10 +1617,13 @@ const updateLiveState = () => {
         todayDate: todayDateEl.value,
         interestRate: interestRateEl.value,
         loans: loans,
+        previousDues: currentPreviousDues, // <--- ADD THIS LINE (Safety Net)
         lastUpdatedBy: sessionClientId
     };
 
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
+    // Merge true ensures we don't overwrite unrelated fields, 
+    // but adding previousDues here ensures the local variable is always synced.
     liveStateRef.set(liveState, { merge: true }).catch(error => {
         console.error("Could not update live state:", error);
     });
