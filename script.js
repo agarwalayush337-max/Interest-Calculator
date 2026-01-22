@@ -468,23 +468,53 @@ const toggleInventoryView = (mode) => {
 // NEW: Batch Table Logic
 const batchTableBody = document.querySelector('#batchTable tbody');
 
+// REPLACE your existing addBatchRow function with this:
 const addBatchRow = () => {
-    const rowCount = batchTableBody ? batchTableBody.rows.length : 0;
+    const batchTableBody = document.querySelector('#batchTable tbody');
+    if (!batchTableBody) return;
+
+    const rowCount = batchTableBody.rows.length;
     const row = batchTableBody.insertRow();
+    
     row.innerHTML = `
         <td>${rowCount + 1}</td>
-        <td><input type="text" class="batch-no" placeholder="A/53"></td>
+        <td>
+            <input type="text" class="batch-no" placeholder="ENTER LOAN NO" style="text-transform: uppercase; width: 100%;">
+        </td>
         <td><input type="number" class="batch-principal" placeholder="0"></td>
         <td>
-            <select class="batch-type">
+            <select class="batch-type" style="border:none; background:transparent; font-weight:900; font-size: 0.9rem; padding: 5px;">
                 <option value="G">G</option>
                 <option value="S">S</option>
             </select>
         </td>
-        <td><input type="text" class="batch-note" placeholder="Optional"></td>
-        <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows();">X</button></td>
+        <td><input type="text" class="batch-note" placeholder="Details"></td>
+        <td style="text-align: center;">
+            <button class="btn btn-danger btn-sm" onclick="removeBatchRow(this)" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
+        </td>
     `;
 };
+
+// NEW: Auto-Add Row Logic for SEARCH Table
+const searchTableBody = document.querySelector('#loanSearchTable tbody');
+
+if (searchTableBody) {
+    searchTableBody.addEventListener('input', (e) => {
+        // Only trigger if typing in an Input field
+        if (e.target.tagName === 'INPUT') {
+            const currentRow = e.target.closest('tr');
+            const lastRow = searchTableBody.rows[searchTableBody.rows.length - 1];
+
+            // If user types in the LAST row, add a new one
+            if (currentRow === lastRow) {
+                if (e.target.value.trim() !== '') {
+                    // Call your existing function to add a search row
+                    if (typeof addSearchRow === 'function') addSearchRow();
+                }
+            }
+        }
+    });
+}
 
 const renumberBatchRows = () => {
     Array.from(batchTableBody.rows).forEach((row, index) => {
@@ -505,7 +535,26 @@ const loadInventory = async () => {
         // Optional: Update dashboard stats here
     } catch (e) { console.error("Inventory Load Error:", e); }
 };
+// NEW: Auto-Add Row Logic for Batch Table
+const batchTable = document.querySelector('#batchTable tbody');
 
+if (batchTable) {
+    batchTable.addEventListener('input', (e) => {
+        // We only care if the user is typing in an input field
+        if (e.target.tagName === 'INPUT') {
+            const currentRow = e.target.closest('tr');
+            const lastRow = batchTable.rows[batchTable.rows.length - 1];
+
+            // If the user is typing in the LAST row, add a new empty row automatically
+            if (currentRow === lastRow) {
+                // Check if the row actually has some data (don't add if they just clicked it)
+                if (e.target.value.trim() !== '') {
+                    addBatchRow();
+                }
+            }
+        }
+    });
+}
 
 const resetCalculatorState = () => {
     if (!user) return;
@@ -2066,3 +2115,25 @@ const fillSearchTableFromScan = async (loanData) => {
     
     showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
 };
+
+// --- TEMP: FORCE TABLES FOR LAYOUT TESTING ---
+setTimeout(() => {
+    // 1. Force Calculator Table Rows
+    if (document.querySelector('#loanTable tbody').rows.length === 0) {
+        for(let i=0; i<3; i++) addRow();
+    }
+    
+    // 2. Force Batch Entry Table Rows
+    const batchBody = document.querySelector('#batchTable tbody');
+    if (batchBody && batchBody.rows.length === 0) {
+        for(let i=0; i<3; i++) {
+            // Manually add row if function exists
+            if (typeof addBatchRow === 'function') addBatchRow();
+        }
+    }
+    
+    // 3. Force Search Table Rows
+    if (document.querySelector('#loanSearchTable tbody').rows.length === 0) {
+         for(let i=0; i<3; i++) addSearchRow();
+    }
+}, 1000); // Wait 1 second for HTML to load

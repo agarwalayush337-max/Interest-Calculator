@@ -532,7 +532,30 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 input.found-gold { background-color: #fcf4cf !important; color: #333; font-weight: 700; border: 1px solid #f1c40f; }
 input.found-silver { background-color: #e0e0e0 !important; color: #000; font-weight: 700; border: 1px solid #999; }
 
+/* --- Fix Calculator Mobile Layout (Side-by-Side + Gap) --- */
+/* --- Fix Calculator Mobile Layout (Smaller Boxes + Big Gap) --- */
+@media (max-width: 768px) {
+    /* 1. Container Settings */
+    #calculatorTab .input-group {
+        display: flex !important;
+        flex-direction: row !important;
+        
+        /* INCREASE THIS NUMBER to make gap wider and boxes smaller */
+        gap: 110px !important; 
+        
+        /* Optional: Add padding to sides to shrink boxes even more */
+        padding-left: 10px;
+        padding-right: 10px;
+    }
 
+    /* 2. Box Settings */
+    #calculatorTab .input-field {
+        flex: 1 !important;      /* Keeps them equal size */
+        width: auto !important;
+        min-width: 0;
+        margin-bottom: 0 !important;
+    }
+}
 /* --- Fix Mobile Tabs to 2x2 Grid --- */
 .tabs {
     display: flex;
@@ -560,4 +583,15 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 #batchTable select { 
     width: 100%; padding: 8px; border: none; background: transparent; 
     font-weight: 600; cursor: pointer;
+}
+
+/* ADD THIS to make the Search/Entry toggle move */
+#invEntry:checked ~ .segment-marker { transform: translateX(100%); }
+
+/* --- TEMP: DEV MODE BYPASS --- */
+#loginOverlay {
+    display: none !important;
+}
+#appContainer {
+    display: block !important;
 }

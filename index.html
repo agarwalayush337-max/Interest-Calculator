@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,7 +51,7 @@
                         <input type="text" id="todayDate" placeholder="DD/MM/YYYY">
                     </div>
                     <div class="input-field" id="interestRateContainer">
-                        <label for="interestRate">Monthly Interest Rate (%)</label>
+                        <label for="interestRate">Interest Rate (%)</label>
                         <input type="number" id="interestRate" value="1.75" step="0.01">
                     </div>
                 </div>
@@ -186,7 +187,7 @@
                         <label for="invSearch">Loan Search</label>
                         
                         <input type="radio" name="invType" id="invEntry" value="entry" onclick="toggleInventoryView('entry')">
-                        <label for="invEntry">Stock Entry</label>
+                        <label for="invEntry">Loan Entry</label>
                         
                         <div class="segment-marker"></div>
                     </div>
@@ -210,60 +211,62 @@
                         </table>
                     </div>
         
-                    <div class="action-bar" id="searchActionBar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                        <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-primary" id="addSearchRowBtn">Add Row</button>
-                            <button class="btn btn-primary" id="scanNumbersBtn">
-                                <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
-                                Scan for Numbers
-                            </button>
-                            <button class="btn btn-secondary" id="downloadErasedBtn" style="display:none;">Download List</button>
-                            <button class="btn btn-danger" id="clearSearchSheetBtn">Clear Sheet</button>
-                        </div>
-        
-                        <div style="display: flex; align-items: center;">
+                    <div class="action-bar" id="searchActionBar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 1rem;">
+    
+                        <button class="btn btn-primary" id="scanNumbersBtn" style="padding: 12px 15px; font-size: 0.9rem; display: flex; align-items: center;">
+                            <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 0 24 24" width="18px" fill="currentColor" style="margin-right: 5px;"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
+                            Scan for Numbers
+                        </button>
+
+                        <button class="btn btn-secondary" id="downloadErasedBtn" style="display:none; padding: 8px 15px; font-size: 0.9rem;">Download List</button>
+
+                        <button class="btn btn-danger" id="clearSearchSheetBtn" style="padding: 8px 15px; font-size: 0.9rem;">Clear Sheet</button>
+
+                        <div style="display: none;">
                             <input type="hidden" id="publicSheetInput" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv">
-                            <span id="sheetStatus" style="font-size: 0.9rem; font-weight: 500; color: #666; white-space: nowrap;">Initializing sheet...</span>
-                            <canvas id="scanCanvas" style="display: none;"></canvas>
-                            <input type="file" id="numberImageUploadInput" accept="image/*" style="display: none;">
+                            <canvas id="scanCanvas"></canvas>
+                            <input type="file" id="numberImageUploadInput" accept="image/*">
                         </div>
                     </div>
                     <div id="loanSearchLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
                 </div>
         
                 <div id="invEntryView" style="display: none;">
-                    
-                    <div class="entry-header">
-                        <div class="input-field" style="margin-bottom:0;">
-                            <label for="batchDate" style="color:#555; margin-bottom: 5px;">Batch Date (Applied to All)</label>
-                            <input type="text" id="batchDate" placeholder="DD/MM/YYYY" style="background:#fff;">
+    
+                    <div class="input-group" style="margin-bottom: 1rem;">
+                        <div class="input-field" style="max-width: 110px;"> 
+                            <label for="batchDate">Batch Date</label>
+                            <input type="text" id="batchDate" placeholder="DD/MM/YYYY">
                         </div>
                     </div>
-        
-                    <button class="btn btn-primary big-btn" id="scanBatchBtn" style="width:100%; padding:1.2rem; margin-bottom:1.5rem; justify-content:center;">
-                        <svg viewBox="0 0 24 24" width="24" height="24" style="vertical-align:middle; margin-right:8px"><path fill="currentColor" d="M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4zm6 9l-4 5h12l-3-4-2.03 2.71L10 13zm7-4.5c0-.83-.67-1.5-1.5-1.5S14 7.67 14 8.5s.67 1.5 1.5 1.5S17 9.33 17 8.5zM20 2h-7v2h7v7h2V4c0-1.1-.9-2-2-2zm0 18h-7v2h7c1.1 0 2-.9 2-2v-7h-2v7zM4 13H2v7c0 1.1.9 2 2 2h7v-2H4v-7z"/></svg>
-                        Scan Batch
-                    </button>
-        
+
                     <div class="table-container">
                         <table id="batchTable">
                             <thead>
                                 <tr>
                                     <th style="width: 40px;">SL</th>
-                                    <th>No</th>
+                                    <th style="min-width: 120px;">Loan No</th> 
                                     <th>Principal</th>
-                                    <th style="width: 70px;">Details</th>
-                                    <th>Add. Details</th>
-                                    <th style="width: 40px;"></th>
+                                    <th style="width: 60px;">Type</th>
+                                    <th>Details</th>
+                                    <th style="width: 30px;"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
                     </div>
+
+                    <div class="action-bar" style="display: flex; justify-content: flex-start; gap: 15px; margin-top: 1rem;">
         
-                    <div class="action-bar">
-                        <button class="btn btn-primary" id="addBatchRowBtn">Add Row</button>
-                        <button class="btn btn-success" id="saveBatchBtn">Save to Inventory</button>
+                        <button class="btn btn-success" id="saveBatchBtn" style="padding: 10px 20px;">
+                            Save Entries
+                        </button>
+
+                        <button class="btn btn-primary" id="scanBatchBtn" style="display: flex; align-items: center; padding: 10px 20px;">
+                            <svg viewBox="0 0 24 24" width="20" height="20" style="margin-right:6px"><path fill="currentColor" d="M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4zm6 9l-4 5h12l-3-4-2.03 2.71L10 13zm7-4.5c0-.83-.67-1.5-1.5-1.5S14 7.67 14 8.5s.67 1.5 1.5 1.5S17 9.33 17 8.5zM20 2h-7v2h7v7h2V4c0-1.1-.9-2-2-2zm0 18h-7v2h7c1.1 0 2-.9 2-2v-7h-2v7zM4 13H2v7c0 1.1.9 2 2 2h7v-2H4v-7z"/></svg>
+                            Scan Image
+                        </button>
+                        
                     </div>
                 </div>
         
