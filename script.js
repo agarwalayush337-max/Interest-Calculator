@@ -1645,7 +1645,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     googleSignInBtn.addEventListener('click', signInWithGoogle);
     signOutBtn.addEventListener('click', signOut);
     addRowBtn.addEventListener('click', () => addRow({ no: '', principal: '', date: '' }));
-    document.getElementById('saveBatchBtn').addEventListener('click', saveBatchEntries);
+    // Wrap it in a check to prevent the crash
+    const saveBtn = document.getElementById('saveBatchBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveBatchEntries);
+    } else {
+        console.warn("Save Button not found in HTML");
+    }
     saveBtn.addEventListener('click', () => saveReport(false));
     clearSheetBtn.addEventListener('click', clearSheet);
     exitViewModeBtn.addEventListener('click', exitViewMode);
