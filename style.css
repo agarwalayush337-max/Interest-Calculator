@@ -581,8 +581,14 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 }
 #batchTable th { font-size: 0.8rem; letter-spacing: 0.5px; text-transform: uppercase; }
 #batchTable select { 
-    width: 100%; padding: 8px; border: none; background: transparent; 
-    font-weight: 600; cursor: pointer;
+    width: 100%; 
+    padding: 0px !important;  /* Changed from 8px to 0px to fit mobile */
+    border: none; 
+    background: transparent; 
+    font-weight: 600; 
+    cursor: pointer;
+    font-size: 0.8rem !important; /* Forces smaller text size */
+    text-indent: 4px; /* distinct indent for the letter G/S */
 }
 
 /* ADD THIS to make the Search/Entry toggle move */
