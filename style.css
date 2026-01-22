@@ -588,3 +588,12 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 /* ADD THIS to make the Search/Entry toggle move */
 #invEntry:checked ~ .segment-marker { transform: translateX(100%); }
 
+/* --- Fix Mobile Buttons (Make them smaller to fit) --- */
+@media (max-width: 768px) {
+    /* Target buttons inside the transaction cards */
+    .transaction-card button, 
+    .summary-card button { 
+        padding: 5px 8px !important;  /* Reduce padding significantly */
+        font-size: 0.75rem !important; /* Make text smaller */
+    }
+}
