@@ -393,7 +393,7 @@ const showTab = (tabId) => {
             toggleTxView('pending');
             
             // Load both lists so the toggle works instantly
-            recentTransactionsListEl.innerHTML = '';
+        
             loadRecentTransactions(); 
             
             // We load finalised in background if empty
@@ -907,12 +907,21 @@ const renderRecentTransactions = (filter = '') => {
 };
 
 const loadRecentTransactions = async () => {
-    if (!user || !reportsCollection) {
+    if (!user || !reportsCollection) return;
+
+    // --- FIX 1: INSTANT LOAD (Cache-First) ---
+    // If we have data in memory, show it IMMEDIATELY. Don't wait for internet.
+    if (cachedReports.length > 0) {
+        renderRecentTransactions(reportSearchInput.value);
         recentTransactionsLoader.style.display = 'none';
-        return;
+    } else {
+        // Only show spinner if the screen is completely empty
+        recentTransactionsLoader.style.display = 'flex';
     }
-    recentTransactionsLoader.style.display = 'flex';
-    let onlineReports = [], localReports = [];
+
+    let onlineReports = [];
+    
+    // --- FIX 2: BACKGROUND FETCH ---
     if (navigator.onLine) {
         try {
             const snapshot = await reportsCollection
@@ -926,15 +935,21 @@ const loadRecentTransactions = async () => {
             console.error("Error loading online reports:", error);
         }
     }
+    
     const local = (localDb) ? (await localDb.getAll('unsyncedReports')).map(r => ({ ...r, id: r.localId, isLocal: true })) : [];
+    
+    // Update memory with fresh data
     cachedReports = [...local, ...onlineReports].sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || 0;
         const dateB = b.createdAt?.toDate?.() || 0;
         return dateB - dateA;
     });
+
+    // Render again with the fresh data
     recentTransactionsLoader.style.display = 'none';
     renderRecentTransactions(reportSearchInput.value);
 };
+
 
 const renderFinalisedTransactions = (filter = '') => {
     const listEl = document.getElementById('finalisedTransactionsList');
@@ -978,12 +993,21 @@ const renderFinalisedTransactions = (filter = '') => {
 
 const loadFinalisedTransactions = async () => {
     if (!user || !navigator.onLine) return;
-    document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
+
+    // --- FIX 1: INSTANT LOAD ---
+    if (cachedFinalisedReports.length > 0) {
+        renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
+        document.getElementById('finalisedTransactionsLoader').style.display = 'none';
+    } else {
+        document.getElementById('finalisedTransactionsLoader').style.display = 'flex';
+    }
+
     try {
         const snapshot = await reportsCollection
             .where("isDeleted", "!=", true)
             .where("status", "==", "finalised")
             .get();
+            
         let reports = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isLocal: false }));
         
         reports.sort((a, b) => {
@@ -999,6 +1023,7 @@ const loadFinalisedTransactions = async () => {
     } catch (error) {
         console.error("Error loading finalised reports:", error);
     }
+    
     document.getElementById('finalisedTransactionsLoader').style.display = 'none';
     renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
 };
@@ -1035,23 +1060,29 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
         liveStateUnsubscribe = null;
     }
 
-    // Smart "Back" button logic
+    // --- FIX: Smart "Back" Button Logic ---
     if (originTab === 'loanSearchTab') {
         exitViewModeBtn.textContent = 'Back to Loan Search';
         exitViewModeBtn.onclick = () => {
-            showTab('loanSearchTab');
+            // Fix: Go to 'inventoryTab' (the real ID) instead of 'loanSearchTab'
+            showTab('inventoryTab'); 
+            toggleInventoryView('search'); // Ensure we land on Search, not Entry
             restoreDefaultBackButton();
         };
     } else if (originTab === 'recentTransactionsTab') {
         exitViewModeBtn.textContent = 'Back to Recent';
         exitViewModeBtn.onclick = () => {
-            showTab('recentTransactionsTab');
+            // Fix: Go to 'transactionsTab' (the real ID)
+            showTab('transactionsTab'); 
+            toggleTxView('pending'); // Force switch to "Pending" list
             restoreDefaultBackButton();
         };
     } else if (originTab === 'finalisedTransactionsTab') {
         exitViewModeBtn.textContent = 'Back to Finalised';
         exitViewModeBtn.onclick = () => {
-            showTab('finalisedTransactionsTab');
+            // Fix: Go to 'transactionsTab' (the real ID)
+            showTab('transactionsTab'); 
+            toggleTxView('finalised'); // Force switch to "Finalised" list
             restoreDefaultBackButton();
         };
     } else {
@@ -1602,7 +1633,7 @@ const listenForLiveStateChanges = () => {
             if (state.loans && state.loans.length > 0) {
                 state.loans.forEach(loan => addRow(loan));
             }
-            while (loanTableBody.rows.length < 5) {
+            while (loanTableBody.rows.length < 3) {
                 addRow({ no: '', principal: '', date: '' });
             }
              if (loanTableBody.rows.length > 0 && loanTableBody.lastChild.querySelector('.principal').value) { 
@@ -1612,7 +1643,7 @@ const listenForLiveStateChanges = () => {
             todayDateEl.value = formatDateToDDMMYYYY(new Date());
             interestRateEl.value = '1.75';
             loanTableBody.innerHTML = '';
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 3; i++) {
                 addRow({ no: '', principal: '', date: '' });
             }
             updateLiveState();
@@ -1736,19 +1767,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
     loanTableBody.addEventListener('input', e => {
-        // NEW: Auto-Fill Logic
-        if (e.target.classList.contains('no')) {
-            const row = e.target.closest('tr');
-            const val = e.target.value.trim().toUpperCase(); // Basic normalize
+        const target = e.target;
+        
+        // 1. AUTO-ADD ROW LOGIC (The Missing Part)
+        // If the user types anything in the LAST row, add a new blank row immediately.
+        const currentRow = target.closest('tr');
+        const lastRow = loanTableBody.lastElementChild;
+        
+        if (currentRow === lastRow && target.value.trim() !== '') {
+            addRow(); 
+        }
+
+        // 2. EXISTING AUTO-FILL LOGIC (Gold/Silver Detection)
+        if (target.classList.contains('no')) {
+            const val = target.value.trim().toUpperCase(); 
             
-            // 1. Check Active Inventory
-            const match = activeInventory.find(item => item.no === val); // You can use normalizeLoanNo(val) here later
+            // Check Active Inventory
+            const match = activeInventory.find(item => item.no === val); 
             
-            const principalInput = row.querySelector('.principal');
-            const dateInput = row.querySelector('.date');
+            const principalInput = currentRow.querySelector('.principal');
+            const dateInput = currentRow.querySelector('.date');
             
             // Reset styles
-            e.target.classList.remove('found-gold', 'found-silver');
+            target.classList.remove('found-gold', 'found-silver');
 
             if (match) {
                 // Fill if empty
@@ -1756,15 +1797,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if(!dateInput.value) dateInput.value = match.date;
                 
                 // Visual Cue
-                if (match.type === 'G') e.target.classList.add('found-gold');
-                else if (match.type === 'S') e.target.classList.add('found-silver');
+                if (match.type === 'G') target.classList.add('found-gold');
+                else if (match.type === 'S') target.classList.add('found-silver');
             }
         }
         
-        if (e.target.matches('input')) {
+        // 3. UPDATE CALCULATIONS
+        if (target.matches('input')) {
             updateAllCalculations();
         }
     });
+    
     loanTableBody.addEventListener('blur', e => {
         if (e.target.matches('input.date')) {
             const parsed = parseDate(e.target.value);
@@ -2241,24 +2284,3 @@ const fillSearchTableFromScan = async (loanData) => {
     showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
 };
 
-// --- TEMP: FORCE TABLES FOR LAYOUT TESTING ---
-setTimeout(() => {
-    // 1. Force Calculator Table Rows
-    if (document.querySelector('#loanTable tbody').rows.length === 0) {
-        for(let i=0; i<3; i++) addRow();
-    }
-    
-    // 2. Force Batch Entry Table Rows
-    const batchBody = document.querySelector('#batchTable tbody');
-    if (batchBody && batchBody.rows.length === 0) {
-        for(let i=0; i<3; i++) {
-            // Manually add row if function exists
-            if (typeof addBatchRow === 'function') addBatchRow();
-        }
-    }
-    
-    // 3. Force Search Table Rows
-    if (document.querySelector('#loanSearchTable tbody').rows.length === 0) {
-         for(let i=0; i<3; i++) addSearchRow();
-    }
-}, 1000); // Wait 1 second for HTML to load
