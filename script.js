@@ -46,6 +46,8 @@ let currentScanCoordinates = [];
 let scanCanvas = null;           
 let scanCtx = null;              
 let sheetDetailsCache = new Map(); // Stores Sheet Data
+let currentPreviousDues = 0; // Stored silently
+let pendingReportIdToFinalise = null;
 
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
@@ -698,6 +700,8 @@ const generatePDF = async (action = 'save') => {
         styles: { halign: 'center' }
     });
 
+    // ... inside generatePDF ...
+    
     const finalY = doc.autoTable.previous.finalY;
 
     doc.setFontSize(12);
@@ -705,13 +709,35 @@ const generatePDF = async (action = 'save') => {
     const numberColumnX = 160;
     const labelColumnX = 165;
 
-    doc.text(String(totalPrincipalEl.textContent), numberColumnX, finalY + 17, { align: 'right' });
+    // 1. Get Values
+    const tPrincipal = parseFloat(totalPrincipalEl.textContent) || 0;
+    const tInterest = parseFloat(totalInterestEl.textContent) || 0;
+    const pDues = parseFloat(currentPreviousDues) || 0; // <--- The Silent Variable
+    
+    // 2. Calculate PDF-Only Total
+    const pdfFinalTotal = Math.round(tPrincipal + tInterest + pDues);
+
+    // 3. Draw Text
+    doc.text(String(tPrincipal), numberColumnX, finalY + 17, { align: 'right' });
     doc.text('Total Principal', labelColumnX, finalY + 17, { align: 'left' });
-    doc.text(String(totalInterestEl.textContent), numberColumnX, finalY + 24, { align: 'right' });
+    
+    doc.text(String(tInterest), numberColumnX, finalY + 24, { align: 'right' });
     doc.text('Total Interest', labelColumnX, finalY + 24, { align: 'left' });
-    doc.setFont("helvetica", "bold");
-    doc.text(String(finalTotalEl.textContent), numberColumnX, finalY + 31, { align: 'right' });
-    doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
+
+    // --- NEW: Add Previous Dues Line ---
+    if (pDues > 0) {
+        doc.text(String(pDues), numberColumnX, finalY + 31, { align: 'right' });
+        doc.text('Previous Dues', labelColumnX, finalY + 31, { align: 'left' });
+
+        doc.setFont("helvetica", "bold");
+        doc.text(String(pdfFinalTotal), numberColumnX, finalY + 40, { align: 'right' });
+        doc.text('Total Amount', labelColumnX, finalY + 40, { align: 'left' });
+    } else {
+        // If no dues, print standard total at normal position
+        doc.setFont("helvetica", "bold");
+        doc.text(String(pdfFinalTotal), numberColumnX, finalY + 31, { align: 'right' });
+        doc.text('Total Amount', labelColumnX, finalY + 31, { align: 'left' });
+    }
 
     const fileName = `Interest_Report_${todayDateEl.value.replace(/\//g, '-')}.pdf`;
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -1620,13 +1646,17 @@ const listenForLiveStateChanges = () => {
     liveStateUnsubscribe = liveStateRef.onSnapshot(doc => {
         if (doc.exists) {
             const state = doc.data();
-            if (state.lastUpdatedBy === sessionClientId) {
-                return;
-            }
+            if (state.lastUpdatedBy === sessionClientId) return;
 
             isUpdatingFromListener = true;
 
+            // --- CHANGED: Load Silently ---
+            currentPreviousDues = parseFloat(state.previousDues) || 0;
+            // We DO NOT update the UI here.
+            // -----------------------------
+
             todayDateEl.value = state.todayDate || formatDateToDDMMYYYY(new Date());
+            // ... (rest of the code remains the same)
             interestRateEl.value = state.interestRate || '1.75';
             
             loanTableBody.innerHTML = '';
@@ -1657,6 +1687,63 @@ const listenForLiveStateChanges = () => {
     });
 };
 
+
+// --- DUES FINALISE LOGIC ---
+const finaliseReport = (docId) => {
+    pendingReportIdToFinalise = docId;
+    document.getElementById('duesInput').value = ''; 
+    document.getElementById('duesModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('duesInput').focus(), 100);
+};
+
+const confirmFinaliseWithDues = async () => {
+    const duesVal = document.getElementById('duesInput').value;
+    const newDues = parseFloat(duesVal) || 0;
+    const docId = pendingReportIdToFinalise;
+
+    document.getElementById('duesModal').style.display = 'none';
+
+    if (!docId) return;
+
+    if (navigator.onLine && reportsCollection) {
+        try {
+            showConfirm("Processing...", "Finalising...", false);
+            
+            const reportDoc = await reportsCollection.doc(docId).get();
+            if (!reportDoc.exists) throw new Error("Report not found.");
+            
+            const reportData = reportDoc.data();
+            const newName = `Final Hisab of ${reportData.reportDate}`;
+            
+            // 1. Finalise Report
+            await reportsCollection.doc(docId).update({ 
+                status: 'finalised', 
+                reportName: newName,
+                finalisedDues: newDues 
+            });
+
+            // 2. Save Dues Silently for Next Calculator Session
+            await db.collection('liveCalculatorState').doc(user.uid).set({
+                previousDues: newDues
+            }, { merge: true });
+
+            // 3. Update Local Variable Immediately
+            currentPreviousDues = newDues;
+
+            await showConfirm("Success", `Report Finalised.`, false);
+            loadRecentTransactions();
+            loadFinalisedTransactions();
+
+        } catch (error) {
+            console.error("Error finalising:", error);
+            await showConfirm("Error", "Could not finalise.", false);
+        }
+    } else {
+        await showConfirm("Offline", "You must be online to finalise.", false);
+    }
+};
+
+
 // --- Initial Load & Event Listeners ---
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDb();
@@ -1686,6 +1773,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 handleUserLogout();
             });
     }
+    // --- DUES MODAL LISTENERS ---
+    const duesConfirmBtn = document.getElementById('duesConfirmBtn');
+    if (duesConfirmBtn) duesConfirmBtn.addEventListener('click', confirmFinaliseWithDues);
+
+    const duesCancelBtn = document.getElementById('duesCancelBtn');
+    if (duesCancelBtn) duesCancelBtn.addEventListener('click', () => {
+        document.getElementById('duesModal').style.display = 'none';
+        pendingReportIdToFinalise = null;
+    });
 
     // 3. Standard Listener (Browser Mode / Already Logged In)
     auth.onAuthStateChanged((firebaseUser) => {
