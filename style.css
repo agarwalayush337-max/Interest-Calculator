@@ -616,17 +616,21 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         width: 100% !important;
         display: flex !important;
         justify-content: space-between !important;
-        gap: 15px !important; /* Reduced gap to save space */
+        gap: 10px !important; /* Reduced gap to save space */
     }
 
     /* 4. Make buttons equal size & touch-friendly */
     .button-group button {
-        flex: 1 !important;        /* Grow to fill space */
-        text-align: center !important;
+        flex: 1 !important; 
+               /* Grow to fill space */
+        /* FORCE CENTER ALIGNMENT */
+        display: flex !important;           
+        justify-content: center !important; 
+        align-items: center !important;
+        
         padding: 8px 2px !important; /* Less side padding */
         font-size: 16px !important;  /* Smaller font to fit "Finalise" */
         white-space: nowrap !important; /* Prevent text wrapping */
         min-width: 0 !important;   /* Prevent flex overflow */
     }
 }
-
