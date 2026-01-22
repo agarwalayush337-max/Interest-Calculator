@@ -179,64 +179,96 @@
 
         <div id="inventoryTab" class="tab-content">
             <div class="main-content">
-                <button class="btn btn-primary big-btn" id="scanBatchBtn" style="width:100%; padding:1.2rem; margin-bottom:1.5rem; justify-content:center;">
-                    <svg viewBox="0 0 24 24" width="24" height="24" style="margin-right:8px"><path fill="currentColor" d="M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4zm6 9l-4 5h12l-3-4-2.03 2.71L10 13zm7-4.5c0-.83-.67-1.5-1.5-1.5S14 7.67 14 8.5s.67 1.5 1.5 1.5S17 9.33 17 8.5zM20 2h-7v2h7v7h2V4c0-1.1-.9-2-2-2zm0 18h-7v2h7c1.1 0 2-.9 2-2v-7h-2v7zM4 13H2v7c0 1.1.9 2 2 2h7v-2H4v-7z"/></svg>
-                    Scan New Batch
-                </button>
-        
-                <h2>Inventory Search</h2>
                 
-                <div class="search-filters">
-                    <button class="btn btn-secondary active-filter" data-filter="all">All</button>
-                    <button class="btn btn-success" data-filter="available">Available</button>
-                    <button class="btn btn-warning" data-filter="not-available">Not Available</button>
+                <div class="toggle-container">
+                    <div class="segment-control">
+                        <input type="radio" name="invType" id="invSearch" value="search" checked onclick="toggleInventoryView('search')">
+                        <label for="invSearch">Loan Search</label>
+                        
+                        <input type="radio" name="invType" id="invEntry" value="entry" onclick="toggleInventoryView('entry')">
+                        <label for="invEntry">Stock Entry</label>
+                        
+                        <div class="segment-marker"></div>
+                    </div>
                 </div>
-
-                <div class="table-container">
-                    <table id="loanSearchTable">
-                        <thead>
-                            <tr>
-                                <th>SL NO</th>
-                                <th>Status</th>
-                                <th>Loan No</th>
-                                <th>Principal</th>
-                                <th>Finalised Date</th>
-                                <th></th>
-                                </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
+        
+                <div id="invSearchView">
+                    <h2>Loan Search</h2>
+        
+                    <div class="search-filters">
+                        <button class="btn btn-secondary active-filter" data-filter="all">All</button>
+                        <button class="btn btn-success" data-filter="available">Available</button>
+                        <button class="btn btn-warning" data-filter="not-available">Not Available</button>
+                    </div>
+        
+                    <div class="table-container">
+                        <table id="loanSearchTable">
+                            <thead>
+                                <tr><th>SL NO</th><th>Status</th><th>Loan No</th><th>Principal</th><th>Finalised Date</th><th></th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+        
+                    <div class="action-bar" id="searchActionBar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" id="addSearchRowBtn">Add Row</button>
+                            <button class="btn btn-primary" id="scanNumbersBtn">
+                                <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
+                                Scan for Numbers
+                            </button>
+                            <button class="btn btn-secondary" id="downloadErasedBtn" style="display:none;">Download List</button>
+                            <button class="btn btn-danger" id="clearSearchSheetBtn">Clear Sheet</button>
+                        </div>
+        
+                        <div style="display: flex; align-items: center;">
+                            <input type="hidden" id="publicSheetInput" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv">
+                            <span id="sheetStatus" style="font-size: 0.9rem; font-weight: 500; color: #666; white-space: nowrap;">Initializing sheet...</span>
+                            <canvas id="scanCanvas" style="display: none;"></canvas>
+                            <input type="file" id="numberImageUploadInput" accept="image/*" style="display: none;">
+                        </div>
+                    </div>
+                    <div id="loanSearchLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
                 </div>
-
-                <div class="action-bar" id="searchActionBar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+        
+                <div id="invEntryView" style="display: none;">
                     
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-primary" id="addSearchRowBtn">Add Row</button>
-                        <button class="btn btn-primary" id="scanNumbersBtn">
-                            <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
-                            Scan for Numbers
-                        </button>
-                        <button class="btn btn-secondary" id="downloadErasedBtn" style="display:none;">Download List</button>
-                        <button class="btn btn-danger" id="clearSearchSheetBtn">Clear Sheet</button>
+                    <div class="entry-header">
+                        <div class="input-field" style="margin-bottom:0;">
+                            <label for="batchDate" style="color:#555; margin-bottom: 5px;">Batch Date (Applied to All)</label>
+                            <input type="text" id="batchDate" placeholder="DD/MM/YYYY" style="background:#fff;">
+                        </div>
                     </div>
-
-                    <div style="display: flex; align-items: center;">
-                        <input type="hidden" id="publicSheetInput" 
-                               value="https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv">
-                        
-                        <span id="sheetStatus" style="font-size: 0.9rem; font-weight: 500; color: #666; white-space: nowrap;">
-                            Initializing sheet...
-                        </span>
-                        
-                        <canvas id="scanCanvas" style="display: none;"></canvas>
-                        <input type="file" id="numberImageUploadInput" accept="image/*" style="display: none;">
+        
+                    <button class="btn btn-primary big-btn" id="scanBatchBtn" style="width:100%; padding:1.2rem; margin-bottom:1.5rem; justify-content:center;">
+                        <svg viewBox="0 0 24 24" width="24" height="24" style="vertical-align:middle; margin-right:8px"><path fill="currentColor" d="M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4zm6 9l-4 5h12l-3-4-2.03 2.71L10 13zm7-4.5c0-.83-.67-1.5-1.5-1.5S14 7.67 14 8.5s.67 1.5 1.5 1.5S17 9.33 17 8.5zM20 2h-7v2h7v7h2V4c0-1.1-.9-2-2-2zm0 18h-7v2h7c1.1 0 2-.9 2-2v-7h-2v7zM4 13H2v7c0 1.1.9 2 2 2h7v-2H4v-7z"/></svg>
+                        Scan Batch
+                    </button>
+        
+                    <div class="table-container">
+                        <table id="batchTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">SL</th>
+                                    <th>No</th>
+                                    <th>Principal</th>
+                                    <th style="width: 70px;">Details</th>
+                                    <th>Add. Details</th>
+                                    <th style="width: 40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+        
+                    <div class="action-bar">
+                        <button class="btn btn-primary" id="addBatchRowBtn">Add Row</button>
+                        <button class="btn btn-success" id="saveBatchBtn">Save to Inventory</button>
                     </div>
                 </div>
-
-                 <div id="loanSearchLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+        
             </div>
         </div>
-
     </div>
 
     <div id="confirmModal" class="modal-overlay" style="display: none;">
@@ -262,4 +294,5 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
