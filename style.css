@@ -588,10 +588,3 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 /* ADD THIS to make the Search/Entry toggle move */
 #invEntry:checked ~ .segment-marker { transform: translateX(100%); }
 
-/* --- TEMP: DEV MODE BYPASS --- */
-#loginOverlay {
-    display: none !important;
-}
-#appContainer {
-    display: block !important;
-}
