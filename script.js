@@ -547,14 +547,16 @@ const saveBatchEntries = async () => {
     // 1. Prepare Data
     const entries = [];
     rows.forEach(row => {
-        const no = row.querySelector('.batch-no').value.trim().toUpperCase();
+        let rawNo = row.querySelector('.batch-no').value.trim().toUpperCase();
         const principal = row.querySelector('.batch-principal').value;
-        const type = row.querySelector('.batch-type').value; // 'G' or 'S'
+        const type = row.querySelector('.batch-type').value; 
         const details = row.querySelector('.batch-note').value.trim();
 
-        if (no && principal) {
+        if (rawNo && principal) {
+            const cleanNo = normalizeLoanNo(rawNo); // Normalize: R/01 -> R/1
+
             entries.push({
-                no: no, // Ensure standard format (e.g., G/123)
+                no: cleanNo,
                 principal: principal,
                 type: type,
                 details: details,
@@ -569,24 +571,42 @@ const saveBatchEntries = async () => {
         return showConfirm("Empty Batch", "Please enter at least one loan number and principal.", false);
     }
 
-    // 2. Send to Firestore (Batch Write for efficiency)
+    // --- NEW: DUPLICATE SAFETY CHECK ---
+    // We check against the locally cached 'activeInventory' array
+    const duplicates = entries.filter(newEntry => 
+        activeInventory.some(existing => normalizeLoanNo(existing.no) === newEntry.no)
+    );
+
+    if (duplicates.length > 0) {
+        // If we find duplicates, we STOP and ask the user.
+        const dupList = duplicates.map(d => d.no).join(', ');
+        const proceed = await showConfirm(
+            "Duplicate Warning", 
+            `The following loans already exist: ${dupList}. \n\nDo you want to OVERWRITE them with new values?`
+        );
+        
+        if (!proceed) {
+            return; // If you click "Cancel", nothing gets saved. Data is safe.
+        }
+    }
+    // -----------------------------------
+
+    // 2. Send to Firestore
     showConfirm("Saving...", "Uploading inventory to cloud...", false);
     const batch = db.batch();
     
     entries.forEach(entry => {
-        // Create a unique ID so we don't duplicate (e.g., "UserID_LoanNo")
-        const docRef = db.collection('activeInventory').doc(`${user.uid}_${entry.no.replace(/\//g, '-')}`);
+        const docId = `${user.uid}_${entry.no.replace(/\//g, '-')}`;
+        const docRef = db.collection('activeInventory').doc(docId);
         batch.set(docRef, entry);
     });
 
     try {
         await batch.commit();
-        
-        // 3. Cleanup
         await showConfirm("Success", `Saved ${entries.length} items to Inventory.`, false);
-        batchBody.innerHTML = ''; // Clear table
-        for(let i=0; i<3; i++) addBatchRow(); // Add fresh rows
-        loadInventory(); // Refresh local memory immediately
+        batchBody.innerHTML = ''; 
+        for(let i=0; i<3; i++) addBatchRow(); 
+        loadInventory(); 
     } catch (error) {
         console.error("Batch Save Error:", error);
         await showConfirm("Error", "Failed to save batch. Check internet connection.", false);
@@ -1122,13 +1142,24 @@ const deleteReport = async (docId, isFinalised = false) => {
 // Aggressive Normalizer (Fixes Matching Issues) e.g., A/052 -> A/52
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
-    const match = loanNo.match(/^(\D*)(\d+)$/);
+    
+    // 1. Clean basic junk (spaces, uppercase)
+    const cleanStr = loanNo.trim().toUpperCase();
+
+    // 2. INTELLIGENT REGEX
+    // Capture Letters -> Ignore Middle Junk -> Capture Numbers
+    const match = cleanStr.match(/^([A-Z]+)[^A-Z0-9]*([0-9]+)$/);
+
     if (match) {
-        const prefix = match[1]; 
-        const numericPart = parseInt(match[2], 10).toString(); 
-        return prefix + numericPart;
+        const prefix = match[1];      // e.g., "R"
+        const number = parseInt(match[2], 10); // e.g., "01" becomes 1
+        
+        // 3. FORCE STANDARD FORMAT (Always add '/')
+        return `${prefix}/${number}`;
     }
-    return loanNo; 
+
+    // Fallback: If it's just numbers "123" or weird symbols, leave it alone.
+    return cleanStr; 
 };
 
 const buildLoanSearchCache = () => {
