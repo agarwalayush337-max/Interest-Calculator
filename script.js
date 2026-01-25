@@ -1705,7 +1705,20 @@ const listenForLiveStateChanges = () => {
             // We DO NOT update the UI here.
             // -----------------------------
 
-            todayDateEl.value = state.todayDate || formatDateToDDMMYYYY(new Date());
+            // --- FIX 2: FORCE CURRENT DATE ---
+            // If the saved date is NOT today, we assume it's old/stale and force Today.
+            const realToday = formatDateToDDMMYYYY(new Date());
+            const savedDate = state.todayDate;
+
+            // Only use saved date if it matches Today (keeps session sync valid)
+            // Otherwise, auto-update to today
+            if (savedDate && savedDate === realToday) {
+                todayDateEl.value = savedDate;
+            } else {
+                todayDateEl.value = realToday; // Auto-update to today
+            }
+            // ---------------------------------
+            
             // ... (rest of the code remains the same)
             interestRateEl.value = state.interestRate || '1.75';
             
@@ -1811,6 +1824,25 @@ const confirmFinaliseWithDues = async () => {
 
 // --- Initial Load & Event Listeners ---
 document.addEventListener('DOMContentLoaded', async () => {
+    // --- FIX 1: INSTANT LOAD (Draw Table Immediately) ---
+    // This makes the app look "ready" instantly, before Firebase connects
+    todayDateEl.value = formatDateToDDMMYYYY(new Date()); 
+    interestRateEl.value = '1.75';
+    
+    // Draw 3 Empty Rows instantly
+    loanTableBody.innerHTML = '';
+    for(let i=0; i<3; i++) {
+        // Manually adding row HTML to be faster than function call
+        const row = loanTableBody.insertRow();
+        row.innerHTML = `
+            <td>${i + 1}</td>
+            <td><input type="text" class="no" value=""></td>
+            <td><input type="number" class="principal" placeholder="0"></td>
+            <td><input type="text" class="date" placeholder="DD/MM/YYYY"></td>
+            <td class="read-only duration"></td>
+            <td class="read-only interest"></td>
+            <td><button class="btn btn-danger" onclick="removeRow(this)">X</button></td>`;
+    }
     await initLocalDb();
     updateSyncStatus();
    // --- FINAL PRODUCTION AUTH LISTENER ---
@@ -2451,4 +2483,18 @@ const fillSearchTableFromScan = async (loanData) => {
     
     showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
 };
+// --- FIX 3: AUTO-REFRESH DATE ON WAKE UP ---
+// If app was in background overnight, update date when opened
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === 'visible') {
+        const currentVal = todayDateEl.value;
+        const realToday = formatDateToDDMMYYYY(new Date());
 
+        // If the date box shows a date that is NOT today, update it.
+        if (currentVal && currentVal !== realToday) {
+            console.log("🌞 New Day Detected: Updating Date...");
+            todayDateEl.value = realToday;
+            updateAllCalculations(); // Recalculate interest for the new day
+        }
+    }
+});
