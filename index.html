@@ -172,6 +172,30 @@
                     </div>
                 </div>
 
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📊</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Total Loans</span>
+                            <span class="kpi-val" id="kpiCount">0</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">💰</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Avg Loan Size</span>
+                            <span class="kpi-val" id="kpiAvgSize">₹0</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">⏳</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Avg Loan Age</span>
+                            <span class="kpi-val" id="kpiAvgAge">0 Days</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="dashboard-grid">
                     <div class="chart-container">
                         <h3>Portfolio Mix (Active)</h3>
@@ -183,6 +207,12 @@
                         <h3>Risk / Aging (Active)</h3>
                         <div style="height: 200px; position: relative;">
                             <canvas id="agingChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container dashboard-full-width">
+                        <h3>Portfolio Deployment Trend (Cumulative Principal)</h3>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="growthChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -380,6 +410,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
