@@ -150,6 +150,7 @@
 
         <div id="dashboardTab" class="tab-content">
             <div class="main-content">
+                
                 <div class="dashboard-header">
                     <h2>Live Portfolio</h2>
                     <span class="live-badge">● Live Updates (1.75%)</span>
@@ -173,41 +174,64 @@
 
                 <div class="dashboard-grid">
                     <div class="chart-container">
-                        <h3>Portfolio Mix (By Value)</h3>
-                        <div style="height: 250px; position: relative;">
+                        <h3>Portfolio Mix (Active)</h3>
+                        <div style="height: 200px; position: relative;">
                             <canvas id="mixChart"></canvas>
                         </div>
                     </div>
-
                     <div class="chart-container">
-                        <h3>Aging Schedule (By Value)</h3>
-                        <div style="height: 250px; position: relative;">
+                        <h3>Risk / Aging (Active)</h3>
+                        <div style="height: 200px; position: relative;">
                             <canvas id="agingChart"></canvas>
-                        </div>
-                    </div>
-
-                    <div class="chart-container dashboard-full-width">
-                        <div class="chart-header-row">
-                            <h3>Transaction History</h3>
-                            <div class="chart-filters">
-                                <button class="btn-mini" onclick="filterHistory('7')">7D</button>
-                                <button class="btn-mini" onclick="filterHistory('30')">30D</button>
-                                <button class="btn-mini" onclick="filterHistory('FY')">This FY</button>
-                                <button class="btn-mini active" onclick="filterHistory('ALL')">All</button>
-                            </div>
-                        </div>
-                        <div style="height: 250px; position: relative;">
-                            <canvas id="historyChart"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <div class="top-lists-grid">
+                <hr style="margin: 3rem 0; border: 0; border-top: 1px solid #ddd;">
+
+                <div class="dashboard-header">
+                    <h2>Historical Analysis</h2>
+                </div>
+
+                <div class="dashboard-filters">
+                    <div class="date-range-picker">
+                        <div class="input-field">
+                            <label for="dashboardStartDate">Start Date</label>
+                            <input type="text" id="dashboardStartDate" placeholder="DD/MM/YYYY">
+                        </div>
+                        <div class="input-field">
+                            <label for="dashboardEndDate">End Date</label>
+                            <input type="text" id="dashboardEndDate" placeholder="DD/MM/YYYY">
+                        </div>
+                    </div>
+                    <div class="quick-filter-buttons">
+                        <button class="btn btn-secondary" id="last30DaysBtn">Last 30 Days</button>
+                        <button class="btn btn-secondary" id="currentFyBtn">Current F.Y.</button>
+                        <button class="btn btn-secondary" id="prevFyBtn">Prev. F.Y.</button>
+                    </div>
+                    <button class="btn btn-primary" id="applyDateFilterBtn">Apply Filter</button>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="chart-container">
+                        <h3>Collected: Principal vs Interest</h3>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="totalsPieChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Total Collected (Per Report)</h3>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="principalBarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="top-lists-grid" style="margin-top: 2rem;">
                     <div class="list-card warning-border">
                         <h3>⚠️ Oldest Active Loans</h3>
                         <ul class="dashboard-list" id="oldestLoansList"></ul>
                     </div>
-                    
                     <div class="list-card success-border">
                         <h3>💎 Top Value (Prin + Int)</h3>
                         <ul class="dashboard-list" id="highValueList"></ul>
@@ -215,6 +239,7 @@
                 </div>
 
                 <div id="dashboardLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                <p id="dashboardMessage" style="display: none; text-align: center; color: #666; margin-top: 20px;"></p>
             </div>
         </div>        
         <div id="inventoryTab" class="tab-content">
@@ -355,6 +380,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
