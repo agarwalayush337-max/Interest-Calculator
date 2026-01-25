@@ -1554,73 +1554,149 @@ const clearSearchSheet = async () => {
     }
 };
 
-// --- Dashboard ---
+// ==========================================
+// NEW ADVANCED DASHBOARD (Real-Time Stats)
+// ==========================================
 const renderDashboard = async () => {
-    dashboardLoader.style.display = 'block';
-    dashboardMessage.style.display = 'none';
+    // 1. Setup & Safety Checks
+    const loader = document.getElementById('dashboardLoader');
+    if (loader) loader.style.display = 'block';
+
+    if (!activeInventory || activeInventory.length === 0) {
+        await loadInventory(); // Ensure we have data
+    }
+    
+    // 2. Configuration
+    const today = new Date();
+    // Use user input rate or default to 1.75
+    const rate = parseFloat(interestRateEl.value) || 1.75; 
+    
+    let totalPrincipal = 0;
+    let totalInterest = 0;
+    
+    let goldCount = 0;
+    let silverCount = 0;
+    
+    let agingStats = { fresh: 0, mid: 0, old: 0 }; // <6m, 6-12m, >12m
+    
+    // 3. PROCESS EVERY LOAN
+    const processedLoans = activeInventory.map(loan => {
+        const p = parseFloat(loan.principal) || 0;
+        const loanDate = parseDate(loan.date);
+        
+        let interest = 0;
+        let days = 0;
+        
+        if (loanDate && p > 0) {
+            days = days360(loanDate, today);
+            // Interest Formula: P * R * T / 3000 (standard monthly logic)
+            interest = (p * rate * days) / 3000;
+        }
+
+        // Aggregates
+        totalPrincipal += p;
+        totalInterest += interest;
+        
+        // Type Count
+        if (loan.type === 'G') goldCount++;
+        else if (loan.type === 'S') silverCount++;
+
+        // Aging Count
+        if (days < 180) agingStats.fresh++;
+        else if (days < 365) agingStats.mid++;
+        else agingStats.old++;
+
+        return {
+            no: loan.no,
+            type: loan.type,
+            principal: p,
+            interest: interest,
+            totalValue: p + interest,
+            days: days,
+            date: loan.date
+        };
+    });
+
+    // 4. UPDATE UI: NET WORTH CARD
+    const netWorth = totalPrincipal + totalInterest;
+    
+    document.getElementById('dashNetWorth').textContent = `₹${Math.round(netWorth).toLocaleString('en-IN')}`;
+    document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
+    document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
+
+    // 5. UPDATE UI: CHARTS
     if (pieChartInstance) pieChartInstance.destroy();
     if (barChartInstance) barChartInstance.destroy();
 
-    if (!user || !navigator.onLine) {
-        dashboardMessage.textContent = "Dashboard requires an internet connection to view finalised reports.";
-        dashboardMessage.style.display = 'block';
-        dashboardLoader.style.display = 'none';
-        return;
-    }
-    
-    await loadFinalisedTransactions();
-
-    const startDate = parseDate(dashboardStartDateEl.value);
-    const endDate = parseDate(dashboardEndDateEl.value);
-
-    if (!startDate || !endDate) {
-        dashboardMessage.textContent = "Please select a valid start and end date to see the dashboard.";
-        dashboardMessage.style.display = 'block';
-        dashboardLoader.style.display = 'none';
-        return;
-    }
-
-    const filteredReports = cachedFinalisedReports.filter(report => {
-        const reportDate = parseDate(report.reportDate);
-        return reportDate && reportDate >= startDate && reportDate <= endDate;
-    });
-
-    dashboardLoader.style.display = 'none';
-    
-    if (filteredReports.length === 0) {
-        dashboardMessage.textContent = "No finalised data available for the selected date range.";
-        dashboardMessage.style.display = 'block';
-        return;
-    }
-
-    dashboardMessage.style.display = 'none';
-    let totalPrincipalAll = 0, totalInterestAll = 0;
-    
-    filteredReports.forEach(report => {
-        totalPrincipalAll += parseFloat(report.totals.principal) || 0;
-        totalInterestAll += parseFloat(report.totals.interest) || 0;
-    });
-
-    const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
+    // A. Mix Chart (Gold vs Silver)
+    const pieCtx = document.getElementById('mixChart').getContext('2d');
     pieChartInstance = new Chart(pieCtx, {
-        type: 'pie',
-        data: { labels: ['Total Principal', 'Total Interest'], datasets: [{ data: [totalPrincipalAll, totalInterestAll], backgroundColor: ['#3D52D5', '#fca311'] }] },
+        type: 'doughnut',
+        data: { 
+            labels: ['Gold', 'Silver', 'Other'], 
+            datasets: [{ 
+                data: [goldCount, silverCount, activeInventory.length - (goldCount+silverCount)], 
+                backgroundColor: ['#fca311', '#adb5bd', '#e9ecef'],
+                borderWidth: 0
+            }] 
+        },
+        options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
     });
 
-    const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recentReports = filteredReports.slice(0, 7).reverse();
+    // B. Aging Chart (Risk)
+    const barCtx = document.getElementById('agingChart').getContext('2d');
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
         data: { 
-            labels: recentReports.map(r => r.reportDate), 
+            labels: ['< 6 Months', '6-12 Months', '> 1 Year'], 
             datasets: [{ 
-                label: 'Total Principal', 
-                data: recentReports.map(r => r.totals.principal), 
-                backgroundColor: '#3D52D5' 
+                label: 'No. of Loans', 
+                data: [agingStats.fresh, agingStats.mid, agingStats.old], 
+                backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'],
+                borderRadius: 4
             }] 
         },
-        options: { scales: { y: { beginAtZero: true } } }
+        options: { 
+            maintainAspectRatio: false, 
+            scales: { y: { beginAtZero: true, grid: { display: false } } },
+            plugins: { legend: { display: false } }
+        }
     });
+
+    // 6. UPDATE UI: TOP LISTS
+    
+    // List A: Oldest Active Loans (Risk)
+    const oldestLoans = [...processedLoans].sort((a, b) => b.days - a.days).slice(0, 5);
+    const oldestListEl = document.getElementById('oldestLoansList');
+    oldestListEl.innerHTML = oldestLoans.map(l => `
+        <li>
+            <div class="list-main">
+                <span class="list-no">${l.no} <span class="list-tag ${l.type === 'G' ? 'tag-g' : 'tag-s'}">${l.type}</span></span>
+                <span class="list-sub">${l.date} (${l.days} days)</span>
+            </div>
+            <div class="list-val">
+                ₹${Math.round(l.principal).toLocaleString('en-IN')}
+            </div>
+        </li>
+    `).join('');
+
+    // List B: Highest Value Loans (Opportunity)
+    const highValueLoans = [...processedLoans].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
+    const highListEl = document.getElementById('highValueList');
+    highListEl.innerHTML = highValueLoans.map(l => `
+        <li>
+            <div class="list-main">
+                <span class="list-no">${l.no}</span>
+                <span class="list-sub">Prin: ₹${Math.round(l.principal/1000)}k</span>
+            </div>
+            <div class="list-val">
+                ₹${Math.round(l.totalValue).toLocaleString('en-IN')}
+                <div style="font-size:0.7rem; color:#888;">(Incl. Int)</div>
+            </div>
+        </li>
+    `).join('');
+
+    if (loader) loader.style.display = 'none';
 };
 
 // --- Authentication ---
