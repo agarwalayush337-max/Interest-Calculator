@@ -1572,7 +1572,7 @@ const renderDashboard = async () => {
     if (loader) loader.style.display = 'none';
 };
 
-// --- Part A: Live Stats (Corrected Logic) ---
+// --- Part A: Live Stats (Fixed: Reads 'loans' correctly) ---
 const renderLiveStats = () => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
@@ -1582,11 +1582,10 @@ const renderLiveStats = () => {
     let mixStats = { goldVal: 0, silverVal: 0, goldCount: 0, silverCount: 0 };
     let agingStats = { normalVal: 0, midVal: 0, oldVal: 0 };
     
-    // Arrays for advanced calculations
     let activeLoansList = [];
     let redeemedLoansList = [];
 
-    // 2. Process ACTIVE Inventory (For Net Worth & Charts)
+    // 2. Process ACTIVE Inventory
     activeInventory.forEach(loan => {
         const p = parseFloat(loan.principal) || 0;
         const loanDate = parseDate(loan.date);
@@ -1596,7 +1595,6 @@ const renderLiveStats = () => {
             days = days360(loanDate, today);
             interest = (p * rate * days) / 3000;
 
-            // Add to Active List
             activeLoansList.push({
                 start: loanDate,
                 end: null, // Still active
@@ -1608,7 +1606,6 @@ const renderLiveStats = () => {
         totalPrincipal += p; 
         totalInterest += interest;
 
-        // Mix & Aging Buckets
         if (loan.type === 'G') { mixStats.goldVal += p; mixStats.goldCount++; }
         else { mixStats.silverVal += p; mixStats.silverCount++; }
 
@@ -1617,21 +1614,26 @@ const renderLiveStats = () => {
         else agingStats.oldVal += p;
     });
 
-    // 3. Process FINALISED Reports (For Avg Age & History Chart)
+    // 3. Process FINALISED Reports (Corrected Property Name)
     if (cachedFinalisedReports && cachedFinalisedReports.length > 0) {
         cachedFinalisedReports.forEach(report => {
-            if (report.items && Array.isArray(report.items)) {
-                report.items.forEach(item => {
+            // FIX: Check for 'loans' (This was 'items' before, causing the 0 error)
+            const loansData = report.loans || report.items || [];
+            
+            if (Array.isArray(loansData)) {
+                loansData.forEach(item => {
                     const start = parseDate(item.date);
                     const end = parseDate(report.reportDate);
                     const p = parseFloat(item.principal) || 0;
+                    // Use report specific rate if available
+                    const r = parseFloat(report.interestRate) || rate; 
 
                     if (start && end && p > 0) {
                         redeemedLoansList.push({
                             start: start,
                             end: end,
                             principal: p,
-                            rate: rate, // Assuming same rate for history visualization
+                            rate: r,
                             duration: days360(start, end)
                         });
                     }
@@ -1646,16 +1648,16 @@ const renderLiveStats = () => {
 
     redeemedLoansList.forEach(l => totalRedeemedDays += l.duration);
     
-    // Logic: If no redeemed loans, show 0. Otherwise average of redeemed only.
+    // Avg Age Calculation
     const avgAge = totalRedeemedCount > 0 ? totalRedeemedDays / totalRedeemedCount : 0;
     
-    // KPI: Avg Size (Active Portfolio is usually more relevant for current business sizing)
+    // Avg Size (Active Portfolio)
     const avgSize = activeInventory.length > 0 ? totalPrincipal / activeInventory.length : 0;
 
     // Update KPI UI
     document.getElementById('kpiCount').textContent = activeInventory.length; 
     document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
-    document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`; // Now Redeemed Only
+    document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`;
 
 
     // 5. UPDATE NET WORTH UI
@@ -1696,13 +1698,13 @@ const renderLiveStats = () => {
     });
 
 
-    // 7. NEW GROWTH CHART (Net Asset Value - Accounts for Redemptions)
+    // 7. GROWTH CHART (Calculates Net Asset Value Day-by-Day)
     if (window.growthChartInstance) window.growthChartInstance.destroy();
 
-    // Combine lists for the timeline
+    // Combine Active + Redeemed to reconstruct history
     const allHistory = [...activeLoansList, ...redeemedLoansList];
     
-    // Sort by Start Date to find where to begin the chart
+    // Sort by Start Date
     allHistory.sort((a, b) => a.start - b.start);
 
     if (allHistory.length > 0) {
@@ -1710,7 +1712,7 @@ const renderLiveStats = () => {
         const chartLabels = [];
         const chartData = [];
 
-        // Time Loop: Check status of portfolio every 7 days from start -> today
+        // Loop: Check every 7 days from Start -> Today
         let currentDate = new Date(firstDate);
         const sevenDays = 7 * 24 * 60 * 60 * 1000;
         let loops = 0;
@@ -1719,13 +1721,13 @@ const renderLiveStats = () => {
             let dailyValue = 0;
 
             for (let loan of allHistory) {
-                // Check: Was the loan "Active" on 'currentDate'?
-                // Condition: Started BEFORE current date AND (Still Active OR Ended AFTER current date)
+                // Was the loan active on this specific 'currentDate'?
+                // 1. Must have started BEFORE currentDate
+                // 2. Must NOT have ended yet (OR ended AFTER currentDate)
                 const isStarted = loan.start <= currentDate;
                 const isNotEnded = (loan.end === null) || (loan.end > currentDate);
 
                 if (isStarted && isNotEnded) {
-                    // Calculate Value on that specific day
                     const daysActive = days360(loan.start, currentDate);
                     const accInterest = (loan.principal * loan.rate * daysActive) / 3000;
                     dailyValue += (loan.principal + accInterest);
@@ -1739,7 +1741,7 @@ const renderLiveStats = () => {
             loops++;
         }
 
-        // Add Final "Today" Point
+        // Add Final "Today" Point (Exact)
         chartLabels.push(formatDateToDDMMYYYY(today));
         chartData.push(totalPrincipal + totalInterest);
 
@@ -1773,8 +1775,7 @@ const renderLiveStats = () => {
         });
     }
 
-    // 8. Update Lists (Dashboard Bottom)
-    // We sort Active Loans for "Oldest" and "Highest Value"
+    // 8. Update Lists
     const activeSorted = activeInventory.map(loan => {
          const p = parseFloat(loan.principal) || 0;
          const loanDate = parseDate(loan.date);
@@ -1789,6 +1790,7 @@ const renderLiveStats = () => {
     const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
     document.getElementById('highValueList').innerHTML = highValueLoans.map(l => `<li><div class="list-main"><span class="list-no">${l.no}</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}</div></li>`).join('');
 };
+
 // --- Authentication ---
 // --- Authentication ---
 // --- Authentication ---
