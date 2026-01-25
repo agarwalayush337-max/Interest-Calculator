@@ -689,4 +689,19 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         font-size: 0.9rem !important; /* Smaller placeholder text */
         color: #999;
     }
+    /* 6. DURATION COLUMN (Reduced Width) */
+    #loanTable th:nth-child(5),
+    #loanTable td:nth-child(5) {
+        width: 50px !important;  /* Shrunk width */
+        text-align: center !important;
+        white-space: normal !important; /* Allow 'Duration' to wrap if needed */
+        line-height: 1.1;
+    }
+
+    /* 7. INTEREST COLUMN (Reduced Width) */
+    #loanTable th:nth-child(6),
+    #loanTable td:nth-child(6) {
+        width: 55px !important; /* Shrunk width */
+        text-align: center !important;
+    }
 }
