@@ -1927,43 +1927,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
+    // ---------------------------------------------------------
+    // FIXED: Auto-Fill & Auto-Add Logic
+    // ---------------------------------------------------------
     loanTableBody.addEventListener('input', e => {
         const target = e.target;
-        
-        // 1. AUTO-ADD ROW LOGIC (The Missing Part)
-        // If the user types anything in the LAST row, add a new blank row immediately.
         const currentRow = target.closest('tr');
-        const lastRow = loanTableBody.lastElementChild;
         
+        // 1. AUTO-ADD ROW LOGIC
+        // If user types in the LAST row, add a new blank row
+        const lastRow = loanTableBody.lastElementChild;
         if (currentRow === lastRow && target.value.trim() !== '') {
             addRow(); 
         }
 
-        // 2. EXISTING AUTO-FILL LOGIC (Gold/Silver Detection)
+        // 2. AUTO-FILL LOGIC (Inventory Lookup)
         if (target.classList.contains('no')) {
             const val = target.value.trim().toUpperCase(); 
-            
-            // Check Active Inventory
-            const match = activeInventory.find(item => item.no === val); 
-            
             const principalInput = currentRow.querySelector('.principal');
             const dateInput = currentRow.querySelector('.date');
-            
-            // Reset styles
+
+            // A. Reset Styles first (so we don't keep old colors)
             target.classList.remove('found-gold', 'found-silver');
 
+            // B. Find Match (Check exact match OR normalized match like A-50 vs A/50)
+            const match = activeInventory.find(item => 
+                item.no === val || normalizeLoanNo(item.no) === normalizeLoanNo(val)
+            ); 
+
             if (match) {
-                // Fill if empty
-                if(!principalInput.value) principalInput.value = match.principal;
-                if(!dateInput.value) dateInput.value = match.date;
+                // C. FORCE UPDATE (The Fix)
+                // We now overwrite the values even if the box wasn't empty
+                principalInput.value = match.principal;
+                dateInput.value = match.date;
                 
-                // Visual Cue
+                // D. Apply Color
+                // Grey (#e0e0e0) = Silver ('S')
+                // Yellow (#fcf4cf) = Gold ('G')
                 if (match.type === 'G') target.classList.add('found-gold');
                 else if (match.type === 'S') target.classList.add('found-silver');
             }
         }
         
         // 3. UPDATE CALCULATIONS
+        // Recalculate interest whenever any input changes
         if (target.matches('input')) {
             updateAllCalculations();
         }
