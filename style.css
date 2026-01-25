@@ -700,7 +700,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         text-align: center !important;
         white-space: normal !important; 
         line-height: 1.1;
-        padding-left: 2px !important;  /* Tighter to Date */
+        padding-left: 0px !important;  /* Tighter to Date */
         padding-right: 2px !important; /* Tighter to Interest */
     }
 
@@ -709,7 +709,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     #loanTable td:nth-child(6) {
         width: 50px !important; /* Reduced from 55px */
         text-align: center !important;
-        padding-left: 2px !important; /* Tighter to Duration */
+        padding-left: 10px !important; /* Tighter to Duration */
     }
 }
 \
