@@ -173,15 +173,31 @@
 
                 <div class="dashboard-grid">
                     <div class="chart-container">
-                        <h3>Portfolio Mix</h3>
-                        <div style="height: 200px; position: relative;">
+                        <h3>Portfolio Mix (By Value)</h3>
+                        <div style="height: 250px; position: relative;">
                             <canvas id="mixChart"></canvas>
                         </div>
                     </div>
+
                     <div class="chart-container">
-                        <h3>Risk / Aging</h3>
-                        <div style="height: 200px; position: relative;">
+                        <h3>Aging Schedule (By Value)</h3>
+                        <div style="height: 250px; position: relative;">
                             <canvas id="agingChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-container dashboard-full-width">
+                        <div class="chart-header-row">
+                            <h3>Transaction History</h3>
+                            <div class="chart-filters">
+                                <button class="btn-mini" onclick="filterHistory('7')">7D</button>
+                                <button class="btn-mini" onclick="filterHistory('30')">30D</button>
+                                <button class="btn-mini" onclick="filterHistory('FY')">This FY</button>
+                                <button class="btn-mini active" onclick="filterHistory('ALL')">All</button>
+                            </div>
+                        </div>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="historyChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -200,8 +216,7 @@
 
                 <div id="dashboardLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
             </div>
-        </div>
-        
+        </div>        
         <div id="inventoryTab" class="tab-content">
             <div class="main-content">
                 
@@ -340,6 +355,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
