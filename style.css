@@ -787,6 +787,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 /* =========================================
    DASHBOARD MINI BUTTONS
    ========================================= */
+/*
 .chart-header-row {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;
@@ -796,6 +797,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 .chart-filters { display: flex; gap: 5px; }
 
 /* New Class for Small Chart Buttons */
+/*
 .btn-mini {
     padding: 4px 10px;
     font-size: 0.75rem;
@@ -815,4 +817,51 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 }
 
 /* Make History Chart span full width on PC */
-.dashboard-full-width { grid-column: 1 / -1; }
+/*
+.dashboard-full-width { grid-column: 1 / -1; }*/
+
+
+/* =========================================
+   DASHBOARD KPIs (Average Metrics)
+   ========================================= */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.kpi-card {
+    background: white;
+    padding: 1rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-left: 4px solid #3D52D5;
+}
+
+.kpi-icon {
+    font-size: 1.5rem;
+    background: #f0f4ff;
+    width: 40px; height: 40px;
+    display: flex; justify-content: center; align-items: center;
+    border-radius: 50%;
+}
+
+.kpi-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.kpi-label {
+    font-size: 0.75rem;
+    color: #888;
+}
+
+.kpi-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #333;
+}
