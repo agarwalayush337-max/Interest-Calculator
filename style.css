@@ -641,74 +641,91 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     }
 }
 /* =========================================
-   BALANCED MOBILE TABLE (Comfortable Fit)
+   MOBILE FIX: ALIGNMENT & TEXT HIDING
    ========================================= */
 @media screen and (max-width: 768px) {
-    
-    /* 1. HIDE EXTRA TEXT (Cleanly) */
+
+    /* 1. HIDE TEXT (Forcefully) */
     .mobile-hide {
         display: none !important;
     }
 
-    /* 2. CELL SPACING (Reduced but comfortable) */
+    /* 2. TABLE CELLS (Keep Font Normal, Reduce Padding) */
     #loanTable th, 
     #loanTable td {
-        padding: 10px 4px !important; /* Enough side padding to prevent touching */
-        font-size: 0.9rem !important; /* Readable size */
+        padding: 10px 4px !important; /* Spacing between columns */
+        font-size: 0.95rem !important; /* KEEP FONT SIZE NORMAL */
         vertical-align: middle;
     }
 
-    /* 3. COLUMN WIDTHS */
-
-    /* SL: Small but clear */
-    #loanTable th:first-child,
-    #loanTable td:first-child {
-        width: 35px !important;
-        text-align: center;
-        padding-left: 0 !important;
+    /* 3. ALIGNMENT FIX (Fixes 'No' Header vs Box) */
+    #loanTable th,
+    #loanTable td input {
+        text-align: center !important; /* Force everything to center */
     }
 
-    /* NO: Standard size */
+    /* --- COLUMN WIDTHS & LOGIC --- */
+
+    /* SL Column: Fixed Tiny Width */
+    #loanTable .col-sl, 
+    #loanTable td:nth-child(1) {
+        width: 35px !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* Loan No Column: Fixed Width + Center */
+    #loanTable .col-no,
+    #loanTable td:nth-child(2) {
+        width: 60px !important;
+    }
     #loanTable input.no {
         width: 100% !important;
         min-width: 50px !important;
-        text-align: center;
         padding: 6px 0 !important;
     }
 
-    /* PRINCIPAL: Flexible */
+    /* Principal: Flexible Width */
+    #loanTable .col-principal,
+    #loanTable td:nth-child(3) {
+        width: auto !important; /* Takes remaining space */
+    }
     #loanTable input.principal {
         width: 100% !important;
         min-width: 70px !important;
-        padding: 6px !important;
+        text-align: center !important; /* Center the amount too */
     }
 
-    /* DATE: Fits perfectly */
+    /* Date: Fixed Width for DD/MM/YYYY */
+    #loanTable .col-date,
+    #loanTable td:nth-child(4) {
+        width: 100px !important;
+    }
     #loanTable input.date {
         width: 100% !important;
-        min-width: 95px !important; /* Just enough for full date */
-        text-align: center;
+        min-width: 95px !important;
         padding: 6px 0 !important;
-        font-size: 0.85rem !important; /* Slight shrink for date text */
     }
 
-    /* DURATION: Wrapped if needed */
-    #loanTable th:nth-child(5),
+    /* Duration: Text Wrap Allowed */
+    #loanTable .col-duration,
     #loanTable td:nth-child(5) {
         width: 65px !important;
-        text-align: center;
-        white-space: normal; /* Allows "Duration" to fit nicely */
+        white-space: normal !important; /* Allows 'Duration' to fit */
+        line-height: 1.2;
     }
 
-    /* INTEREST */
-    #loanTable th:nth-child(6),
+    /* Interest: Right Align Numbers */
+    #loanTable .col-interest,
     #loanTable td:nth-child(6) {
-        min-width: 60px !important;
-        text-align: right;
+        width: 60px !important;
+        text-align: center !important;
     }
-
-    /* DELETE BUTTON */
-    #loanTable .btn-danger {
-        padding: 4px 8px !important; /* Easier to tap */
+    
+    /* Delete Button */
+    #loanTable .col-action,
+    #loanTable td:nth-child(7) {
+        width: 30px !important;
+        padding: 0 !important;
     }
 }
