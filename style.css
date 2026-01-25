@@ -641,61 +641,74 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     }
 }
 /* =========================================
-   MOBILE OPTIMIZATION: COMPACT TABLE
-   (Paste at the bottom of style.css)
+   BALANCED MOBILE TABLE (Comfortable Fit)
    ========================================= */
 @media screen and (max-width: 768px) {
     
-    /* 1. Hide the extra text inside spans */
+    /* 1. HIDE EXTRA TEXT (Cleanly) */
     .mobile-hide {
-        display: none;
+        display: none !important;
     }
 
-    /* 2. Tighten Cell Spacing (Keep Font Size Normal) */
+    /* 2. CELL SPACING (Reduced but comfortable) */
     #loanTable th, 
     #loanTable td {
-        padding: 12px 2px !important; /* Good vertical space, tight sides */
+        padding: 10px 4px !important; /* Enough side padding to prevent touching */
+        font-size: 0.9rem !important; /* Readable size */
+        vertical-align: middle;
     }
 
-    /* 3. COLUMN 1: SL (Tiny) */
+    /* 3. COLUMN WIDTHS */
+
+    /* SL: Small but clear */
     #loanTable th:first-child,
     #loanTable td:first-child {
-        width: 30px !important;
+        width: 35px !important;
         text-align: center;
         padding-left: 0 !important;
-        padding-right: 0 !important;
     }
 
-    /* 4. COLUMN 2: Loan No (Compact) */
+    /* NO: Standard size */
     #loanTable input.no {
-        min-width: 0 !important;
-        width: 55px !important; 
+        width: 100% !important;
+        min-width: 50px !important;
         text-align: center;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+        padding: 6px 0 !important;
     }
 
-    /* 5. COLUMN 3: Principal (Flexible) */
+    /* PRINCIPAL: Flexible */
     #loanTable input.principal {
+        width: 100% !important;
         min-width: 70px !important;
-        padding-left: 5px !important;
+        padding: 6px !important;
     }
 
-    /* 6. COLUMN 4: Date (Strict Width) */
+    /* DATE: Fits perfectly */
     #loanTable input.date {
-        min-width: 0 !important;
-        width: 95px !important; /* Exact width for DD/MM/YYYY */
+        width: 100% !important;
+        min-width: 95px !important; /* Just enough for full date */
         text-align: center;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+        padding: 6px 0 !important;
+        font-size: 0.85rem !important; /* Slight shrink for date text */
     }
 
-    /* 7. COLUMN 5: Duration (Hide extra space) */
+    /* DURATION: Wrapped if needed */
     #loanTable th:nth-child(5),
     #loanTable td:nth-child(5) {
-        width: 50px !important; 
-        max-width: 50px !important;
+        width: 65px !important;
         text-align: center;
-        padding: 0 !important;
+        white-space: normal; /* Allows "Duration" to fit nicely */
+    }
+
+    /* INTEREST */
+    #loanTable th:nth-child(6),
+    #loanTable td:nth-child(6) {
+        min-width: 60px !important;
+        text-align: right;
+    }
+
+    /* DELETE BUTTON */
+    #loanTable .btn-danger {
+        padding: 4px 8px !important; /* Easier to tap */
     }
 }
