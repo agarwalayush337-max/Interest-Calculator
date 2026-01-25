@@ -659,8 +659,8 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     #loanTable th:nth-child(2),       
     #loanTable td:nth-child(2) input { 
         text-align: center !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+        padding-left: 5 !important;
+        padding-right: 5 !important;
     }
 
     /* 4. Ensure SL column is tight */
@@ -675,7 +675,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     /* 5. PRINCIPAL COLUMN (Tighter margins) */
     #loanTable th:nth-child(3),
     #loanTable td:nth-child(3) {
-        padding-left: 0 !important; /* Pulls closer to No */
+        padding-left: 5 !important; /* Pulls closer to No */
         padding-right: 0 !important; /* Pulls closer to Date */
     }
 
