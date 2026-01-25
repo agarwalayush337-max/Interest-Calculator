@@ -640,3 +640,62 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         min-width: 0 !important;   /* Prevent flex overflow */
     }
 }
+/* =========================================
+   MOBILE OPTIMIZATION: COMPACT TABLE
+   (Paste at the bottom of style.css)
+   ========================================= */
+@media screen and (max-width: 768px) {
+    
+    /* 1. Hide the extra text inside spans */
+    .mobile-hide {
+        display: none;
+    }
+
+    /* 2. Tighten Cell Spacing (Keep Font Size Normal) */
+    #loanTable th, 
+    #loanTable td {
+        padding: 12px 2px !important; /* Good vertical space, tight sides */
+    }
+
+    /* 3. COLUMN 1: SL (Tiny) */
+    #loanTable th:first-child,
+    #loanTable td:first-child {
+        width: 30px !important;
+        text-align: center;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* 4. COLUMN 2: Loan No (Compact) */
+    #loanTable input.no {
+        min-width: 0 !important;
+        width: 55px !important; 
+        text-align: center;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* 5. COLUMN 3: Principal (Flexible) */
+    #loanTable input.principal {
+        min-width: 70px !important;
+        padding-left: 5px !important;
+    }
+
+    /* 6. COLUMN 4: Date (Strict Width) */
+    #loanTable input.date {
+        min-width: 0 !important;
+        width: 95px !important; /* Exact width for DD/MM/YYYY */
+        text-align: center;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* 7. COLUMN 5: Duration (Hide extra space) */
+    #loanTable th:nth-child(5),
+    #loanTable td:nth-child(5) {
+        width: 50px !important; 
+        max-width: 50px !important;
+        text-align: center;
+        padding: 0 !important;
+    }
+}
