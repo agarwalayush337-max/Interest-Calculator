@@ -1572,12 +1572,12 @@ const renderDashboard = async () => {
     if (loader) loader.style.display = 'none';
 };
 
-// 2. LIVE STATS (Active Net Worth + Growth Trend + KPIs)
+// --- Part A: Live Stats (Corrected Logic) ---
 const renderLiveStats = () => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
     
-    // Setup Variables
+    // 1. Setup Variables
     let totalPrincipal = 0, totalInterest = 0;
     let mixStats = { goldVal: 0, silverVal: 0, goldCount: 0, silverCount: 0 };
     let agingStats = { normalVal: 0, midVal: 0, oldVal: 0 };
@@ -1586,7 +1586,7 @@ const renderLiveStats = () => {
     let activeLoansList = [];
     let redeemedLoansList = [];
 
-    // A. Process ACTIVE Inventory (For Net Worth & Charts)
+    // 2. Process ACTIVE Inventory (For Net Worth & Charts)
     activeInventory.forEach(loan => {
         const p = parseFloat(loan.principal) || 0;
         const loanDate = parseDate(loan.date);
@@ -1617,7 +1617,7 @@ const renderLiveStats = () => {
         else agingStats.oldVal += p;
     });
 
-    // B. Process FINALISED Reports (For Avg Age & History Chart)
+    // 3. Process FINALISED Reports (For Avg Age & History Chart)
     if (cachedFinalisedReports && cachedFinalisedReports.length > 0) {
         cachedFinalisedReports.forEach(report => {
             if (report.items && Array.isArray(report.items)) {
@@ -1625,15 +1625,13 @@ const renderLiveStats = () => {
                     const start = parseDate(item.date);
                     const end = parseDate(report.reportDate);
                     const p = parseFloat(item.principal) || 0;
-                    // Use report specific rate if available, else current rate
-                    const r = parseFloat(report.interestRate) || rate; 
 
                     if (start && end && p > 0) {
                         redeemedLoansList.push({
                             start: start,
                             end: end,
                             principal: p,
-                            rate: r,
+                            rate: rate, // Assuming same rate for history visualization
                             duration: days360(start, end)
                         });
                     }
@@ -1642,31 +1640,31 @@ const renderLiveStats = () => {
         });
     }
 
-    // C. UPDATE KPI: Avg Loan Age (REDEEMED ONLY)
+    // 4. UPDATE KPI: Avg Loan Age (REDEEMED ONLY)
     let totalRedeemedDays = 0;
     let totalRedeemedCount = redeemedLoansList.length;
 
     redeemedLoansList.forEach(l => totalRedeemedDays += l.duration);
     
-    // Avg Age = Based only on closed loans (True business cycle speed)
+    // Logic: If no redeemed loans, show 0. Otherwise average of redeemed only.
     const avgAge = totalRedeemedCount > 0 ? totalRedeemedDays / totalRedeemedCount : 0;
     
-    // Avg Size = Based on Active Inventory (Current market position)
+    // KPI: Avg Size (Active Portfolio is usually more relevant for current business sizing)
     const avgSize = activeInventory.length > 0 ? totalPrincipal / activeInventory.length : 0;
 
     // Update KPI UI
     document.getElementById('kpiCount').textContent = activeInventory.length; 
     document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
-    document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`;
+    document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`; // Now Redeemed Only
 
 
-    // D. UPDATE NET WORTH UI
+    // 5. UPDATE NET WORTH UI
     document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
     document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
     document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
 
 
-    // E. UPDATE CHARTS (Mix & Aging)
+    // 6. UPDATE CHARTS (Mix & Aging)
     if (pieChartInstance) pieChartInstance.destroy();
     if (barChartInstance) barChartInstance.destroy();
 
@@ -1698,13 +1696,13 @@ const renderLiveStats = () => {
     });
 
 
-    // F. GROWTH CHART (Net Asset Value - Accounts for Redemptions)
+    // 7. NEW GROWTH CHART (Net Asset Value - Accounts for Redemptions)
     if (window.growthChartInstance) window.growthChartInstance.destroy();
 
     // Combine lists for the timeline
     const allHistory = [...activeLoansList, ...redeemedLoansList];
     
-    // Sort by Start Date
+    // Sort by Start Date to find where to begin the chart
     allHistory.sort((a, b) => a.start - b.start);
 
     if (allHistory.length > 0) {
@@ -1775,8 +1773,8 @@ const renderLiveStats = () => {
         });
     }
 
-    // G. Update Lists (Dashboard Bottom)
-    // We recreate the processed list for sorting
+    // 8. Update Lists (Dashboard Bottom)
+    // We sort Active Loans for "Oldest" and "Highest Value"
     const activeSorted = activeInventory.map(loan => {
          const p = parseFloat(loan.principal) || 0;
          const loanDate = parseDate(loan.date);
@@ -1790,74 +1788,6 @@ const renderLiveStats = () => {
     
     const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
     document.getElementById('highValueList').innerHTML = highValueLoans.map(l => `<li><div class="list-main"><span class="list-no">${l.no}</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}</div></li>`).join('');
-};
-
-// 3. HISTORICAL STATS (Date Filtered Charts)
-const renderHistoricalStats = () => {
-    // A. Get Date Range
-    const startDate = parseDate(dashboardStartDateEl.value);
-    const endDate = parseDate(dashboardEndDateEl.value);
-    const msgEl = document.getElementById('dashboardMessage');
-
-    if (!startDate || !endDate) {
-        if(msgEl) { msgEl.textContent = "Select valid dates for history."; msgEl.style.display = 'block'; }
-        return;
-    }
-
-    // B. Filter Reports
-    const filteredReports = cachedFinalisedReports.filter(report => {
-        const d = parseDate(report.reportDate);
-        return d && d >= startDate && d <= endDate;
-    });
-
-    if (filteredReports.length === 0) {
-        if(msgEl) { msgEl.textContent = "No finalised reports in this range."; msgEl.style.display = 'block'; }
-        if (histPieInstance) histPieInstance.destroy();
-        if (histBarInstance) histBarInstance.destroy();
-        return;
-    }
-    if(msgEl) msgEl.style.display = 'none';
-
-    // C. Aggregate Data
-    let totalPrin = 0, totalInt = 0;
-    filteredReports.forEach(r => {
-        totalPrin += parseFloat(r.totals.principal) || 0;
-        totalInt += parseFloat(r.totals.interest) || 0;
-    });
-
-    // D. Draw Historical Charts
-    if (histPieInstance) histPieInstance.destroy();
-    if (histBarInstance) histBarInstance.destroy();
-
-    // Pie Chart: Principal vs Interest
-    const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
-    histPieInstance = new Chart(pieCtx, {
-        type: 'pie',
-        data: { 
-            labels: ['Principal', 'Interest'], 
-            datasets: [{ 
-                data: [totalPrin, totalInt], 
-                backgroundColor: ['#3D52D5', '#fca311'] 
-            }] 
-        },
-        options: { maintainAspectRatio: false }
-    });
-
-    // Bar Chart: Per Report Totals (Last 10 in range)
-    const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recent = filteredReports.slice(0, 10).reverse();
-    histBarInstance = new Chart(barCtx, {
-        type: 'bar',
-        data: { 
-            labels: recent.map(r => r.reportDate), 
-            datasets: [{ 
-                label: 'Collected Amount', 
-                data: recent.map(r => parseFloat(r.totals.final)), 
-                backgroundColor: '#3D52D5' 
-            }] 
-        },
-        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-    });
 };
 // --- Authentication ---
 // --- Authentication ---
