@@ -1549,8 +1549,10 @@ const clearSearchSheet = async () => {
 };
 
 // ==========================================
-// MASTER DASHBOARD CONTROLLER
+// MASTER DASHBOARD CONTROLLER (Fixed & Complete)
 // ==========================================
+
+// Global variables for Chart instances
 let histPieInstance = null;
 let histBarInstance = null;
 
@@ -1558,20 +1560,20 @@ const renderDashboard = async () => {
     const loader = document.getElementById('dashboardLoader');
     if (loader) loader.style.display = 'block';
 
-    // 1. Ensure Data Loads
+    // 1. Ensure Data Loads (Both Active & History are needed)
     if (!activeInventory || activeInventory.length === 0) await loadInventory();
     await loadFinalisedTransactions(); 
 
-    // 2. Render LIVE Section (Net Worth, Active Loans)
+    // 2. Render LIVE Section (Net Worth, KPIs, Growth Chart)
     renderLiveStats();
 
-    // 3. Render HISTORICAL Section (Date Filters, Old Pie Chart)
+    // 3. Render HISTORICAL Section (Date Filters, Collected Charts)
     renderHistoricalStats();
 
     if (loader) loader.style.display = 'none';
 };
 
-// --- Part A: Live Stats (Active Inventory + History Integration) ---
+// --- Part A: Live Stats (KPIs, Net Worth, Growth Trend) ---
 const renderLiveStats = () => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
@@ -1580,12 +1582,13 @@ const renderLiveStats = () => {
     let totalPrincipal = 0, totalInterest = 0;
     let mixStats = { goldVal: 0, silverVal: 0, goldCount: 0, silverCount: 0 };
     let agingStats = { normalVal: 0, midVal: 0, oldVal: 0 };
+    let totalDaysSum = 0; // For Avg Age
+    let totalLoanCount = 0; // For Avg Age
 
-    // Data for Growth Chart
-    // We will track the "Value" (Prin + Int) of the CURRENT portfolio over time
-    let growthEvents = []; 
+    // Data for Growth Chart (We need ALL loans: Active + Redeemed)
+    let allLoansHistory = []; 
 
-    // 2. Process ACTIVE Loans (For Net Worth & Chart)
+    // 2. Process ACTIVE Loans
     const processedLoans = activeInventory.map(loan => {
         const p = parseFloat(loan.principal) || 0;
         const loanDate = parseDate(loan.date);
@@ -1595,12 +1598,16 @@ const renderLiveStats = () => {
             days = days360(loanDate, today);
             interest = (p * rate * days) / 3000;
             
-            // Add to Growth Data: This loan started existing on 'loanDate'
-            growthEvents.push({ 
+            // Add to History: Active from Start Date -> Today
+            allLoansHistory.push({ 
                 start: loanDate, 
+                end: today, // Still open
                 principal: p, 
                 rate: rate 
             });
+
+            totalDaysSum += days;
+            totalLoanCount++;
         }
 
         totalPrincipal += p; 
@@ -1617,54 +1624,53 @@ const renderLiveStats = () => {
         return { no: loan.no, type: loan.type, principal: p, totalValue: p + interest, days, date: loan.date };
     });
 
-    // 3. UPDATE NET WORTH CARD
-    document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
-    document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
-    document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
-
-
-    // 4. CALCULATE "TRUE" AVG LOAN AGE (Active + Finalised)
-    let grandTotalDays = 0;
-    let grandTotalCount = 0;
-
-    // A. Add Active Loans
-    processedLoans.forEach(l => {
-        grandTotalDays += l.days;
-        grandTotalCount++;
-    });
-
-    // B. Add Finalised Loans (Historical Data)
+    // 3. Process REDEEMED Loans (From History) for Charts & KPIs
     if (cachedFinalisedReports && cachedFinalisedReports.length > 0) {
         cachedFinalisedReports.forEach(report => {
             if (report.items && Array.isArray(report.items)) {
                 report.items.forEach(item => {
-                    // Try to calculate duration if start/end dates exist
-                    const start = parseDate(item.date); // Original Loan Date
-                    const end = parseDate(report.reportDate); // Finalisation Date
-                    
-                    if (start && end) {
+                    const start = parseDate(item.date);
+                    const end = parseDate(report.reportDate);
+                    const p = parseFloat(item.principal) || 0;
+
+                    if (start && end && p > 0) {
+                        // For Avg Age KPI
                         const duration = days360(start, end);
                         if (duration > 0) {
-                            grandTotalDays += duration;
-                            grandTotalCount++;
+                            totalDaysSum += duration;
+                            totalLoanCount++;
                         }
+
+                        // For Growth Chart: Active from Start -> End
+                        allLoansHistory.push({
+                            start: start,
+                            end: end,
+                            principal: p,
+                            rate: rate
+                        });
                     }
                 });
             }
         });
     }
 
-    // C. Update KPI Cards
-    const avgAge = grandTotalCount > 0 ? grandTotalDays / grandTotalCount : 0;
-    const avgSize = grandTotalCount > 0 ? (totalPrincipal + (totalPrincipalFromHistory || 0)) / grandTotalCount : (totalPrincipal/activeInventory.length || 0);
-    // Note: Avg Size is kept to Active mainly for relevance, but Age is now global.
+    // 4. UPDATE UI: NET WORTH & KPIs
+    document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
+    document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
+    document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
 
-    document.getElementById('kpiCount').textContent = activeInventory.length; // Active Count
-    document.getElementById('kpiAvgSize').textContent = `₹${Math.round(totalPrincipal / (activeInventory.length || 1)).toLocaleString('en-IN')}`;
-    document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`; // GLOBAL AVG AGE
+    // KPI Calculations
+    const avgAge = totalLoanCount > 0 ? totalDaysSum / totalLoanCount : 0;
+    // Avg Size: Based on Active Principal + Redeemed Principal (Approximated by Active count for simplicity or calculated fully if needed)
+    // For simplicity and relevance, we often keep Avg Size to Active Portfolio, but Avg Age to All Time.
+    const avgSize = activeInventory.length > 0 ? totalPrincipal / activeInventory.length : 0;
+
+    document.getElementById('kpiCount').textContent = activeInventory.length; 
+    document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
+    document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`;
 
 
-    // 5. UPDATE CHARTS (Mix & Aging - same as before)
+    // 5. UPDATE LIVE CHARTS
     if (pieChartInstance) pieChartInstance.destroy();
     if (barChartInstance) barChartInstance.destroy();
 
@@ -1696,50 +1702,44 @@ const renderLiveStats = () => {
     });
 
 
-    // 6. NEW GROWTH CHART (Total Estimated Value Trend)
+    // 6. GROWTH CHART (Reconstructing Value of Active Loans Over Time)
     if (window.growthChartInstance) window.growthChartInstance.destroy();
 
-    // Algorithm: Reconstruct the Daily Value of the CURRENT Active Portfolio
-    // 1. Sort all loans by Start Date
-    growthEvents.sort((a, b) => a.start - b.start);
+    // Sort all loan events by start date
+    allLoansHistory.sort((a, b) => a.start - b.start);
 
-    if (growthEvents.length > 0) {
-        const firstDate = growthEvents[0].start;
-        const lastDate = new Date();
+    if (allLoansHistory.length > 0) {
+        const firstDate = allLoansHistory[0].start;
+        const lastDate = today;
         const chartLabels = [];
         const chartData = [];
 
-        // Loop day by day from First Loan -> Today
-        // (Optimized: Step by 7 days to keep chart clean if range is huge)
+        // Iterate: 7-day steps from first loan to today
         let currentDate = new Date(firstDate);
-        const oneDay = 24 * 60 * 60 * 1000;
-        
-        // Safety: Prevent infinite loop if bad dates
-        let loops = 0; 
-        while (currentDate <= lastDate && loops < 2000) {
-            
-            // Calculate Portfolio Value on 'currentDate'
-            let dailyTotalValue = 0;
+        const sevenDays = 7 * 24 * 60 * 60 * 1000;
+        let loops = 0;
 
-            // Sum up every loan that existed on 'currentDate'
-            for (let loan of growthEvents) {
-                if (loan.start <= currentDate) {
+        while (currentDate <= lastDate && loops < 1000) {
+            let dailyValue = 0;
+
+            // Check every loan: Was it active on 'currentDate'?
+            for (let loan of allLoansHistory) {
+                if (loan.start <= currentDate && loan.end >= currentDate) {
+                    // It was active! Calculate Value (Prin + Int) on that day
                     const daysActive = days360(loan.start, currentDate);
-                    const interestAccrued = (loan.principal * loan.rate * daysActive) / 3000;
-                    dailyTotalValue += (loan.principal + interestAccrued);
+                    const accInterest = (loan.principal * loan.rate * daysActive) / 3000;
+                    dailyValue += (loan.principal + accInterest);
                 }
             }
 
             chartLabels.push(formatDateToDDMMYYYY(currentDate));
-            chartData.push(dailyTotalValue);
-
-            // Step forward (e.g., every 15 days for smoothness, or 1 day for precision)
-            // Using 7 days for a good balance
-            currentDate = new Date(currentDate.getTime() + (14 * oneDay)); 
+            chartData.push(dailyValue);
+            
+            currentDate = new Date(currentDate.getTime() + sevenDays);
             loops++;
         }
-        
-        // Ensure TODAY is the last point
+
+        // Add Today's exact point
         chartLabels.push(formatDateToDDMMYYYY(today));
         chartData.push(totalPrincipal + totalInterest);
 
@@ -1749,14 +1749,14 @@ const renderLiveStats = () => {
             data: {
                 labels: chartLabels,
                 datasets: [{
-                    label: 'Total Est. Value (Active)',
+                    label: 'Portfolio Value (Prin + Int)',
                     data: chartData,
                     borderColor: '#2a9d8f',
                     backgroundColor: 'rgba(42, 157, 143, 0.1)',
                     fill: true,
                     pointRadius: 0, 
                     borderWidth: 2,
-                    tension: 0.4 // Smooth curves
+                    tension: 0.4
                 }]
             },
             options: {
@@ -1773,7 +1773,7 @@ const renderLiveStats = () => {
         });
     }
 
-    // 7. Update Lists (Same as before)
+    // 7. Update Lists
     const oldestLoans = [...processedLoans].sort((a, b) => b.days - a.days).slice(0, 5);
     document.getElementById('oldestLoansList').innerHTML = oldestLoans.map(l => `<li><div class="list-main"><span class="list-no">${l.no}</span><span class="list-sub">${l.date} (${l.days}d)</span></div><div class="list-val">₹${Math.round(l.principal).toLocaleString('en-IN')}</div></li>`).join('');
     
@@ -1781,9 +1781,73 @@ const renderLiveStats = () => {
     document.getElementById('highValueList').innerHTML = highValueLoans.map(l => `<li><div class="list-main"><span class="list-no">${l.no}</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}</div></li>`).join('');
 };
 
-// Helper variable for Avg Size calculation (optional)
-let totalPrincipalFromHistory = 0;
+// --- Part B: Historical Stats (This was missing!) ---
+const renderHistoricalStats = () => {
+    // 1. Get Date Range
+    const startDate = parseDate(dashboardStartDateEl.value);
+    const endDate = parseDate(dashboardEndDateEl.value);
+    const msgEl = document.getElementById('dashboardMessage');
 
+    if (!startDate || !endDate) {
+        if(msgEl) { msgEl.textContent = "Select valid dates for history."; msgEl.style.display = 'block'; }
+        return;
+    }
+
+    // 2. Filter Reports
+    const filteredReports = cachedFinalisedReports.filter(report => {
+        const d = parseDate(report.reportDate);
+        return d && d >= startDate && d <= endDate;
+    });
+
+    if (filteredReports.length === 0) {
+        if(msgEl) { msgEl.textContent = "No finalised reports in this range."; msgEl.style.display = 'block'; }
+        if (histPieInstance) histPieInstance.destroy();
+        if (histBarInstance) histBarInstance.destroy();
+        return;
+    }
+    if(msgEl) msgEl.style.display = 'none';
+
+    // 3. Aggregate Data
+    let totalPrin = 0, totalInt = 0;
+    filteredReports.forEach(r => {
+        totalPrin += parseFloat(r.totals.principal) || 0;
+        totalInt += parseFloat(r.totals.interest) || 0;
+    });
+
+    // 4. Draw Historical Charts
+    if (histPieInstance) histPieInstance.destroy();
+    if (histBarInstance) histBarInstance.destroy();
+
+    // Pie Chart: Principal vs Interest
+    const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
+    histPieInstance = new Chart(pieCtx, {
+        type: 'pie',
+        data: { 
+            labels: ['Principal', 'Interest'], 
+            datasets: [{ 
+                data: [totalPrin, totalInt], 
+                backgroundColor: ['#3D52D5', '#fca311'] 
+            }] 
+        },
+        options: { maintainAspectRatio: false }
+    });
+
+    // Bar Chart: Per Report Totals (Last 10 in range)
+    const barCtx = document.getElementById('principalBarChart').getContext('2d');
+    const recent = filteredReports.slice(0, 10).reverse();
+    histBarInstance = new Chart(barCtx, {
+        type: 'bar',
+        data: { 
+            labels: recent.map(r => r.reportDate), 
+            datasets: [{ 
+                label: 'Collected Amount', 
+                data: recent.map(r => parseFloat(r.totals.final)), 
+                backgroundColor: '#3D52D5' 
+            }] 
+        },
+        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+};
 // --- Authentication ---
 // --- Authentication ---
 // --- Authentication ---
