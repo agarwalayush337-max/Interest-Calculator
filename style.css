@@ -640,4 +640,30 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         min-width: 0 !important;   /* Prevent flex overflow */
     }
 }
+/* =========================================
+   MOBILE HEADER & ALIGNMENT FIX
+   ========================================= */
+@media screen and (max-width: 768px) {
+    
+    /* 1. Hide the extra text (SL NO -> SL, Duration (Days) -> Duration) */
+    .desktop-text {
+        display: none !important;
+    }
 
+    /* 2. Fix "No" Column Alignment (Header + Input Box) */
+    #loanTable th:nth-child(2),       /* The Header 'No' */
+    #loanTable td:nth-child(2) input { /* The Input Box */
+        text-align: center !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* 3. Ensure SL column is tight but readable */
+    #loanTable th:first-child,
+    #loanTable td:first-child {
+        width: 35px !important;
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+        text-align: center !important;
+    }
+}
