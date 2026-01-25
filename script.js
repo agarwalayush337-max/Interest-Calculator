@@ -1549,9 +1549,6 @@ const clearSearchSheet = async () => {
 };
 
 // ==========================================
-// NEW ADVANCED DASHBOARD (Real-Time Stats)
-// ==========================================
-// ==========================================
 // ADVANCED DASHBOARD (Value-Based + History)
 // ==========================================
 const renderDashboard = async () => {
@@ -1560,7 +1557,7 @@ const renderDashboard = async () => {
 
     // 1. Load Data
     if (!activeInventory || activeInventory.length === 0) await loadInventory();
-    await loadFinalisedTransactions(); // Load History
+    await loadFinalisedTransactions(); 
 
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
@@ -1569,19 +1566,8 @@ const renderDashboard = async () => {
     let totalPrincipal = 0;
     let totalInterest = 0;
     
-    // Portfolio Mix (By Value)
-    let mixStats = {
-        goldVal: 0, goldCount: 0,
-        silverVal: 0, silverCount: 0
-    };
-
-    // Aging Buckets (By Value)
-    // Buckets: 0-2 Years, 2-3 Years, > 3 Years
-    let agingStats = {
-        normalVal: 0, normalCount: 0, // < 2 Years
-        midVal: 0, midCount: 0,       // 2-3 Years
-        oldVal: 0, oldCount: 0        // > 3 Years
-    };
+    let mixStats = { goldVal: 0, goldCount: 0, silverVal: 0, silverCount: 0 };
+    let agingStats = { normalVal: 0, normalCount: 0, midVal: 0, midCount: 0, oldVal: 0, oldCount: 0 };
 
     // 3. Process Active Loans
     const processedLoans = activeInventory.map(loan => {
@@ -1603,13 +1589,9 @@ const renderDashboard = async () => {
         else if (loan.type === 'S') { mixStats.silverVal += p; mixStats.silverCount++; }
 
         // Aging Logic
-        if (days < 730) { // < 2 Years (approx)
-            agingStats.normalVal += p; agingStats.normalCount++;
-        } else if (days < 1095) { // 2 - 3 Years
-            agingStats.midVal += p; agingStats.midCount++;
-        } else { // > 3 Years
-            agingStats.oldVal += p; agingStats.oldCount++;
-        }
+        if (days < 730) { agingStats.normalVal += p; agingStats.normalCount++; } 
+        else if (days < 1095) { agingStats.midVal += p; agingStats.midCount++; } 
+        else { agingStats.oldVal += p; agingStats.oldCount++; }
 
         return { no: loan.no, type: loan.type, principal: p, totalValue: p + interest, days, date: loan.date };
     });
@@ -1621,11 +1603,9 @@ const renderDashboard = async () => {
     document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
 
     // 5. CHART CONFIGURATION
-    // Helper for Tooltips: "₹50,000 (12 Nos)"
     const currencyTooltip = {
         callbacks: {
             label: function(context) {
-                let label = context.dataset.label || '';
                 let value = context.raw || 0;
                 let count = context.dataset.counts ? context.dataset.counts[context.dataIndex] : 0;
                 return ` ₹${value.toLocaleString('en-IN')} (${count} Nos)`;
@@ -1633,12 +1613,11 @@ const renderDashboard = async () => {
         }
     };
 
-    // DESTROY OLD CHARTS
     if (pieChartInstance) pieChartInstance.destroy();
     if (barChartInstance) barChartInstance.destroy();
-    if (window.historyChartInstance) window.historyChartInstance.destroy();
+    // Note: History chart is handled by filterHistory, so we don't destroy it here directly
 
-    // A. PORTFOLIO MIX CHART (By Value)
+    // A. PORTFOLIO MIX CHART
     const pieCtx = document.getElementById('mixChart').getContext('2d');
     pieChartInstance = new Chart(pieCtx, {
         type: 'doughnut',
@@ -1646,21 +1625,15 @@ const renderDashboard = async () => {
             labels: ['Gold', 'Silver'], 
             datasets: [{ 
                 data: [mixStats.goldVal, mixStats.silverVal], 
-                counts: [mixStats.goldCount, mixStats.silverCount], // Store counts for tooltip
+                counts: [mixStats.goldCount, mixStats.silverCount],
                 backgroundColor: ['#fca311', '#adb5bd'],
                 borderWidth: 0
             }] 
         },
-        options: { 
-            maintainAspectRatio: false, 
-            plugins: { 
-                tooltip: currencyTooltip,
-                legend: { position: 'bottom' } 
-            } 
-        }
+        options: { maintainAspectRatio: false, plugins: { tooltip: currencyTooltip, legend: { position: 'bottom' } } }
     });
 
-    // B. AGING CHART (By Value - >2Y & >3Y)
+    // B. AGING CHART
     const barCtx = document.getElementById('agingChart').getContext('2d');
     barChartInstance = new Chart(barCtx, {
         type: 'bar',
@@ -1669,7 +1642,7 @@ const renderDashboard = async () => {
             datasets: [{ 
                 label: 'Loan Value', 
                 data: [agingStats.normalVal, agingStats.midVal, agingStats.oldVal],
-                counts: [agingStats.normalCount, agingStats.midCount, agingStats.oldCount], // Store counts
+                counts: [agingStats.normalCount, agingStats.midCount, agingStats.oldCount],
                 backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'],
                 borderRadius: 5
             }] 
@@ -1681,31 +1654,15 @@ const renderDashboard = async () => {
         }
     });
 
-    // C. HISTORY CHART (Restored)
-    const histCtx = document.getElementById('historyChart').getContext('2d');
-    const recentHistory = cachedFinalisedReports.slice(0, 7).reverse(); // Last 7 reports
-    
-    window.historyChartInstance = new Chart(histCtx, {
-        type: 'line',
-        data: {
-            labels: recentHistory.map(r => r.reportDate),
-            datasets: [{
-                label: 'Total Collected',
-                data: recentHistory.map(r => parseFloat(r.totals?.final || 0)),
-                borderColor: '#3D52D5',
-                backgroundColor: 'rgba(61, 82, 213, 0.1)',
-                fill: true,
-                tension: 0.4
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: { borderDash: [5, 5] } } }
+    // C. HISTORY CHART (Delegate to Filter Function)
+    // This fixes the error because it waits for the element to exist
+    setTimeout(() => {
+        if(typeof filterHistory === 'function') {
+            filterHistory('ALL'); 
         }
-    });
+    }, 100);
 
-    // 6. TOP LISTS (Same as before)
+    // 6. TOP LISTS
     const oldestLoans = [...processedLoans].sort((a, b) => b.days - a.days).slice(0, 5);
     document.getElementById('oldestLoansList').innerHTML = oldestLoans.map(l => `
         <li>
@@ -1722,6 +1679,7 @@ const renderDashboard = async () => {
 
     if (loader) loader.style.display = 'none';
 };
+
 // --- Authentication ---
 // --- Authentication ---
 // --- Authentication ---
