@@ -643,54 +643,42 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 
 @media screen and (max-width: 768px) {
     
-    /* 1. Hide the extra text */
+    /* 1. Hide the extra text (SL NO -> SL, Duration (Days) -> Duration) */
     .desktop-text {
         display: none !important;
     }
 
-    /* 2. REDUCE GAP GLOBALLY: This brings No, Principal, and Date closer */
-    #loanTable th, 
-    #loanTable td {
-        padding: 10px 2px !important; /* Reduced from 1rem to 2px */
-        vertical-align: middle;
-    }
-
-    /* 3. Fix "No" Column Alignment */
-    #loanTable th:nth-child(2),       
-    #loanTable td:nth-child(2) input { 
+    /* 2. Fix "No" Column Alignment (Header + Input Box) */
+    #loanTable th:nth-child(2),       /* The Header 'No' */
+    #loanTable td:nth-child(2) input { /* The Input Box */
         text-align: center !important;
-        padding-left: 5 !important;
-        padding-right: 5 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }
 
-    /* 4. Ensure SL column is tight */
+    /* 3. Ensure SL column is tight but readable (Your settings) */
     #loanTable th:first-child,
     #loanTable td:first-child {
         width: 35px !important;
-        padding-left: 5px !important;
+        padding-left: 10px !important;
         padding-right: 5px !important;
         text-align: center !important;
-    }
-
-    /* 5. PRINCIPAL COLUMN (Tighter margins) */
-    #loanTable th:nth-child(3),
-    #loanTable td:nth-child(3) {
-        padding-left: 5 !important; /* Pulls closer to No */
-        padding-right: 0 !important; /* Pulls closer to Date */
     }
 
     /* ============================
        DATE COLUMN SPECIFIC FIXES
        ============================ */
 
-    /* 1. Center the Date Header & Reduce Gap */
+    /* 1. Center the Date Header & Reduce Right Padding (Gap to Duration) */
     #loanTable th:nth-child(4) {
         text-align: center !important;
-        padding-left: 2px !important; /* Tighter to Principal */
-        padding-right: 2px !important; 
+        padding-right: 2px !important; /* REDUCED GAP HERE */
+    }
+    #loanTable td:nth-child(4) {
+        padding-right: 2px !important; /* REDUCED GAP HERE */
     }
 
-    /* 2. Shrink Date Box Width */
+    /* 2. Shrink Date Box Width (But keep Input Text Size Normal) */
     #loanTable input.date {
         width: 95px !important;       
         min-width: 0 !important;
@@ -699,28 +687,28 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         font-size: 1rem !important;   
     }
 
-    /* 3. Reduce Placeholder Size */
+    /* 3. Reduce ONLY the "DD/MM/YYYY" Placeholder Font Size */
     #loanTable input.date::placeholder {
         font-size: 0.9rem !important; 
         color: #999;
     }
 
-    /* 6. DURATION COLUMN */
+    /* 6. DURATION COLUMN (Reduced Width & Padding) */
     #loanTable th:nth-child(5),
     #loanTable td:nth-child(5) {
-        width: 45px !important;
+        width: 45px !important;  /* Reduced from 50px */
         text-align: center !important;
         white-space: normal !important; 
         line-height: 1.1;
-        padding-left: 2px !important;
-        padding-right: 2px !important;
+        padding-left: 2px !important;  /* Tighter to Date */
+        padding-right: 2px !important; /* Tighter to Interest */
     }
 
-    /* 7. INTEREST COLUMN */
+    /* 7. INTEREST COLUMN (Reduced Width & Padding) */
     #loanTable th:nth-child(6),
     #loanTable td:nth-child(6) {
-        width: 50px !important; 
+        width: 50px !important; /* Reduced from 55px */
         text-align: center !important;
-        padding-left: 10px !important;
+        padding-left: 2px !important; /* Tighter to Duration */
     }
 }
