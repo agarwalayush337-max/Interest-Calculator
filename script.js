@@ -404,13 +404,7 @@ const showTab = (tabId) => {
             }
         }
 
-        // 3. Dashboard (Kept mostly the same)
-        if (tabId === 'dashboardTab') {
-            if (!dashboardStartDateEl.value || !dashboardEndDateEl.value) {
-                const { startDate, endDate } = getFinancialYear();
-                dashboardStartDateEl.value = formatDateToDDMMYYYY(startDate);
-                dashboardEndDateEl.value = formatDateToDDMMYYYY(endDate);
-            }
+       if (tabId === 'dashboardTab') {
             renderDashboard();
         }
 
@@ -2092,7 +2086,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }, true);
 
-    // --- Dashboard Filter Event Listeners ---
+    /*// --- Dashboard Filter Event Listeners ---
     last30DaysBtn.addEventListener('click', () => {
         const endDate = new Date();
         const startDate = new Date();
@@ -2123,7 +2117,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     dashboardEndDateEl.addEventListener('blur', (e) => {
         const parsed = parseDate(e.target.value);
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
-    });
+    });*/
 
     // --- Event Listeners for Loan Search Tab ---
     const addSearchRowBtn = document.getElementById('addSearchRowBtn');
