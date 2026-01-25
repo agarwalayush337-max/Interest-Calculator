@@ -666,4 +666,27 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
         padding-right: 5px !important;
         text-align: center !important;
     }
+    /* ============================
+       DATE COLUMN SPECIFIC FIXES
+       ============================ */
+
+    /* 1. Center the Date Header */
+    #loanTable th:nth-child(4) {
+        text-align: center !important;
+    }
+
+    /* 2. Shrink Date Box Width (But keep Input Text Size Normal) */
+    #loanTable input.date {
+        width: 95px !important;       /* Reduced width */
+        min-width: 0 !important;
+        text-align: center;
+        padding: 5px 0 !important;
+        font-size: 1rem !important;   /* ENSURE Input text stays normal size */
+    }
+
+    /* 3. Reduce ONLY the "DD/MM/YYYY" Placeholder Font Size */
+    #loanTable input.date::placeholder {
+        font-size: 0.75rem !important; /* Smaller placeholder text */
+        color: #999;
+    }
 }
