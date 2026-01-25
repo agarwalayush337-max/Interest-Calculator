@@ -662,7 +662,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     #loanTable th:first-child,
     #loanTable td:first-child {
         width: 35px !important;
-        padding-left: 15px !important;
+        padding-left: 10px !important;
         padding-right: 5px !important;
         text-align: center !important;
     }
@@ -686,7 +686,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 
     /* 3. Reduce ONLY the "DD/MM/YYYY" Placeholder Font Size */
     #loanTable input.date::placeholder {
-        font-size: 0.75rem !important; /* Smaller placeholder text */
+        font-size: 0.9rem !important; /* Smaller placeholder text */
         color: #999;
     }
 }
