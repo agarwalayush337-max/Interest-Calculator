@@ -2403,7 +2403,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 const generateSortedImage = () => {
-    // 1. Get fresh data from the table
+    // 1. Get current list from the table
     const loanList = getAvailableLoansFromTable();
 
     if (!loanList || loanList.length === 0) {
@@ -2411,23 +2411,32 @@ const generateSortedImage = () => {
         return;
     }
 
-    // A. Categorize and Sort (Using ACTIVE INVENTORY for details)
+    // A. Process List: FORCE Data from Active Inventory
+    // This ensures we use the Database Principal/Date, NOT the Scanned Image data.
     const processedList = loanList.map(item => {
-        // Find the loan in Active Inventory to get its Type (G/S)
+        // Find the "Truth" in your Database
         const match = activeInventory.find(inv => normalizeLoanNo(inv.no) === normalizeLoanNo(item.no));
         
-        // Default to "?" if type is missing, otherwise use the type from Firestore
-        const detail = match ? (match.type || "?") : "?";
-        const principalStr = item.principal ? String(item.principal) : '-';
-        
-        return { 
-            no: item.no, 
-            principal: principalStr, 
-            date: item.date || '-', 
-            detail: detail 
-        };
+        if (match) {
+            // FOUND: Use Database Values (Ignore Scan Errors)
+            return { 
+                no: match.no, // Use correct casing (A/52 instead of A-52)
+                principal: String(match.principal), 
+                date: match.date, 
+                detail: match.type || "?" 
+            };
+        } else {
+            // NOT FOUND: Fallback to what's in the table (Scanned Data)
+            return { 
+                no: item.no, 
+                principal: item.principal ? String(item.principal) : '-', 
+                date: item.date || '-', 
+                detail: "?" 
+            };
+        }
     });
 
+    // Sort: By Type (G/S), then by Number
     processedList.sort((a, b) => {
         if (a.detail < b.detail) return -1;
         if (a.detail > b.detail) return 1;
@@ -2436,7 +2445,7 @@ const generateSortedImage = () => {
 
     // B. Create Canvas (High Definition Setup)
     const reportCanvas = document.createElement('canvas');
-    const ctx = reportCanvas.getContext('2d');
+    const ctx = reportCanvas.getContext('2d', { willReadFrequently: true });
     
     // Scale factor for High DPI
     const scale = 2; 
