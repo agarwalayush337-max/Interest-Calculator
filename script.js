@@ -1549,7 +1549,7 @@ const clearSearchSheet = async () => {
 };
 
 // ==========================================
-// MASTER DASHBOARD CONTROLLER (Complete & Fixed)
+// MASTER DASHBOARD CONTROLLER (Fixed & Enhanced)
 // ==========================================
 
 // Global variables for Chart instances
@@ -1578,13 +1578,12 @@ const renderDashboard = async () => {
     }
 
     // D. Render HISTORICAL Section
-    // (Now defined below, so no ReferenceError)
     renderHistoricalStats();
 
     if (loader) loader.style.display = 'none';
 };
 
-// 2. LIVE STATS (Active Net Worth + Growth Trend + KPIs)
+// 2. LIVE STATS (Active Net Worth + Growth Trend + 4 KPIs)
 const renderLiveStats = () => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
@@ -1653,18 +1652,33 @@ const renderLiveStats = () => {
     }
 
     // --- UPDATE KPIs ---
+    
+    // KPI 1: Count
+    const count = activeInventory.length;
+
+    // KPI 2: Avg Active Loan Size
+    const avgSize = count > 0 ? totalPrincipal / count : 0;
+
+    // KPI 3: Avg Loan Age (Redeemed Only)
     let totalRedeemedDays = 0;
     let totalRedeemedCount = redeemedLoansList.length;
     redeemedLoansList.forEach(l => totalRedeemedDays += l.duration);
-    
     const avgAge = totalRedeemedCount > 0 ? totalRedeemedDays / totalRedeemedCount : 0;
-    
-    // KPI 1: Avg Loan Size (Based on Active Inventory)
-    const avgSize = activeInventory.length > 0 ? totalPrincipal / activeInventory.length : 0;
 
-    document.getElementById('kpiCount').textContent = activeInventory.length; 
+    // KPI 4: Projected Monthly Income (Active Principal * Rate)
+    // Formula: (Principal * Rate) / 100
+    const monthlyIncome = totalPrincipal * (rate / 100);
+
+    // Render KPIs
+    document.getElementById('kpiCount').textContent = count; 
     document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
     document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`;
+    
+    // Check if the new 4th card exists before writing to it
+    const kpiMonthlyEl = document.getElementById('kpiMonthly');
+    if (kpiMonthlyEl) {
+        kpiMonthlyEl.textContent = `₹${Math.round(monthlyIncome).toLocaleString('en-IN')}`;
+    }
 
     // --- UPDATE NET WORTH ---
     document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
@@ -1675,13 +1689,13 @@ const renderLiveStats = () => {
     if (pieChartInstance) pieChartInstance.destroy();
     if (barChartInstance) barChartInstance.destroy();
 
-    // Helper for Tooltips: "₹50,000 (12 Nos)"
+    // Tooltip: "₹50,000 (12 Nos)"
     const currencyTooltip = {
         callbacks: {
             label: function(context) {
                 let value = context.raw || 0;
-                let count = context.dataset.counts ? context.dataset.counts[context.dataIndex] : 0;
-                return ` ₹${value.toLocaleString('en-IN')} (${count} Nos)`;
+                let c = context.dataset.counts ? context.dataset.counts[context.dataIndex] : 0;
+                return ` ₹${value.toLocaleString('en-IN')} (${c} Nos)`;
             }
         }
     };
@@ -1693,7 +1707,7 @@ const renderLiveStats = () => {
             labels: ['Gold', 'Silver'], 
             datasets: [{ 
                 data: [mixStats.goldVal, mixStats.silverVal], 
-                counts: [mixStats.goldCount, mixStats.silverCount], // Store counts here
+                counts: [mixStats.goldCount, mixStats.silverCount],
                 backgroundColor: ['#fca311', '#adb5bd'], 
                 borderWidth: 0 
             }] 
@@ -1702,7 +1716,7 @@ const renderLiveStats = () => {
             maintainAspectRatio: false, 
             plugins: { 
                 legend: { position: 'bottom' },
-                tooltip: currencyTooltip // Apply custom tooltip
+                tooltip: currencyTooltip 
             } 
         }
     });
@@ -1715,10 +1729,18 @@ const renderLiveStats = () => {
             datasets: [{ 
                 label: 'Value', 
                 data: [agingStats.normalVal, agingStats.midVal, agingStats.oldVal], 
+                counts: [agingStats.normalCount, agingStats.midCount, agingStats.oldCount],
                 backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'], borderRadius: 4 
             }] 
         },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, display: false } } }
+        options: { 
+            maintainAspectRatio: false, 
+            plugins: { 
+                legend: { display: false },
+                tooltip: currencyTooltip 
+            }, 
+            scales: { y: { beginAtZero: true, display: false } } 
+        }
     });
 
     // --- UPDATE GROWTH CHART ---
@@ -1788,7 +1810,7 @@ const renderLiveStats = () => {
         });
     }
 
-    // --- UPDATE TOP LISTS (With requested changes) ---
+    // --- UPDATE TOP LISTS ---
     const activeSorted = activeInventory.map(loan => {
          const p = parseFloat(loan.principal) || 0;
          const loanDate = parseDate(loan.date);
@@ -1797,12 +1819,11 @@ const renderLiveStats = () => {
          return { ...loan, principal: p, days, totalValue: p + interest };
     });
 
-    // 1. OLDEST LOANS (Show Years + Type)
+    // Oldest Loans
     const oldestLoans = [...activeSorted].sort((a, b) => b.days - a.days).slice(0, 5);
     document.getElementById('oldestLoansList').innerHTML = oldestLoans.map(l => {
-        const years = (l.days / 365).toFixed(1); // Convert days to years (1 decimal)
+        const years = (l.days / 365).toFixed(1);
         const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
-        
         return `<li>
             <div class="list-main">
                 <span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span>
@@ -1812,7 +1833,7 @@ const renderLiveStats = () => {
         </li>`;
     }).join('');
     
-    // 2. HIGHEST VALUE LOANS (Show Principal + Type)
+    // High Value Loans
     const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
     document.getElementById('highValueList').innerHTML = highValueLoans.map(l => {
         const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
@@ -1829,6 +1850,71 @@ const renderLiveStats = () => {
     }).join('');
 };
 
+// 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
+const renderHistoricalStats = () => {
+    // A. Get Date Range
+    const startDate = parseDate(dashboardStartDateEl.value);
+    const endDate = parseDate(dashboardEndDateEl.value);
+    const msgEl = document.getElementById('dashboardMessage');
+
+    if (!startDate || !endDate) {
+        if(msgEl) { msgEl.textContent = "Select valid dates for history."; msgEl.style.display = 'block'; }
+        return;
+    }
+
+    // B. Filter Reports
+    const filteredReports = cachedFinalisedReports.filter(report => {
+        const d = parseDate(report.reportDate);
+        return d && d >= startDate && d <= endDate;
+    });
+
+    if (filteredReports.length === 0) {
+        if(msgEl) { msgEl.textContent = "No finalised reports in this range."; msgEl.style.display = 'block'; }
+        if (histPieInstance) histPieInstance.destroy();
+        if (histBarInstance) histBarInstance.destroy();
+        return;
+    }
+    if(msgEl) msgEl.style.display = 'none';
+
+    // C. Aggregate Data
+    let totalPrin = 0, totalInt = 0;
+    filteredReports.forEach(r => {
+        totalPrin += parseFloat(r.totals.principal) || 0;
+        totalInt += parseFloat(r.totals.interest) || 0;
+    });
+
+    // D. Draw Historical Charts
+    if (histPieInstance) histPieInstance.destroy();
+    if (histBarInstance) histBarInstance.destroy();
+
+    const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
+    histPieInstance = new Chart(pieCtx, {
+        type: 'pie',
+        data: { 
+            labels: ['Principal', 'Interest'], 
+            datasets: [{ 
+                data: [totalPrin, totalInt], 
+                backgroundColor: ['#3D52D5', '#fca311'] 
+            }] 
+        },
+        options: { maintainAspectRatio: false }
+    });
+
+    const barCtx = document.getElementById('principalBarChart').getContext('2d');
+    const recent = filteredReports.slice(0, 10).reverse();
+    histBarInstance = new Chart(barCtx, {
+        type: 'bar',
+        data: { 
+            labels: recent.map(r => r.reportDate), 
+            datasets: [{ 
+                label: 'Collected Amount', 
+                data: recent.map(r => parseFloat(r.totals.final)), 
+                backgroundColor: '#3D52D5' 
+            }] 
+        },
+        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+};
 // --- Authentication ---
 // --- Authentication ---
 // --- Authentication ---
@@ -1957,7 +2043,7 @@ const listenForLiveStateChanges = () => {
 };
 
 
-// --- DUES FINALISE LOGIC ---
+// --- DUES FINALISE LOGIC (Updated: Auto-Removes from Inventory) ---
 const finaliseReport = (docId) => {
     // 1. Store the ID
     pendingReportIdToFinalise = docId;
@@ -1969,62 +2055,104 @@ const finaliseReport = (docId) => {
     // 3. Auto-focus input
     setTimeout(() => document.getElementById('duesInput').focus(), 100);
 };
+
 const confirmFinaliseWithDues = async () => {
     const duesVal = document.getElementById('duesInput').value;
     const newDues = parseFloat(duesVal) || 0;
-    const docId = pendingReportIdToFinalise;
+    const reportId = pendingReportIdToFinalise;
 
-    // 1. Close the Input Box
+    // 1. Close Modal
     document.getElementById('duesModal').style.display = 'none';
 
-    if (!docId) return;
+    if (!reportId) return;
 
-    // 2. NOW Ask for Confirmation (The "Are you sure?" Popup)
+    // 2. Confirmation
     const confirmed = await showConfirm(
-        "Finalise Report", 
-        "Are you sure you want to finalise this report? This action cannot be undone."
+        "Finalise & Archive", 
+        "This will move loans to 'Redeemed Inventory' and lock the report. Continue?"
     );
     
-    if (!confirmed) return; // If they click Cancel, stop everything.
+    if (!confirmed) return; 
 
-    // 3. Proceed with Saving
+    // 3. Execute Cloud Move
     if (navigator.onLine && reportsCollection) {
         try {
-            showConfirm("Processing...", "Finalising report...", false);
+            showConfirm("Archiving...", "Moving loans to Redeemed Inventory...", false);
             
-            const reportDoc = await reportsCollection.doc(docId).get();
+            const reportRef = reportsCollection.doc(reportId);
+            const reportDoc = await reportRef.get();
+            
             if (!reportDoc.exists) throw new Error("Report not found.");
             
             const reportData = reportDoc.data();
             const newName = `Final Hisab of ${reportData.reportDate}`;
             
+            // --- BATCH OPERATION (All or Nothing) ---
+            const batch = db.batch();
+
             // A. Finalise the Report
-            await reportsCollection.doc(docId).update({ 
+            batch.update(reportRef, { 
                 status: 'finalised', 
                 reportName: newName,
-                finalisedDues: newDues 
+                finalisedDues: newDues,
+                finalisedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // B. Save Dues Silently for Next Session
-            await db.collection('liveCalculatorState').doc(user.uid).set({
+            // B. Update Live Dues
+            const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
+            batch.set(liveStateRef, {
                 previousDues: newDues,
-                previousDuesDate: reportData.reportDate // <--- SAVE THE DATE
+                previousDuesDate: reportData.reportDate 
             }, { merge: true });
 
-            // C. Update Local Variable
+            // C. MOVE LOANS: Active -> Redeemed
+            let moveCount = 0;
+            if (reportData.loans && Array.isArray(reportData.loans)) {
+                reportData.loans.forEach(loan => {
+                    if (loan.no) {
+                        let cleanNo = loan.no.trim().toUpperCase();
+                        // Create unique ID (e.g. USER123_A-52)
+                        const docId = `${user.uid}_${cleanNo.replace(/\//g, '-')}`;
+                        
+                        // 1. DELETE from Active Inventory
+                        const activeRef = db.collection('activeInventory').doc(docId);
+                        batch.delete(activeRef);
+
+                        // 2. ADD to Redeemed Inventory (New Collection)
+                        const redeemedRef = db.collection('redeemedInventory').doc(docId);
+                        batch.set(redeemedRef, {
+                            ...loan, // Copy Number, Principal, Date, Type
+                            userId: user.uid,
+                            originalReportId: reportId,
+                            redeemedDate: reportData.reportDate,
+                            redeemedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            status: 'redeemed'
+                        });
+                        moveCount++;
+                    }
+                });
+            }
+
+            // D. Commit Changes
+            await batch.commit();
+
+            // 4. Success UI
             currentPreviousDues = newDues;
-            currentPreviousDuesDate = reportData.reportDate; // <--- Update Local
-            await showConfirm("Success", `Report Finalised.`, false);
+            currentPreviousDuesDate = reportData.reportDate; 
             
+            await showConfirm("Success", `Archived ${moveCount} loans to Redeemed Inventory.`, false);
+            
+            // Refresh All Data
             loadRecentTransactions();
             loadFinalisedTransactions();
+            loadInventory(); 
 
         } catch (error) {
-            console.error("Error finalising report:", error);
-            await showConfirm("Error", "Could not finalise the report.", false);
+            console.error("Error finalising:", error);
+            await showConfirm("Error", "Could not complete the archive process.", false);
         }
     } else {
-        await showConfirm("Offline", "You must be online to finalise a report.", false);
+        await showConfirm("Offline", "You must be online to archive loans.", false);
     }
 };
 
