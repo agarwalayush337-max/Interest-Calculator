@@ -2400,7 +2400,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             handleImageScan(event.data.file);
         }
     });
-
+});
 
 const generateSortedImage = () => {
     // 1. Get fresh data from the table
@@ -2748,7 +2748,6 @@ const filterHistory = (mode) => {
         }
     });
 };
-});
 // ==========================================
 // FIX: ACTIVATE 'LOAN ENTRY' SCAN BUTTON
 // ==========================================
