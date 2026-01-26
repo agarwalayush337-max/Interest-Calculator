@@ -1614,7 +1614,10 @@ const renderLiveStats = () => {
         if (loanDate && p > 0) {
             days = days360(loanDate, today);
             if (days < 0) days = 0; 
-            interest = (p * rate * days) / 3000;
+            
+            // RULE: Use minimum 30 days for interest calc
+            const calcDays = Math.max(30, days);
+            interest = (p * rate * calcDays) / 3000;
 
             activeLoansList.push({
                 start: loanDate,
