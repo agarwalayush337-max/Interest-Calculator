@@ -520,14 +520,40 @@ const renumberBatchRows = () => {
 const addBatchBtn = document.getElementById('addBatchRowBtn');
 if(addBatchBtn) addBatchBtn.addEventListener('click', addBatchRow);
 
-// NEW: Load Inventory from DB
 const loadInventory = async () => {
     if (!user) return;
+    
+    // Optional: Show a small loading state in the console
+    console.log("☁️ Syncing Inventory...");
+
     try {
-        const snapshot = await db.collection('activeInventory').where('userId', '==', user.uid).get();
-        activeInventory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Optional: Update dashboard stats here
-    } catch (e) { console.error("Inventory Load Error:", e); }
+        const snapshot = await db.collection('activeInventory').get();
+        
+        // 1. Load Data into Global Variable
+        activeInventory = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        // 2. Sort Data (A-Z)
+        activeInventory.sort((a, b) => {
+            return String(a.no).localeCompare(String(b.no), undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+        // 3. Update the Inventory UI (The "Search/Entry" list)
+        renderInventoryTable();
+
+        // --- THE FIX: PRE-RENDER DASHBOARD INSTANTLY ---
+        // We calculate the stats NOW, while the user is still on the Calculator tab.
+        // So when they click "Dashboard", the numbers are already waiting.
+        await renderDashboard(); 
+        // -----------------------------------------------
+
+        console.log(`✅ Loaded ${activeInventory.length} items.`);
+
+    } catch (error) {
+        console.error("Error loading inventory:", error);
+    }
 };
 
 // --- Add this to your script.js ---
