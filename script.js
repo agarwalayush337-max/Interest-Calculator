@@ -540,13 +540,14 @@ const loadInventory = async () => {
             return String(a.no).localeCompare(String(b.no), undefined, { numeric: true, sensitivity: 'base' });
         });
 
-        // 3. Update the Inventory UI (The "Search/Entry" list)
-        renderInventoryTable();
+        // 3. (Line Removed: renderInventoryTable) - Not needed.
 
-        // --- THE FIX: PRE-RENDER DASHBOARD INSTANTLY ---
+        // --- PRE-RENDER DASHBOARD INSTANTLY ---
         // We calculate the stats NOW, while the user is still on the Calculator tab.
         // So when they click "Dashboard", the numbers are already waiting.
-        await renderDashboard(); 
+        if (typeof renderDashboard === 'function') {
+            await renderDashboard(); 
+        }
         // -----------------------------------------------
 
         console.log(`✅ Loaded ${activeInventory.length} items.`);
