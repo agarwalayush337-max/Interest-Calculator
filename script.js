@@ -1559,14 +1559,12 @@ const clearSearchSheet = async () => {
 };
 
 // ==========================================
-// MASTER DASHBOARD CONTROLLER (Updated 2.0)
+// MASTER DASHBOARD CONTROLLER (Fixed & Enhanced)
 // ==========================================
 
 // Global variables for Chart instances
 let histPieInstance = null;
 let histBarInstance = null;
-let ticketChartInstance = null;   // NEW
-let cashFlowChartInstance = null; // NEW
 
 // 1. THE WRAPPER FUNCTION
 const renderDashboard = async () => {
@@ -1577,7 +1575,7 @@ const renderDashboard = async () => {
     if (!activeInventory || activeInventory.length === 0) await loadInventory();
     await loadFinalisedTransactions(); 
 
-    // B. Render LIVE Section (Now includes new charts)
+    // B. Render LIVE Section
     renderLiveStats();
 
     // C. Auto-Set "Last 30 Days" if empty
@@ -1595,35 +1593,29 @@ const renderDashboard = async () => {
     if (loader) loader.style.display = 'none';
 };
 
-// 2. LIVE STATS (Enhanced with Liquidity & Efficiency)
+// 2. LIVE STATS (Active Net Worth + Growth Trend + 4 KPIs)
 const renderLiveStats = () => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
     
     let totalPrincipal = 0, totalInterest = 0;
-    
-    // Stats Containers
     let mixStats = { goldVal: 0, silverVal: 0, goldCount: 0, silverCount: 0 };
-    let agingStats = { normalVal: 0, midVal: 0, oldVal: 0, normalCount: 0, midCount: 0, oldCount: 0 };
-    let ticketStats = { small: 0, medium: 0, large: 0 }; // < 10k, 10-50k, > 50k
+    let agingStats = { normalVal: 0, midVal: 0, oldVal: 0 };
     
     let activeLoansList = [];
     let redeemedLoansList = [];
 
-    // --- 1. PROCESS ACTIVE INVENTORY ---
+    // --- PROCESS ACTIVE INVENTORY ---
     activeInventory.forEach(loan => {
         const p = parseFloat(loan.principal) || 0;
         const loanDate = parseDate(loan.date);
-        
-        // A. Interest Calculation
-        let interest = 0;
-        let days = 0;
-        
+        let interest = 0, days = 0;
+
         if (loanDate && p > 0) {
             days = days360(loanDate, today);
-            if (days < 0) days = 0;
+            if (days < 0) days = 0; 
             
-            // Interest Rule: Min 30 days
+            // RULE: Use minimum 30 days for interest calc
             const calcDays = Math.max(30, days);
             interest = (p * rate * calcDays) / 3000;
 
@@ -1638,39 +1630,33 @@ const renderLiveStats = () => {
         totalPrincipal += p; 
         totalInterest += interest;
 
-        // B. Metal Mix
         if (loan.type === 'G') { mixStats.goldVal += p; mixStats.goldCount++; }
         else { mixStats.silverVal += p; mixStats.silverCount++; }
 
-        // C. Aging
-        if (days < 730) { agingStats.normalVal += p; agingStats.normalCount++; }
-        else if (days < 1095) { agingStats.midVal += p; agingStats.midCount++; }
-        else { agingStats.oldVal += p; agingStats.oldCount++; }
-
-        // D. Ticket Size (NEW)
-        if (p < 10000) ticketStats.small++;
-        else if (p <= 50000) ticketStats.medium++;
-        else ticketStats.large++;
+        if (days < 730) agingStats.normalVal += p; 
+        else if (days < 1095) agingStats.midVal += p; 
+        else agingStats.oldVal += p;
     });
 
-    // --- 2. PROCESS REDEEMED (HISTORY) ---
-    // We need this for "Turnaround Time" and "Cash Flow"
+    // --- PROCESS FINALISED REPORTS (History) ---
     if (cachedFinalisedReports && cachedFinalisedReports.length > 0) {
         cachedFinalisedReports.forEach(report => {
             const loansData = report.loans || report.items || [];
+            
             if (Array.isArray(loansData)) {
                 loansData.forEach(item => {
                     const start = parseDate(item.date);
                     const end = parseDate(report.reportDate);
                     const p = parseFloat(item.principal) || 0;
-                    
+                    const r = parseFloat(report.interestRate) || rate; 
+
                     if (start && end && p > 0) {
                         redeemedLoansList.push({
                             start: start,
                             end: end,
                             principal: p,
-                            type: item.type || '?', // Need type for Gold/Silver stats
-                            totalReturn: p + (parseFloat(report.totals?.interest || 0) / loansData.length) // Approx
+                            rate: r,
+                            duration: Math.max(0, days360(start, end))
                         });
                     }
                 });
@@ -1678,58 +1664,55 @@ const renderLiveStats = () => {
         });
     }
 
-    // --- 3. UPDATE TEXT KPIs ---
+    // --- UPDATE KPIs ---
     
-    // Standard KPIs
+    // KPI 1: Count
     const count = activeInventory.length;
+
+    // KPI 2: Avg Active Loan Size
     const avgSize = count > 0 ? totalPrincipal / count : 0;
+
+    // KPI 3: Avg Loan Age (Redeemed Only)
+    let totalRedeemedDays = 0;
+    let totalRedeemedCount = redeemedLoansList.length;
+    redeemedLoansList.forEach(l => totalRedeemedDays += l.duration);
+    const avgAge = totalRedeemedCount > 0 ? totalRedeemedDays / totalRedeemedCount : 0;
+
+    // KPI 4: Projected Monthly Income (Active Principal * Rate)
+    // Formula: (Principal * Rate) / 100
     const monthlyIncome = totalPrincipal * (rate / 100);
-    
+
+    // Render KPIs
     document.getElementById('kpiCount').textContent = count; 
     document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
-    
-    // Avg Age (Redeemed)
-    let totalRedeemedDays = 0;
-    redeemedLoansList.forEach(l => totalRedeemedDays += Math.max(0, days360(l.start, l.end)));
-    const avgAge = redeemedLoansList.length > 0 ? totalRedeemedDays / redeemedLoansList.length : 0;
     document.getElementById('kpiAvgAge').textContent = `${Math.round(avgAge)} Days`;
-
-    const kpiMonthlyEl = document.getElementById('kpiMonthly');
-    if (kpiMonthlyEl) kpiMonthlyEl.textContent = `₹${Math.round(monthlyIncome).toLocaleString('en-IN')}`;
-
-    // NEW: Turnaround Time (Gold vs Silver)
-    const goldLoans = redeemedLoansList.filter(l => l.type === 'G');
-    const silverLoans = redeemedLoansList.filter(l => l.type === 'S');
     
-    const calcAvgDays = (list) => {
-        if (!list.length) return 0;
-        const sum = list.reduce((acc, l) => acc + Math.max(0, days360(l.start, l.end)), 0);
-        return Math.round(sum / list.length);
-    };
+    // Check if the new 4th card exists before writing to it
+    const kpiMonthlyEl = document.getElementById('kpiMonthly');
+    if (kpiMonthlyEl) {
+        kpiMonthlyEl.textContent = `₹${Math.round(monthlyIncome).toLocaleString('en-IN')}`;
+    }
 
-    document.getElementById('goldTurnaround').textContent = `${calcAvgDays(goldLoans)} Days`;
-    document.getElementById('silverTurnaround').textContent = `${calcAvgDays(silverLoans)} Days`;
-
-    // Net Worth
+    // --- UPDATE NET WORTH ---
     document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
     document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
     document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
 
+    // --- UPDATE LIVE CHARTS ---
+    if (pieChartInstance) pieChartInstance.destroy();
+    if (barChartInstance) barChartInstance.destroy();
 
-    // --- 4. RENDER CHARTS ---
-    
+    // Tooltip: "₹50,000 (12 Nos)"
     const currencyTooltip = {
         callbacks: {
             label: function(context) {
                 let value = context.raw || 0;
-                let c = context.dataset.counts ? context.dataset.counts[context.dataIndex] : '';
-                return ` ₹${value.toLocaleString('en-IN')} ${c ? '('+c+')' : ''}`;
+                let c = context.dataset.counts ? context.dataset.counts[context.dataIndex] : 0;
+                return ` ₹${value.toLocaleString('en-IN')} (${c} Nos)`;
             }
         }
     };
 
-    // A. Metal Mix (Pie)
-    if (pieChartInstance) pieChartInstance.destroy();
     const mixCtx = document.getElementById('mixChart').getContext('2d');
     pieChartInstance = new Chart(mixCtx, {
         type: 'doughnut',
@@ -1738,14 +1721,19 @@ const renderLiveStats = () => {
             datasets: [{ 
                 data: [mixStats.goldVal, mixStats.silverVal], 
                 counts: [mixStats.goldCount, mixStats.silverCount],
-                backgroundColor: ['#fca311', '#adb5bd'], borderWidth: 0 
+                backgroundColor: ['#fca311', '#adb5bd'], 
+                borderWidth: 0 
             }] 
         },
-        options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: currencyTooltip } }
+        options: { 
+            maintainAspectRatio: false, 
+            plugins: { 
+                legend: { position: 'bottom' },
+                tooltip: currencyTooltip 
+            } 
+        }
     });
 
-    // B. Aging (Bar)
-    if (barChartInstance) barChartInstance.destroy();
     const agingCtx = document.getElementById('agingChart').getContext('2d');
     barChartInstance = new Chart(agingCtx, {
         type: 'bar',
@@ -1758,100 +1746,17 @@ const renderLiveStats = () => {
                 backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'], borderRadius: 4 
             }] 
         },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: currencyTooltip }, scales: { y: { display: false } } }
-    });
-
-    // C. Ticket Size (NEW Doughnut)
-    if (ticketChartInstance) ticketChartInstance.destroy();
-    const ticketCtx = document.getElementById('ticketChart').getContext('2d');
-    ticketChartInstance = new Chart(ticketCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Small (<10k)', 'Med (10-50k)', 'Large (>50k)'],
-            datasets: [{
-                data: [ticketStats.small, ticketStats.medium, ticketStats.large],
-                backgroundColor: ['#a8dadc', '#457b9d', '#1d3557'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'bottom' },
-                tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.raw} Loans` } }
-            }
+        options: { 
+            maintainAspectRatio: false, 
+            plugins: { 
+                legend: { display: false },
+                tooltip: currencyTooltip 
+            }, 
+            scales: { y: { beginAtZero: true, display: false } } 
         }
     });
 
-    // D. Liquidity / Cash Flow (NEW Bar Chart)
-    // 6 Months History: Money Out (Lent) vs Money In (Recovered)
-    if (cashFlowChartInstance) cashFlowChartInstance.destroy();
-    
-    // 1. Prepare Last 6 Months Labels
-    const labels = [];
-    const lentData = [0,0,0,0,0,0];
-    const recoveredData = [0,0,0,0,0,0];
-    
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(today.getMonth() - i);
-        labels.push(d.toLocaleString('default', { month: 'short' }));
-    }
-
-    // 2. Calculate Money Out (Lent) - Check Start Date of ALL loans (Active + Redeemed)
-    const allLoans = [...activeLoansList, ...redeemedLoansList];
-    allLoans.forEach(l => {
-        const monthDiff = (today.getFullYear() - l.start.getFullYear()) * 12 + (today.getMonth() - l.start.getMonth());
-        if (monthDiff >= 0 && monthDiff < 6) {
-            lentData[5 - monthDiff] += l.principal;
-        }
-    });
-
-    // 3. Calculate Money In (Recovered) - Check End Date of Redeemed Loans
-    redeemedLoansList.forEach(l => {
-        const monthDiff = (today.getFullYear() - l.end.getFullYear()) * 12 + (today.getMonth() - l.end.getMonth());
-        if (monthDiff >= 0 && monthDiff < 6) {
-            // Money In = Principal + Interest (Approx logic used earlier, or just Principal if you prefer conservative)
-            recoveredData[5 - monthDiff] += l.principal; // Keeping it strictly Principal for cleaner comparison
-        }
-    });
-
-    const cashFlowCtx = document.getElementById('cashFlowChart').getContext('2d');
-    cashFlowChartInstance = new Chart(cashFlowCtx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Given (Out)',
-                    data: lentData,
-                    backgroundColor: '#ef233c', // Red
-                    borderRadius: 3
-                },
-                {
-                    label: 'Recovered (In)',
-                    data: recoveredData,
-                    backgroundColor: '#2a9d8f', // Green
-                    borderRadius: 3
-                }
-            ]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: {
-                tooltip: currencyTooltip
-            },
-            scales: {
-                y: { 
-                    beginAtZero: true, 
-                    ticks: { callback: (v) => '₹' + v/1000 + 'k' } 
-                }
-            }
-        }
-    });
-
-
-    // --- 5. GROWTH CHART (Unchanged) ---
+    // --- UPDATE GROWTH CHART ---
     if (window.growthChartInstance) window.growthChartInstance.destroy();
 
     const allHistory = [...activeLoansList, ...redeemedLoansList];
@@ -1873,10 +1778,13 @@ const renderLiveStats = () => {
                 const isNotEnded = (loan.end === null) || (loan.end > currentDate);
 
                 if (isStarted && isNotEnded) {
-                    let daysActive = days360(loan.start, currentDate);
-                    if (daysActive < 0) daysActive = 0;
-                    const accInterest = (loan.principal * loan.rate * daysActive) / 3000;
-                    dailyValue += (loan.principal + accInterest);
+                    const daysActive = days360(loan.start, currentDate);
+                    if (daysActive > 0) {
+                        const accInterest = (loan.principal * loan.rate * daysActive) / 3000;
+                        dailyValue += (loan.principal + accInterest);
+                    } else {
+                         dailyValue += loan.principal;
+                    }
                 }
             }
             chartLabels.push(formatDateToDDMMYYYY(currentDate));
@@ -1915,20 +1823,12 @@ const renderLiveStats = () => {
         });
     }
 
-    // --- 6. UPDATE TOP LISTS (Unchanged) ---
+    // --- UPDATE TOP LISTS ---
     const activeSorted = activeInventory.map(loan => {
          const p = parseFloat(loan.principal) || 0;
          const loanDate = parseDate(loan.date);
-         
-         let days = 0;
-         let calcDays = 0;
-         
-         if (loanDate) {
-             days = days360(loanDate, today);
-             calcDays = Math.max(30, days);
-         }
-         
-         const interest = (p * rate * calcDays) / 3000;
+         const days = loanDate ? days360(loanDate, today) : 0;
+         const interest = (p * rate * days) / 3000;
          return { ...loan, principal: p, days, totalValue: p + interest };
     });
 
@@ -1961,6 +1861,72 @@ const renderLiveStats = () => {
             </div>
         </li>`;
     }).join('');
+};
+
+// 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
+const renderHistoricalStats = () => {
+    // A. Get Date Range
+    const startDate = parseDate(dashboardStartDateEl.value);
+    const endDate = parseDate(dashboardEndDateEl.value);
+    const msgEl = document.getElementById('dashboardMessage');
+
+    if (!startDate || !endDate) {
+        if(msgEl) { msgEl.textContent = "Select valid dates for history."; msgEl.style.display = 'block'; }
+        return;
+    }
+
+    // B. Filter Reports
+    const filteredReports = cachedFinalisedReports.filter(report => {
+        const d = parseDate(report.reportDate);
+        return d && d >= startDate && d <= endDate;
+    });
+
+    if (filteredReports.length === 0) {
+        if(msgEl) { msgEl.textContent = "No finalised reports in this range."; msgEl.style.display = 'block'; }
+        if (histPieInstance) histPieInstance.destroy();
+        if (histBarInstance) histBarInstance.destroy();
+        return;
+    }
+    if(msgEl) msgEl.style.display = 'none';
+
+    // C. Aggregate Data
+    let totalPrin = 0, totalInt = 0;
+    filteredReports.forEach(r => {
+        totalPrin += parseFloat(r.totals.principal) || 0;
+        totalInt += parseFloat(r.totals.interest) || 0;
+    });
+
+    // D. Draw Historical Charts
+    if (histPieInstance) histPieInstance.destroy();
+    if (histBarInstance) histBarInstance.destroy();
+
+    const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
+    histPieInstance = new Chart(pieCtx, {
+        type: 'pie',
+        data: { 
+            labels: ['Principal', 'Interest'], 
+            datasets: [{ 
+                data: [totalPrin, totalInt], 
+                backgroundColor: ['#3D52D5', '#fca311'] 
+            }] 
+        },
+        options: { maintainAspectRatio: false }
+    });
+
+    const barCtx = document.getElementById('principalBarChart').getContext('2d');
+    const recent = filteredReports.slice(0, 10).reverse();
+    histBarInstance = new Chart(barCtx, {
+        type: 'bar',
+        data: { 
+            labels: recent.map(r => r.reportDate), 
+            datasets: [{ 
+                label: 'Collected Amount', 
+                data: recent.map(r => parseFloat(r.totals.final)), 
+                backgroundColor: '#3D52D5' 
+            }] 
+        },
+        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
 };
 // --- Authentication ---
 // --- Authentication ---
