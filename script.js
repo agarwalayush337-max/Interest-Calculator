@@ -2873,4 +2873,3 @@ const handleBatchScan = async (event) => {
     // Reset input
     event.target.value = '';
 };
-}
