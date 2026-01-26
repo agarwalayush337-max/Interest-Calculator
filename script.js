@@ -523,8 +523,6 @@ if(addBatchBtn) addBatchBtn.addEventListener('click', addBatchRow);
 const loadInventory = async () => {
     if (!user) return;
     
-    // Optional: Show a small loading state in the console
-    console.log("☁️ Syncing Inventory...");
 
     try {
         const snapshot = await db.collection('activeInventory').get();
@@ -549,8 +547,6 @@ const loadInventory = async () => {
             await renderDashboard(); 
         }
         // -----------------------------------------------
-
-        console.log(`✅ Loaded ${activeInventory.length} items.`);
 
     } catch (error) {
         console.error("Error loading inventory:", error);
