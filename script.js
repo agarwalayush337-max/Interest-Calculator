@@ -25,7 +25,6 @@ const firebaseConfig = {
 };
 // --- CONFIGURATION ---
 // PASTE YOUR GOOGLE SHEET CSV LINK HERE
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv";
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -44,7 +43,6 @@ let currentlyEditingReportId = null;
 let currentScanCoordinates = []; 
 let scanCanvas = null;           
 let scanCtx = null;              
-let sheetDetailsCache = new Map(); // Stores Sheet Data
 let currentPreviousDues = 0; // Stored silently
 let currentPreviousDuesDate = ''; // NEW: Stores the date of the dues
 let pendingReportIdToFinalise = null;
@@ -1350,12 +1348,11 @@ const performLoanSearch = (inputElement) => {
 
     const normalizedKey = normalizeLoanNo(userInput);
 
-    // --- CHECK 1: FINALIZED REPORTS (Sold/Closed) ---
-    // Here we DO show the date because it is the "Finalised Date"
+    // --- CHECK 1: FINALISED REPORTS (Sold/Closed) ---
     if (loanSearchCache.has(normalizedKey)) {
         const data = loanSearchCache.get(normalizedKey);
         principalCell.textContent = data.principal;
-        dateCell.textContent = data.reportDate; // <--- KEEP THIS (It's the finalised date)
+        dateCell.textContent = data.reportDate; 
         statusCell.classList.add('status-not-available');
         statusCell.innerHTML = `
             <span>Not Available</span>
@@ -1365,7 +1362,8 @@ const performLoanSearch = (inputElement) => {
         return; 
     }
 
-    // --- CHECK 2: ACTIVE INVENTORY (Your New Entries) ---
+    // --- CHECK 2: ACTIVE INVENTORY (Firestore) ---
+    // We look for the loan in your loaded Active Inventory list
     const inventoryMatch = activeInventory.find(item => 
         item.no === userInput || normalizeLoanNo(item.no) === normalizedKey
     );
@@ -1373,36 +1371,25 @@ const performLoanSearch = (inputElement) => {
     if (inventoryMatch) {
         statusCell.classList.add('status-available');
         
-        // Show Principal ONLY. 
-        // We leave the date BLANK or put a dash '-' because it is not finalised yet.
+        // Show Principal. Date is left blank for active loans.
         principalCell.textContent = inventoryMatch.principal || '-';
-        dateCell.textContent = '';  // <--- CHANGED: Forces date to be empty/dash
+        dateCell.textContent = ''; 
 
-        // Color Logic for G/S
+        // Color Logic for G/S (From Firestore Data)
         let colorStyle = '#333';
         if(inventoryMatch.type === 'G') colorStyle = '#f1c40f'; // Yellow
         if(inventoryMatch.type === 'S') colorStyle = '#000000'; // Black
 
-        statusCell.innerHTML = `<span>Available</span><span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${inventoryMatch.type}]</span>`;
+        statusCell.innerHTML = `<span>Available</span><span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${inventoryMatch.type || '?'}]</span>`;
         return; 
     }
 
-    // --- CHECK 3: OLD SHEET DATA (CSV) ---
-    statusCell.classList.add('status-available');
-    let annotationHtml = '';
-    
-    if (sheetDetailsCache.has(normalizedKey)) {
-        const detail = sheetDetailsCache.get(normalizedKey);
-        let colorStyle = '#333';
-        if(detail === 'G') colorStyle = '#f1c40f'; 
-        if(detail === 'S') colorStyle = '#000000'; 
-        annotationHtml = `<span style="margin-left:8px; font-weight:900; font-size:1.1em; color:${colorStyle};">[${detail}]</span>`;
-    } else {
-        annotationHtml = `<span style="margin-left:8px; font-weight:bold; color:#e74c3c;">[?]</span>`;
-    }
-
-    statusCell.innerHTML = `<span>Available</span>${annotationHtml}`;
+    // --- CHECK 3: NOT FOUND ---
+    // If not in Finalised and not in Active, it's unknown.
+    statusCell.classList.add('status-searching'); // Grey background
+    statusCell.innerHTML = `<span style="font-size:0.9em; opacity:0.7;">Unknown</span>`;
 };
+
 // Handle Image Scan for Loan Search Tab
 const handleNumberScan = async (event) => {
     const file = event.target.files[0];
@@ -2414,140 +2401,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // --- Auto-Load Saved Sheet on Startup ---
-   // --- Auto-Load Sheet on Startup ---
-    // Trigger the fetch immediately using the hardcoded URL
-    fetchSheetData();
-});
 
-// ======================================================
-// EXTERNAL INTEGRATION LOGIC (Sheet & Report Gen)
-// ======================================================
-
-// 1. DATA FETCHER
-// 1. DATA FETCHER (Updated: Uses Hardcoded SHEET_URL)
-// 1. DATA FETCHER (Updated: Hardcoded Link + UI Fix)
-// 1. DATA FETCHER (Robust CSV Parser - Fixes Partial Loading)
-// 1. DATA FETCHER (Robust CSV Parser)
-// 1. DATA FETCHER (Updated with HTML Detection Guard)
-const fetchSheetData = async () => {
-    const url = SHEET_URL; 
-
-    if (!url || url.includes("PASTE_YOUR_NEW")) {
-        console.warn("No Sheet URL configured.");
-        return false;
-    }
-
-    // Timestamp to prevent caching
-    const uniqueUrl = url + `&t=${Date.now()}`;
-    
-    // Status UI
-    const statusEl = document.querySelector('.initializing-text') || document.getElementById('sheetStatus');
-
-    if(statusEl) {
-        statusEl.textContent = "⏳ Connecting to Sheet...";
-        statusEl.style.color = "#d35400";
-    }
-
-    try {
-        const response = await fetch(uniqueUrl);
-        if (!response.ok) throw new Error("Connection Failed");
-        const text = await response.text();
-
-        // 🛑 CRITICAL CHECK: Did we get a Website instead of Data?
-        if (text.trim().startsWith("<!DOCTYPE html") || text.includes("<html")) {
-            throw new Error("Wrong Link Type! You are using an '/edit' link. Please use 'File > Share > Publish to web > CSV'.");
-        }
-        
-        // Use the Robust Parser
-        const rows = parseCSV(text); 
-        
-        sheetDetailsCache.clear();
-        
-        rows.forEach(cols => {
-            if (cols.length >= 2) {
-                const rawNo = cols[0].trim(); 
-                const cleanNo = normalizeLoanNo(rawNo); 
-                const details = cols[1].trim(); 
-                
-                if (cleanNo && details) {
-                    sheetDetailsCache.set(cleanNo, details);
-                }
-            }
-        });
-
-        console.log(`Loaded ${sheetDetailsCache.size} details.`);
-        
-        if(statusEl) {
-            statusEl.textContent = `✅ Active: ${sheetDetailsCache.size} records.`;
-            statusEl.style.color = "green";
-            statusEl.style.fontWeight = "bold";
-        }
-        return true;
-    } catch (error) {
-        console.error("Sheet Error:", error);
-        if(statusEl) {
-            // Show the specific error message to the user
-            statusEl.textContent = `❌ ${error.message}`;
-            statusEl.style.color = "red";
-            statusEl.style.fontSize = "12px"; // Make it readable
-        }
-        showConfirm("Sheet Error", error.message, false); // Alert the user via modal
-        return false;
-    }
-};
-
-// --- HELPER: ROBUST CSV PARSER ---
-// Add this function directly below fetchSheetData
-function parseCSV(text) {
-    const rows = [];
-    let currentRow = [];
-    let currentCell = '';
-    let insideQuotes = false;
-    
-    // Iterate character by character
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        const nextChar = text[i + 1];
-        
-        if (char === '"') {
-            if (insideQuotes && nextChar === '"') {
-                currentCell += '"'; // Handle escaped quote ("")
-                i++; // Skip the next quote
-            } else {
-                insideQuotes = !insideQuotes; // Toggle quote state
-            }
-        } else if (char === ',' && !insideQuotes) {
-            // End of cell
-            currentRow.push(currentCell);
-            currentCell = '';
-        } else if ((char === '\r' || char === '\n') && !insideQuotes) {
-            // End of row (Handle CRLF or LF)
-            if (char === '\r' && nextChar === '\n') i++;
-            currentRow.push(currentCell);
-            if (currentRow.length > 0) rows.push(currentRow); // Add row
-            currentRow = [];
-            currentCell = '';
-        } else {
-            currentCell += char;
-        }
-    }
-    // Push the very last row if exists
-    if (currentCell || currentRow.length > 0) {
-        currentRow.push(currentCell);
-        rows.push(currentRow);
-    }
-    return rows;
-}
-
-// 2. GENERATE SORTED IMAGE (UPDATED: 4 Columns + Strict Mobile/PC Logic)
-// UPDATED: GENERATE SORTED IMAGE (Fixes: No Blue Header, Right-Align Amount, No Cut-off)
-// UPDATED: GENERATE SORTED IMAGE
-// Fixes: Share on Mobile Only, No Cut-off, New Header Format, Yellow/Black Colors
-// UPDATED: GENERATE SORTED IMAGE (High Quality + Date + Correct Header)
-// UPDATED: GENERATE SORTED IMAGE (High-Res, No Overlap, Fixed Date)
 const generateSortedImage = () => {
-    // 1. Get fresh data
+    // 1. Get fresh data from the table
     const loanList = getAvailableLoansFromTable();
 
     if (!loanList || loanList.length === 0) {
@@ -2555,10 +2411,15 @@ const generateSortedImage = () => {
         return;
     }
 
-    // A. Categorize and Sort
+    // A. Categorize and Sort (Using ACTIVE INVENTORY for details)
     const processedList = loanList.map(item => {
-        const detail = sheetDetailsCache.get(item.no) || "?";
+        // Find the loan in Active Inventory to get its Type (G/S)
+        const match = activeInventory.find(inv => normalizeLoanNo(inv.no) === normalizeLoanNo(item.no));
+        
+        // Default to "?" if type is missing, otherwise use the type from Firestore
+        const detail = match ? (match.type || "?") : "?";
         const principalStr = item.principal ? String(item.principal) : '-';
+        
         return { 
             no: item.no, 
             principal: principalStr, 
@@ -2577,36 +2438,30 @@ const generateSortedImage = () => {
     const reportCanvas = document.createElement('canvas');
     const ctx = reportCanvas.getContext('2d');
     
-    // Scale factor for High DPI (Retina) screens
+    // Scale factor for High DPI
     const scale = 2; 
     
-    // Layout Config (Logical Pixels)
+    // Layout Config
     const rowHeight = 50;
-    const dateHeaderHeight = 40; // Space for the date at top
-    const columnHeaderHeight = 50; // Space for SL/NO/AMOUNT headers
+    const dateHeaderHeight = 40; 
+    const columnHeaderHeight = 50; 
     const totalHeaderHeight = dateHeaderHeight + columnHeaderHeight;
-    const padding = 200; // Increased to prevent bottom cut-off
+    const padding = 200; 
     
     const logicalWidth = 900;
-    // Calculate total height dynamically
-    // We assume roughly 1 header per 5 rows to estimate, 
-    // but canvas will resize if we need more. 
-    // For now, let's use a safe dynamic height + padding
     const logicalHeight = totalHeaderHeight + (processedList.length * 60) + padding;
 
-    // Set Actual Size (Multiplied by Scale)
     reportCanvas.width = logicalWidth * scale;
     reportCanvas.height = logicalHeight * scale;
 
-    // Normalize coordinate system so we can write code using logical pixels
     ctx.scale(scale, scale);
 
     // C. Draw White Background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
-    // D. Draw Today's Date (Top Right)
-    const today = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    // D. Draw Today's Date
+    const today = new Date().toLocaleDateString('en-GB');
     ctx.fillStyle = "#333";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "right";
@@ -2626,15 +2481,12 @@ const generateSortedImage = () => {
     ctx.textAlign = "left";
     ctx.fillText("SL NO", colX.sl, textY);
     ctx.fillText("NO", colX.no, textY);
-    
     ctx.textAlign = "right"; 
     ctx.fillText("AMOUNT", colX.amt, textY);
     ctx.textAlign = "left";  
-    
     ctx.fillText("DATE", colX.date, textY);
     ctx.fillText("DETAIL", colX.det, textY);
     
-    // Header Bottom Line
     ctx.beginPath();
     ctx.moveTo(0, headerY + columnHeaderHeight);
     ctx.lineTo(logicalWidth, headerY + columnHeaderHeight);
@@ -2651,50 +2503,38 @@ const generateSortedImage = () => {
         // Draw Category Header if changed
         if (item.detail !== currentCategory) {
             currentCategory = item.detail;
-            
-            // 1. Push y down to create a gap between previous row and header
             y += 45; 
-            
-            // 2. Draw Header Box in that gap
             ctx.fillStyle = "#e9ecef";
             ctx.fillRect(0, y - 60, logicalWidth, 30);
-            
             ctx.fillStyle = "#000";
             ctx.textAlign = "left";
             ctx.font = "bold 16px sans-serif";
             ctx.fillText(`CATEGORY: ${currentCategory}`, 20, y - 40);
         }
 
-        // Row Content
         ctx.font = "24px sans-serif";
         ctx.fillStyle = "#000000";
         
-        // SL NO
         ctx.textAlign = "left";
         ctx.fillText(slCounter++, colX.sl, y);
-        
-        // LOAN NO
         ctx.fillText(item.no, colX.no, y);
 
-        // AMOUNT (Right Aligned)
         ctx.textAlign = "right";
         ctx.fillText(item.principal, colX.amt, y);
         ctx.textAlign = "left"; 
 
-        // DATE
         ctx.fillText(item.date, colX.date, y);
 
-        // DETAIL COLOR LOGIC (Yellow & Black)
+        // DETAIL COLOR LOGIC
         let badgeColor = "#333";
-        if (item.detail === "G") badgeColor = "#f1c40f"; // Golden Yellow
-        else if (item.detail === "S") badgeColor = "#000000"; // Black
-        else if (item.detail === "?") badgeColor = "#e74c3c"; // Red
+        if (item.detail === "G") badgeColor = "#f1c40f"; 
+        else if (item.detail === "S") badgeColor = "#000000"; 
+        else if (item.detail === "?") badgeColor = "#e74c3c"; 
 
         ctx.fillStyle = badgeColor;
         ctx.font = "bold 26px sans-serif";
         ctx.fillText(item.detail, colX.det, y);
 
-        // Divider Line
         ctx.strokeStyle = "#eee";
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -2705,20 +2545,15 @@ const generateSortedImage = () => {
         y += rowHeight;
     });
 
-    // G. Mobile Share vs PC Download
+    // G. Download/Share
     reportCanvas.toBlob((blob) => {
         const fileName = `Sorted_List_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: 'image/png' });
-        
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({
-                files: [file],
-                title: 'Sorted Loan List'
-            }).catch(console.error);
+            navigator.share({ files: [file], title: 'Sorted Loan List' }).catch(console.error);
         } else {
-            // PC: Force Download
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = fileName;
@@ -2728,7 +2563,6 @@ const generateSortedImage = () => {
         }
     });
 };
-
 // 3. MAIN SCANNER (UPDATED: Captures Full Data)
 // Updated: Passes hidden amount/date to addSearchRow
 // NEW HELPER: Reads the current state of the table (handles manual edits)
@@ -2756,10 +2590,8 @@ const getAvailableLoansFromTable = () => {
     return availableLoans;
 };
 
-// UPDATED: MAIN SCANNER (Uses new download logic)
 const fillSearchTableFromScan = async (loanData) => {
-    
-    if (sheetDetailsCache.size === 0) await fetchSheetData();
+    // 1. Build Cache (Only for Finalised reports now)
     buildLoanSearchCache(); 
 
     if (!loanData || loanData.length === 0) {
@@ -2803,12 +2635,11 @@ const fillSearchTableFromScan = async (loanData) => {
 
     renumberSearchRows();
     
-    // Setup Download Button (Points to new generation function)
+    // Setup Download Button
     const dlBtn = document.getElementById('downloadErasedBtn');
     if(dlBtn) {
         if (foundAvailable) {
             dlBtn.style.display = 'inline-flex';
-            // IMPORTANT: Call the function directly, don't pass old list
             dlBtn.onclick = generateSortedImage; 
         } else {
             dlBtn.style.display = 'none';
@@ -2817,6 +2648,8 @@ const fillSearchTableFromScan = async (loanData) => {
     
     showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
 };
+    
+    
 // --- FIX 3: AUTO-REFRESH DATE ON WAKE UP ---
 // If app was in background overnight, update date when opened
 document.addEventListener("visibilitychange", () => {
@@ -2914,4 +2747,131 @@ const filterHistory = (mode) => {
             }
         }
     });
+};
+// ==========================================
+// FIX: ACTIVATE 'LOAN ENTRY' SCAN BUTTON
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // 1. Create a hidden file input for the Batch Scanner (if it doesn't exist)
+    if (!document.getElementById('batchImageInput')) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'batchImageInput';
+        input.accept = 'image/*';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        
+        // Add Listener for File Selection
+        input.addEventListener('change', handleBatchScan);
+    }
+
+    // 2. Connect the "Scan Image" Button to the Input
+    const scanBtn = document.getElementById('scanBatchBtn');
+    if (scanBtn) {
+        // Remove old listeners (clone node trick) to prevent duplicates
+        const newBtn = scanBtn.cloneNode(true);
+        scanBtn.parentNode.replaceChild(newBtn, scanBtn);
+        
+        newBtn.addEventListener('click', () => {
+            document.getElementById('batchImageInput').click();
+        });
+    }
+});
+
+// 3. The Scanning Logic (Specific for Batch Entry)
+const handleBatchScan = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    showConfirm('Scanning...', 'Analyzing document for Loan Entry...', false);
+
+    try {
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const base64Image = reader.result.split(',')[1];
+                
+                // Reuse the Calculator Scan API (it works perfectly for Loan No + Principal)
+                const response = await fetch('/.netlify/functions/scanImage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64Image, mimeType: file.type })
+                });
+
+                if (!response.ok) throw new Error("Scan failed. Server error.");
+                
+                const result = await response.json();
+                const loans = result.loans; // Expecting {no, principal, date}
+
+                if (!loans || loans.length === 0) {
+                    closeConfirm();
+                    showConfirm("No Data", "No legible loans found in the image.", false);
+                    return;
+                }
+
+                // --- POPULATE THE BATCH TABLE ---
+                const batchBody = document.querySelector('#batchTable tbody');
+                
+                // Optional: Remove empty rows first
+                Array.from(batchBody.rows).forEach(row => {
+                   const noVal = row.querySelector('.batch-no').value;
+                   const prinVal = row.querySelector('.batch-principal').value;
+                   if(!noVal && !prinVal) row.remove();
+                });
+
+                loans.forEach(l => {
+                    const row = batchBody.insertRow();
+                    const count = batchBody.rows.length;
+                    
+                    // Format: A-052 -> A/52
+                    let cleanNo = String(l.no).toUpperCase();
+                    cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]+(\d)/g, '$1/$2');
+                    if (/^[A-Z]\d+$/.test(cleanNo)) {
+                         cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
+                    }
+
+                    // Infer Details (Use Date if available)
+                    const details = l.date ? formatDateToDDMMYYYY(parseDate(l.date)) : '';
+
+                    row.innerHTML = `
+                        <td>${count}</td>
+                        <td>
+                            <input type="text" class="batch-no" value="${cleanNo}" placeholder="LOAN NO" style="text-transform: uppercase; width: 100%;">
+                        </td>
+                        <td><input type="number" class="batch-principal" value="${l.principal}" placeholder="0"></td>
+                        <td>
+                            <select class="batch-type" style="border:none; background:transparent; font-weight:900; font-size: 0.9rem;">
+                                <option value="S">S</option>
+                                <option value="G">G</option>
+                            </select>
+                        </td>
+                        <td><input type="text" class="batch-note" placeholder="Details" value="${details}"></td>
+                        <td style="text-align: center;">
+                            <button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows();" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
+                        </td>
+                    `;
+                });
+                
+                // Helper to renumber (if not globally available)
+                Array.from(batchBody.rows).forEach((row, index) => {
+                    row.cells[0].textContent = index + 1;
+                });
+
+                closeConfirm();
+                showConfirm("Success", `Added ${loans.length} loans to the Entry List. Check and Save.`, false);
+            
+            } catch (err) {
+                closeConfirm();
+                showConfirm("Error", err.message, false);
+            }
+        };
+        reader.readAsDataURL(file);
+    } catch (e) {
+        closeConfirm();
+        showConfirm("Error", e.message, false);
+    }
+    
+    // Reset input so you can scan the same file twice if needed
+    event.target.value = '';
 };
