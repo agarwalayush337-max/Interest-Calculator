@@ -152,132 +152,148 @@
             <div class="main-content">
                 
                 <div class="dashboard-header">
-                    <h2>Live Portfolio</h2>
-                    <span class="live-badge">● Live Updates (1.75%)</span>
-                </div>
-
-                <div class="net-worth-card">
-                    <div class="net-worth-header">Total Estimated Value</div>
-                    <div class="net-worth-amount" id="dashNetWorth">₹0</div>
-                    <div class="net-worth-breakdown">
-                        <div class="nw-item">
-                            <span class="nw-label">Active Principal</span>
-                            <span class="nw-val" id="dashPrincipal">0</span>
-                        </div>
-                        <div class="nw-divider"></div>
-                        <div class="nw-item">
-                            <span class="nw-label">Uncollected Interest</span>
-                            <span class="nw-val interest-text" id="dashInterest">0</span>
-                        </div>
+                    <h2>Portfolio Dashboard</h2>
+                    <div class="date-filter-group">
+                        <input type="text" id="dashboardStartDate" placeholder="DD/MM/YYYY" class="date-input-sm">
+                        <span style="color:#aaa">-</span>
+                        <input type="text" id="dashboardEndDate" placeholder="DD/MM/YYYY" class="date-input-sm">
+                        <button id="applyDateFilterBtn" class="btn btn-primary btn-sm">Go</button>
                     </div>
+                </div>
+                
+                <div class="filter-presets">
+                    <button class="btn-mini" id="last30DaysBtn">Last 30 Days</button>
+                    <button class="btn-mini" id="currentFyBtn">Current FY</button>
+                    <button class="btn-mini" id="prevFyBtn">Prev FY</button>
                 </div>
 
                 <div class="kpi-grid">
                     <div class="kpi-card">
-                        <div class="kpi-icon">📊</div>
-                        <div class="kpi-info">
-                            <span class="kpi-label">Total Loans</span>
-                            <span class="kpi-val" id="kpiCount">0</span>
-                        </div>
+                        <div class="kpi-label">Active Loans</div>
+                        <div class="kpi-value" id="kpiCount">0</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon">💰</div>
-                        <div class="kpi-info">
-                            <span class="kpi-label">Avg Loan Size</span>
-                            <span class="kpi-val" id="kpiAvgSize">₹0</span>
-                        </div>
+                        <div class="kpi-label">Avg Loan Size</div>
+                        <div class="kpi-value" id="kpiAvgSize">₹0</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon">⏳</div>
-                        <div class="kpi-info">
-                            <span class="kpi-label">Avg Loan Age</span>
-                            <span class="kpi-val" id="kpiAvgAge">0 Days</span>
-                        </div>
+                        <div class="kpi-label">Avg Return Time</div>
+                        <div class="kpi-value" id="kpiAvgAge">0 Days</div>
                     </div>
-
                     <div class="kpi-card">
-                        <div class="kpi-icon">📈</div>
-                        <div class="kpi-info">
-                            <span class="kpi-label">Proj. Monthly Int.</span>
-                            <span class="kpi-val" id="kpiMonthly">₹0</span>
-                        </div>
+                        <div class="kpi-label">Proj. Monthly Income</div>
+                        <div class="kpi-value" id="kpiMonthly">₹0</div>
                     </div>
                 </div>
 
-                <div class="dashboard-grid">
-                    <div class="chart-container">
-                        <h3>Portfolio Mix (Active)</h3>
-                        <div style="height: 200px; position: relative;">
+                <div class="net-worth-card">
+                    <div class="nw-label">NET PORTFOLIO VALUE</div>
+                    <div class="nw-value" id="dashNetWorth">₹0</div>
+                    <div class="nw-breakdown">
+                        <span class="nw-principal">Principal: <span id="dashPrincipal">₹0</span></span>
+                        <span class="nw-interest">Interest: <span id="dashInterest">+ ₹0</span></span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div class="chart-card" style="height: 220px;">
+                        <h3 class="chart-title">Metal Mix</h3>
+                        <div class="chart-wrapper">
                             <canvas id="mixChart"></canvas>
                         </div>
                     </div>
-                    <div class="chart-container">
-                        <h3>Risk / Aging (Active)</h3>
-                        <div style="height: 200px; position: relative;">
+                    <div class="chart-card" style="height: 220px;">
+                        <h3 class="chart-title">Asset Aging</h3>
+                        <div class="chart-wrapper">
                             <canvas id="agingChart"></canvas>
                         </div>
                     </div>
-                    <div class="chart-container dashboard-full-width">
-                        <h3>Portfolio Deployment Trend (Cumulative Principal)</h3>
-                        <div style="height: 250px; position: relative;">
-                            <canvas id="growthChart"></canvas>
+                    <div class="chart-card" style="height: 220px;">
+                        <h3 class="chart-title">Loan Size Dist.</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="ticketChart"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <hr style="margin: 3rem 0; border: 0; border-top: 1px solid #ddd;">
-
-                <div class="dashboard-header">
-                    <h2>Historical Analysis</h2>
+                <div class="chart-card">
+                    <h3 class="chart-title">Portfolio Growth Trend</h3>
+                    <div class="chart-wrapper" style="height: 250px;">
+                        <canvas id="growthChart"></canvas>
+                    </div>
                 </div>
 
-                <div class="dashboard-filters">
-                    <div class="date-range-picker">
-                        <div class="input-field">
-                            <label for="dashboardStartDate">Start Date</label>
-                            <input type="text" id="dashboardStartDate" placeholder="DD/MM/YYYY">
-                        </div>
-                        <div class="input-field">
-                            <label for="dashboardEndDate">End Date</label>
-                            <input type="text" id="dashboardEndDate" placeholder="DD/MM/YYYY">
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px; margin-top: 20px;">
+                    
+                    <div class="chart-card">
+                        <h3 class="chart-title">Liquidity (In vs Out) - Last 6 Months</h3>
+                        <div class="chart-wrapper" style="height: 200px;">
+                            <canvas id="cashFlowChart"></canvas>
                         </div>
                     </div>
-                    <div class="quick-filter-buttons">
-                        <button class="btn btn-secondary" id="last30DaysBtn">Last 30 Days</button>
-                        <button class="btn btn-secondary" id="currentFyBtn">Current F.Y.</button>
-                        <button class="btn btn-secondary" id="prevFyBtn">Prev. F.Y.</button>
-                    </div>
-                    <button class="btn btn-primary" id="applyDateFilterBtn">Apply Filter</button>
-                </div>
 
-                <div class="dashboard-grid">
-                    <div class="chart-container">
-                        <h3>Collected: Principal vs Interest</h3>
-                        <div style="height: 250px; position: relative;">
-                            <canvas id="totalsPieChart"></canvas>
+                    <div class="chart-card" style="display: flex; flex-direction: column; justify-content: center; padding: 15px;">
+                        <h3 class="chart-title" style="margin-bottom: 15px;">Turnaround Time</h3>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <div style="font-size: 0.8rem; color: #666;">Gold Avg Life</div>
+                            <div style="font-size: 1.4rem; font-weight: bold; color: #fca311;" id="goldTurnaround">0 Days</div>
                         </div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Total Collected (Per Report)</h3>
-                        <div style="height: 250px; position: relative;">
-                            <canvas id="principalBarChart"></canvas>
+                        
+                        <div>
+                            <div style="font-size: 0.8rem; color: #666;">Silver Avg Life</div>
+                            <div style="font-size: 1.4rem; font-weight: bold; color: #333;" id="silverTurnaround">0 Days</div>
                         </div>
                     </div>
                 </div>
 
-                <div class="top-lists-grid" style="margin-top: 2rem;">
-                    <div class="list-card warning-border">
-                        <h3>⚠️ Oldest Active Loans</h3>
+                <div class="list-grid" style="margin-top: 20px;">
+                    <div class="list-card">
+                        <div class="list-header">Oldest Active Loans</div>
                         <ul class="dashboard-list" id="oldestLoansList"></ul>
                     </div>
-                    <div class="list-card success-border">
-                        <h3>💎 Top Value (Prin + Int)</h3>
+                    <div class="list-card">
+                        <div class="list-header">Highest Value Loans</div>
                         <ul class="dashboard-list" id="highValueList"></ul>
                     </div>
                 </div>
 
-                <div id="dashboardLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
-                <p id="dashboardMessage" style="display: none; text-align: center; color: #666; margin-top: 20px;"></p>
+                <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+                    <h3 style="margin-bottom: 15px;">Historical Performance</h3>
+                    <div class="chart-filters">
+                        <button class="btn-mini active" onclick="filterHistory('7')">7 Reports</button>
+                        <button class="btn-mini" onclick="filterHistory('30')">30 Days</button>
+                        <button class="btn-mini" onclick="filterHistory('FY')">This FY</button>
+                        <button class="btn-mini" onclick="filterHistory('ALL')">All Time</button>
+                    </div>
+                    <div id="dashboardMessage" style="display:none; color: #666; margin-bottom: 10px;"></div>
+                    
+                    <div class="charts-row">
+                        <div class="chart-card">
+                            <h3 class="chart-title">Principal vs Interest</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="totalsPieChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <h3 class="chart-title">Collection History</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="principalBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-card" style="margin-top: 20px;">
+                        <h3 class="chart-title">Total Collection Trend</h3>
+                        <div class="chart-wrapper" style="height: 250px;">
+                            <canvas id="historyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="dashboardLoader" class="loader-overlay" style="display: none;">
+                    <div class="loader"></div>
+                    <div style="color:white; margin-top:15px;">Crunching numbers...</div>
+                </div>
             </div>
         </div>        
         <div id="inventoryTab" class="tab-content">
@@ -418,6 +434,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
