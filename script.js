@@ -2752,7 +2752,6 @@ const filterHistory = (mode) => {
 // FIX: ACTIVATE 'LOAN ENTRY' SCAN BUTTON
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    
     // 1. Create a hidden file input for the Batch Scanner (if it doesn't exist)
     if (!document.getElementById('batchImageInput')) {
         const input = document.createElement('input');
@@ -2769,7 +2768,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. Connect the "Scan Image" Button to the Input
     const scanBtn = document.getElementById('scanBatchBtn');
     if (scanBtn) {
-        // Remove old listeners (clone node trick) to prevent duplicates
+        // Remove old listeners to prevent duplicates
         const newBtn = scanBtn.cloneNode(true);
         scanBtn.parentNode.replaceChild(newBtn, scanBtn);
         
@@ -2792,7 +2791,7 @@ const handleBatchScan = async (event) => {
             try {
                 const base64Image = reader.result.split(',')[1];
                 
-                // Reuse the Calculator Scan API (it works perfectly for Loan No + Principal)
+                // Reuse the Calculator Scan API
                 const response = await fetch('/.netlify/functions/scanImage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2802,7 +2801,7 @@ const handleBatchScan = async (event) => {
                 if (!response.ok) throw new Error("Scan failed. Server error.");
                 
                 const result = await response.json();
-                const loans = result.loans; // Expecting {no, principal, date}
+                const loans = result.loans; 
 
                 if (!loans || loans.length === 0) {
                     closeConfirm();
@@ -2813,7 +2812,7 @@ const handleBatchScan = async (event) => {
                 // --- POPULATE THE BATCH TABLE ---
                 const batchBody = document.querySelector('#batchTable tbody');
                 
-                // Optional: Remove empty rows first
+                // Remove empty rows first
                 Array.from(batchBody.rows).forEach(row => {
                    const noVal = row.querySelector('.batch-no').value;
                    const prinVal = row.querySelector('.batch-principal').value;
@@ -2831,7 +2830,6 @@ const handleBatchScan = async (event) => {
                          cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
                     }
 
-                    // Infer Details (Use Date if available)
                     const details = l.date ? formatDateToDDMMYYYY(parseDate(l.date)) : '';
 
                     row.innerHTML = `
@@ -2853,7 +2851,7 @@ const handleBatchScan = async (event) => {
                     `;
                 });
                 
-                // Helper to renumber (if not globally available)
+                // Renumber
                 Array.from(batchBody.rows).forEach((row, index) => {
                     row.cells[0].textContent = index + 1;
                 });
@@ -2872,6 +2870,6 @@ const handleBatchScan = async (event) => {
         showConfirm("Error", e.message, false);
     }
     
-    // Reset input so you can scan the same file twice if needed
+    // Reset input
     event.target.value = '';
 };
