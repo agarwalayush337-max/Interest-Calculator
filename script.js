@@ -1176,32 +1176,54 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
         liveStateUnsubscribe = null;
     }
 
-    // --- UPDATED: Back Button & Tab Logic ---
-    if (originTab === 'recentTransactionsTab' || originTab === 'finalisedTransactionsTab') {
-        // 1. Stay in Transactions Tab visually
-        moveCalculatorToTransactions(); 
+    // --- UPDATED LOGIC ---
+    // Condition A: EDIT MODE -> Always go to Calculator Tab
+    if (isEditable) {
+        // Ensure calculator is back in its original tab
+        restoreCalculator(); 
+        restoreDefaultBackButton();
+        showTab('calculatorTab');
         
-        // 2. Configure Back Button to restore list
+        // Setup Editing
+        currentlyEditingReportId = reportId;
+        setViewMode(false); // Enable inputs
+    } 
+    // Condition B: VIEW MODE (from Transactions) -> Stay in Transactions Tab
+    else if (originTab === 'recentTransactionsTab' || originTab === 'finalisedTransactionsTab') {
+        moveCalculatorToTransactions(); // Bring calculator here
+        
+        // Configure "Back" button to return to list
         exitViewModeBtn.textContent = 'Back to List';
         exitViewModeBtn.onclick = () => {
-            exitViewMode(); // This will call restoreCalculator
+            exitViewMode(); 
         };
-
-    } else if (originTab === 'loanSearchTab') {
-        // Existing logic for Search Tab...
+        
+        currentlyEditingReportId = null;
+        setViewMode(true); // Disable inputs (Read-Only)
+    }
+    // Condition C: VIEW MODE (from Search/Other) -> Standard Behavior
+    else if (originTab === 'loanSearchTab') {
+        restoreCalculator();
+        showTab('calculatorTab');
         exitViewModeBtn.textContent = 'Back to Loan Search';
         exitViewModeBtn.onclick = () => {
             showTab('inventoryTab'); 
             toggleInventoryView('search');
             restoreDefaultBackButton();
         };
-        showTab('calculatorTab'); // Ensure we are on calc tab
-    } else {
+        currentlyEditingReportId = null;
+        setViewMode(true);
+    } 
+    // Condition D: Fallback
+    else {
+        restoreCalculator();
+        showTab('calculatorTab');
         restoreDefaultBackButton();
-        showTab('calculatorTab'); // Standard behavior
+        currentlyEditingReportId = null;
+        setViewMode(true);
     }
 
-    // Populate Data
+    // --- POPULATE DATA (Common for all) ---
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
@@ -1210,14 +1232,11 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
     if (report.loans) report.loans.forEach(loan => addRow(loan));
     isUpdatingFromListener = false;
     
+    // If editing, add a blank row at the bottom for convenience
     if (isEditable) {
-        currentlyEditingReportId = reportId;
         addRow({ no: '', principal: '', date: '' });
-        setViewMode(false);
-    } else {
-        currentlyEditingReportId = null;
-        setViewMode(true);
     }
+    
     updateAllCalculations();
 };
 
