@@ -340,9 +340,21 @@
                 <div id="invEntryView" style="display: none;">
     
                     <div class="input-group" style="margin-bottom: 1rem;">
-                        <div class="input-field" style="max-width: 110px;"> 
+                        <<div class="input-field" style="max-width: 110px;"> 
                             <label for="batchDate">Batch Date</label>
                             <input type="text" id="batchDate" placeholder="DD/MM/YYYY">
+                        </div>
+                        <div class="input-field" style="max-width: 85px;">
+                            <label for="batchSeries">Series</label>
+                            <select id="batchSeries" style="width: 100%; padding: 0.75rem; border: none; border-radius: 8px; background: var(--background-color); box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark);">
+                                <option value="R">R</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                            </select>
+                        </div>
+                        <div class="input-field" style="max-width: 120px;">
+                            <label>Batch Total</label>
+                            <div id="batchTotalDisplay" style="padding: 0.75rem; font-weight: bold; color: var(--primary-color);">₹0</div>
                         </div>
                     </div>
 
@@ -418,6 +430,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
