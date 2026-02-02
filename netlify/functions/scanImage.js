@@ -124,13 +124,30 @@ exports.handler = async function(event) {
     }
     
     // --- NEW: Return the correct JSON structure based on scan type ---
+    // --- FIXED: Return the correct JSON structure based on scan type ---
+    let parsedData;
+    try {
+        parsedData = JSON.parse(jsonText);
+    } catch (e) {
+        throw new Error("Failed to parse AI response as JSON.");
+    }
+
     let responseBody;
+
     if (scanType === 'loan_numbers') {
-        const loanNumbers = JSON.parse(jsonText);
-        responseBody = JSON.stringify({ loanNumbers });
-    } else {
-        const loans = JSON.parse(jsonText);
-        responseBody = JSON.stringify({ loans });
+        // Handle if AI returns [ ... ] OR { "loanNumbers": [ ... ] }
+        const finalArray = Array.isArray(parsedData) ? parsedData : (parsedData.loanNumbers || []);
+        responseBody = JSON.stringify({ loanNumbers: finalArray });
+
+    } else { 
+        // FIX: Handle if AI returns [ ... ] OR { "loans": [ ... ] }
+        let finalLoans = [];
+        if (Array.isArray(parsedData)) {
+            finalLoans = parsedData;
+        } else if (parsedData.loans && Array.isArray(parsedData.loans)) {
+            finalLoans = parsedData.loans;
+        }
+        responseBody = JSON.stringify({ loans: finalLoans });
     }
 
     return {
