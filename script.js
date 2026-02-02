@@ -2427,6 +2427,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 
+// --- NEW: Logic for Clear Batch Button ---
+const clearBatchBtn = document.getElementById('clearBatchBtn');
+
+const clearBatchTable = async () => {
+    const confirmed = await showConfirm(
+        "Clear Batch Entry", 
+        "Are you sure you want to clear all entries?"
+    );
+    if (confirmed) {
+        // Clear all rows
+        document.querySelector('#batchTable tbody').innerHTML = '';
+        
+        // Add 3 default rows back
+        for (let i = 0; i < 3; i++) {
+             // Ensure function exists before calling
+             if (typeof addBatchRow === 'function') {
+                 addBatchRow();
+             }
+        }
+        
+        // Reset Total Display
+        const totalDisplay = document.getElementById('batchTotalDisplay');
+        if(totalDisplay) totalDisplay.textContent = '₹0';
+    }
+};
+
+// Add Listener
+if (clearBatchBtn) {
+    clearBatchBtn.addEventListener('click', clearBatchTable);
+}
+
 const generateSortedImage = () => {
     // 1. Get current list from the table
     const loanList = getAvailableLoansFromTable();
