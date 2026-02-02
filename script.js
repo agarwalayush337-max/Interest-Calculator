@@ -2812,12 +2812,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 3. The Scanning Logic (Specific for Batch Entry)
 const handleBatchScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    showConfirm('Scanning...', 'Analyzing document for Loan Entry...', false);
+    showConfirm('Scanning...', 'Analyzing handwritten list for Entry...', false);
 
     try {
         const reader = new FileReader();
@@ -2825,11 +2824,15 @@ const handleBatchScan = async (event) => {
             try {
                 const base64Image = reader.result.split(',')[1];
                 
-                // Reuse the Calculator Scan API
+                // --- FIX 1: Send 'loan_entry' scanType ---
                 const response = await fetch('/.netlify/functions/scanImage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image, mimeType: file.type })
+                    body: JSON.stringify({ 
+                        image: base64Image, 
+                        mimeType: file.type,
+                        scanType: 'loan_entry' // <--- CRITICAL FIX
+                    })
                 });
 
                 if (!response.ok) throw new Error("Scan failed. Server error.");
@@ -2843,55 +2846,57 @@ const handleBatchScan = async (event) => {
                     return;
                 }
 
-                // --- POPULATE THE BATCH TABLE ---
                 const batchBody = document.querySelector('#batchTable tbody');
-                
                 // Remove empty rows first
                 Array.from(batchBody.rows).forEach(row => {
                    const noVal = row.querySelector('.batch-no').value;
-                   const prinVal = row.querySelector('.batch-principal').value;
-                   if(!noVal && !prinVal) row.remove();
+                   if(!noVal) row.remove();
                 });
+
+                // --- FIX 2: Get Selected Series ---
+                const selectedSeries = document.getElementById('batchSeries')?.value || 'R';
 
                 loans.forEach(l => {
                     const row = batchBody.insertRow();
                     const count = batchBody.rows.length;
                     
-                    // Format: A-052 -> A/52
-                    let cleanNo = String(l.no).toUpperCase();
-                    cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]+(\d)/g, '$1/$2');
-                    if (/^[A-Z]\d+$/.test(cleanNo)) {
-                         cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
+                    // --- FIX 3: Apply Series Prefix Immediately ---
+                    let cleanNo = String(l.no).toUpperCase().trim();
+                    if (/^\d+$/.test(cleanNo)) {
+                        cleanNo = `${selectedSeries}/${cleanNo}`; // R/11
+                    } else {
+                         // Standard cleanup just in case
+                        cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]*(\d+)/g, '$1/$2');
                     }
 
-                    const details = l.date ? formatDateToDDMMYYYY(parseDate(l.date)) : '';
+                    // --- FIX 4: Map Type & Details ---
+                    // Default to 'S' if undefined, but use scan result if present
+                    const typeVal = (l.type === 'G' || l.type === 'S') ? l.type : 'S';
+                    const detailVal = l.details || '';
 
                     row.innerHTML = `
                         <td>${count}</td>
                         <td>
                             <input type="text" class="batch-no" value="${cleanNo}" placeholder="LOAN NO" style="text-transform: uppercase; width: 100%;">
                         </td>
-                        <td><input type="number" class="batch-principal" value="${l.principal}" placeholder="0"></td>
+                        <td><input type="number" class="batch-principal" value="${l.principal}" placeholder="0" oninput="updateBatchTotal()"></td>
                         <td>
                             <select class="batch-type" style="border:none; background:transparent; font-weight:900; font-size: 0.9rem;">
-                                <option value="S">S</option>
-                                <option value="G">G</option>
+                                <option value="S" ${typeVal === 'S' ? 'selected' : ''}>S</option>
+                                <option value="G" ${typeVal === 'G' ? 'selected' : ''}>G</option>
                             </select>
                         </td>
-                        <td><input type="text" class="batch-note" placeholder="Details" value="${details}"></td>
+                        <td><input type="text" class="batch-note" placeholder="Details" value="${detailVal}"></td>
                         <td style="text-align: center;">
-                            <button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows();" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
+                            <button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows(); updateBatchTotal();" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
                         </td>
                     `;
                 });
                 
-                // Renumber
-                Array.from(batchBody.rows).forEach((row, index) => {
-                    row.cells[0].textContent = index + 1;
-                });
-
+                renumberBatchRows();
+                updateBatchTotal(); // Calculate total immediately
                 closeConfirm();
-                showConfirm("Success", `Added ${loans.length} loans to the Entry List. Check and Save.`, false);
+                showConfirm("Success", `Added ${loans.length} loans.`, false);
             
             } catch (err) {
                 closeConfirm();
@@ -2903,7 +2908,14 @@ const handleBatchScan = async (event) => {
         closeConfirm();
         showConfirm("Error", e.message, false);
     }
-    
-    // Reset input
     event.target.value = '';
+};
+
+// --- Add this Helper Function for the Total ---
+const updateBatchTotal = () => {
+    const inputs = document.querySelectorAll('.batch-principal');
+    let total = 0;
+    inputs.forEach(inp => total += (parseFloat(inp.value) || 0));
+    const display = document.getElementById('batchTotalDisplay');
+    if(display) display.textContent = `₹${total.toLocaleString('en-IN')}`;
 };
