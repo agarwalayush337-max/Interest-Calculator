@@ -190,14 +190,34 @@
                             <span class="kpi-val" id="kpiAvgSize">₹0</span>
                         </div>
                     </div>
+                    
                     <div class="kpi-card">
                         <div class="kpi-icon">⏳</div>
                         <div class="kpi-info">
-                            <span class="kpi-label">Avg Loan Age</span>
+                            <span class="kpi-label">Avg Active Age</span>
                             <span class="kpi-val" id="kpiAvgAge">0 Days</span>
+                            <div id="kpiAvgAgeSplit" style="font-size: 0.7rem; color: #666; margin-top: 2px;">
+                                G: 0d | S: 0d
+                            </div>
                         </div>
                     </div>
-
+                
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🔄</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Churn Rate (3M)</span>
+                            <span class="kpi-val" id="kpiChurn">0 Days</span>
+                        </div>
+                    </div>
+                
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📅</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Busiest Month</span>
+                            <span class="kpi-val" id="kpiHeatmap">-</span>
+                        </div>
+                    </div>
+                
                     <div class="kpi-card">
                         <div class="kpi-icon">📈</div>
                         <div class="kpi-info">
@@ -206,7 +226,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="dashboard-grid">
                     <div class="chart-container">
                         <h3>Portfolio Mix (Active)</h3>
@@ -221,7 +240,16 @@
                         </div>
                     </div>
                     <div class="chart-container dashboard-full-width">
-                        <h3>Portfolio Deployment Trend (Cumulative Principal)</h3>
+                        <div class="chart-header-row">
+                            <h3>Portfolio Deployment Trend</h3>
+                            <div class="chart-filters">
+                                <button class="btn-mini" onclick="updateGrowthChart('30', this)">30D</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('90', this)">3M</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('180', this)">6M</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('365', this)">1Y</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('ALL', this)">All</button>
+                            </div>
+                        </div>
                         <div style="height: 250px; position: relative;">
                             <canvas id="growthChart"></canvas>
                         </div>
@@ -443,6 +471,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
