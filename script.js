@@ -410,10 +410,25 @@ const showTab = (tabId) => {
             if (cachedFinalisedReports.length === 0) loadFinalisedTransactions();
         }
         if (tabId === 'dashboardTab') renderDashboard();
+        
+        // --- UPDATED INVENTORY TAB LOGIC ---
         if (tabId === 'inventoryTab') {
             loadInventory();
             toggleInventoryView('search'); 
-            if (loanSearchTableBody.rows.length === 0) for (let i = 0; i < 3; i++) addSearchRow();
+            
+            // 1. Ensure Search Table has rows (Existing logic)
+            if (loanSearchTableBody.rows.length === 0) {
+                for (let i = 0; i < 3; i++) addSearchRow();
+            }
+
+            // 2. FIX: Ensure Batch (Entry) Table has rows (MISSING PART)
+            const batchBody = document.querySelector('#batchTable tbody');
+            if (batchBody && batchBody.rows.length === 0) {
+                for(let i=0; i<3; i++) {
+                    if (typeof addBatchRow === 'function') addBatchRow();
+                }
+            }
+
             if (cachedFinalisedReports.length === 0) loadFinalisedTransactions().then(buildLoanSearchCache);
             else buildLoanSearchCache();
         }
