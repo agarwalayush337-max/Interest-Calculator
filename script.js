@@ -37,6 +37,7 @@ let cachedFinalisedReports = [];
 let activeInventory = []; // NEW: Stores active stock
 let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
+let currentGrowthTimeframe = 'ALL'; // Default setting
 let currentlyEditingReportId = null; 
 
 // --- GLOBALS FOR SCANNING & SHEETS ---
@@ -1650,6 +1651,21 @@ const renderDashboard = async () => {
     renderHistoricalStats();
 
     if (loader) loader.style.display = 'none';
+};
+
+// --- CHART FILTER FUNCTION ---
+const updateGrowthChart = (days, btnElement) => {
+    // 1. Update State
+    currentGrowthTimeframe = days;
+
+    // 2. Update UI (Buttons)
+    if (btnElement) {
+        document.querySelectorAll('.chart-filters .btn-mini').forEach(b => b.classList.remove('active'));
+        btnElement.classList.add('active');
+    }
+
+    // 3. Re-render
+    renderLiveStats();
 };
 
 // 2. LIVE STATS (Active Net Worth + Growth Trend + 4 KPIs)
