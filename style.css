@@ -582,15 +582,25 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 #batchTable th { font-size: 0.8rem; letter-spacing: 0.5px; text-transform: uppercase; }
 #batchTable select { 
     width: 100%; 
-    padding: 0px !important;  /* Changed from 8px to 0px to fit mobile */
+    padding: 0px !important;
     border: none; 
     background: transparent; 
     font-weight: 600; 
     cursor: pointer;
-    font-size: 1.1rem !important; /* Forces smaller text size */
-    text-indent: 2px; /* distinct indent for the letter G/S */
+    font-size: 1.1rem !important;
+    text-indent: 2px;
 }
 
+/* New: Mobile Detail Box Scaling */
+@media (max-width: 768px) {
+    .batch-note {
+        min-width: 160px !important;
+        font-size: 0.95rem !important;
+    }
+    #batchTable td:nth-child(5) {
+        width: 180px !important;
+    }
+}
 /* ADD THIS to make the Search/Entry toggle move */
 #invEntry:checked ~ .segment-marker { transform: translateX(100%); }
 
