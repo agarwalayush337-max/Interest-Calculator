@@ -43,8 +43,8 @@
             <button class="tab-button" data-tab="dashboardTab">Dashboard</button>
         </div>
 
-        <div id="calculatorTab" class="tab-content active">
-            <div class="main-content">
+       <div id="calculatorTab" class="tab-content active">
+            <div class="main-content" id="calculatorMainContent">
                 <div class="input-group">
                     <div class="input-field" id="todayDateContainer">
                         <label for="todayDate">Today's Date</label>
@@ -118,6 +118,9 @@
 
         <div id="transactionsTab" class="tab-content">
             <div class="main-content">
+                
+                <div id="transactionCalculatorMount" style="display: none;"></div>
+        
                 <div class="toggle-container">
                     <div class="segment-control">
                         <input type="radio" name="txType" id="txPending" value="pending" checked onclick="toggleTxView('pending')">
@@ -440,6 +443,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
