@@ -53,6 +53,28 @@ exports.handler = async function(event) {
            - IMPORTANT: The box must cover the ENTIRE WIDTH of the row (Number + Principal + Date).
 
         Do not include markdown formatting. Just the JSON.`;
+    } else if (scanType === 'loan_entry') {
+        promptText = `
+        Analyze this handwritten list of loans for entry.
+        Return a raw JSON array of objects. Each object must have 4 fields:
+
+        1. "no": Extract the loan number.
+           - Replace '1' with '/' for 4-digit numbers starting with 1.
+           - Ensure there is a '/' between letter and number.
+        
+        2. "principal": Extract the amount (Digits only).
+        
+        3. "type": Look for the circled letter 'G' or 'S'.
+           - 'G' = Gold (Sona).
+           - 'S' = Silver (Chandi).
+        
+        4. "details": Construct a detail string based on the Hindi text in the last column.
+           - Format: "[Sona/Chandi] [Value] [Bhari/Aana]"
+           - If type is 'G', use "Sona [Value] [Aana/Bhari]".
+           - If type is 'S', use "Chandi [Value] Bhari".
+           - Recognize Hindi: "भरी" as "Bhari" and "आना" as "Aana".
+        
+        Do not include markdown formatting. Just the JSON.`;
     } else {
         // ... existing calculator prompt ...
         promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 4-digit numbers starting with it (A1666->A/666) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." 
