@@ -1668,7 +1668,7 @@ const updateGrowthChart = (days, btnElement) => {
     renderLiveStats();
 };
 
-// 2. LIVE STATS (Updated with Churn, Heatmap, Bifurcation & Interactive Graph)
+// 2. LIVE STATS (Fixed: Buttons, Lacs Axis, Heatmap, Churn)
 const renderLiveStats = () => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
@@ -1676,62 +1676,47 @@ const renderLiveStats = () => {
     let totalPrincipal = 0, totalInterest = 0;
     let mixStats = { goldVal: 0, silverVal: 0, goldCount: 0, silverCount: 0 };
     let agingStats = { normalVal: 0, midVal: 0, oldVal: 0 };
-    
-    // NEW: Avg Age Bifurcation Stats
     let ageStats = { totalDays: 0, count: 0, gDays: 0, gCount: 0, sDays: 0, sCount: 0 };
 
     let activeLoansList = [];
     let redeemedLoansList = [];
-    let monthCounts = Array(12).fill(0); // For Heatmap (Jan-Dec)
+    let monthCounts = Array(12).fill(0); 
 
     // --- PROCESS ACTIVE INVENTORY ---
     activeInventory.forEach(loan => {
         const p = parseFloat(loan.principal) || 0;
         const loanDate = parseDate(loan.date);
-        let interest = 0, days = 0;
-
+        
         if (loanDate && p > 0) {
-            days = days360(loanDate, today);
+            let days = days360(loanDate, today);
             if (days < 0) days = 0; 
             
-            // Heatmap Data (Disbursement Month)
+            // Heatmap: Count the month (0=Jan, 11=Dec)
             monthCounts[loanDate.getMonth()]++;
 
-            // Avg Age Stats
-            ageStats.totalDays += days;
-            ageStats.count++;
-            if (loan.type === 'G') { ageStats.gDays += days; ageStats.gCount++; }
-            if (loan.type === 'S') { ageStats.sDays += days; ageStats.sCount++; }
-
             // Active Graph Data
-            activeLoansList.push({
-                start: loanDate,
-                end: null, 
-                principal: p,
-                rate: rate
-            });
+            activeLoansList.push({ start: loanDate, end: null, principal: p, rate: rate });
 
-            // Interest Calc
+            // Stats
+            ageStats.totalDays += days; ageStats.count++;
+            if (loan.type === 'G') { ageStats.gDays += days; ageStats.gCount++; mixStats.goldVal += p; mixStats.goldCount++; }
+            else { ageStats.sDays += days; ageStats.sCount++; mixStats.silverVal += p; mixStats.silverCount++; }
+
             const calcDays = Math.max(30, days);
-            interest = (p * rate * calcDays) / 3000;
+            const interest = (p * rate * calcDays) / 3000;
+            totalPrincipal += p; 
+            totalInterest += interest;
+
+            if (days < 730) agingStats.normalVal += p; 
+            else if (days < 1095) agingStats.midVal += p; 
+            else agingStats.oldVal += p;
         }
-
-        totalPrincipal += p; 
-        totalInterest += interest;
-
-        if (loan.type === 'G') { mixStats.goldVal += p; mixStats.goldCount++; }
-        else { mixStats.silverVal += p; mixStats.silverCount++; }
-
-        if (days < 730) agingStats.normalVal += p; 
-        else if (days < 1095) agingStats.midVal += p; 
-        else agingStats.oldVal += p;
     });
 
-    // --- PROCESS FINALISED REPORTS (Redeemed History) ---
+    // --- PROCESS FINALISED REPORTS ---
     if (cachedFinalisedReports && cachedFinalisedReports.length > 0) {
         cachedFinalisedReports.forEach(report => {
             const loansData = report.loans || report.items || [];
-            
             if (Array.isArray(loansData)) {
                 loansData.forEach(item => {
                     const start = parseDate(item.date);
@@ -1740,14 +1725,9 @@ const renderLiveStats = () => {
                     const r = parseFloat(report.interestRate) || rate; 
 
                     if (start && end && p > 0) {
-                        // Heatmap Data
-                        monthCounts[start.getMonth()]++;
-
+                        monthCounts[start.getMonth()]++; // Heatmap
                         redeemedLoansList.push({
-                            start: start,
-                            end: end,
-                            principal: p,
-                            rate: r,
+                            start: start, end: end, principal: p, rate: r,
                             duration: Math.max(0, days360(start, end))
                         });
                     }
@@ -1757,59 +1737,46 @@ const renderLiveStats = () => {
     }
 
     // --- UPDATE KPIs ---
-    
-    // KPI 1: Count
     const count = activeInventory.length;
-
-    // KPI 2: Avg Active Loan Size
     const avgSize = count > 0 ? totalPrincipal / count : 0;
+    const monthlyIncome = totalPrincipal * (rate / 100);
 
-    // KPI 3: Avg Active Age (Bifurcated)
     const avgAgeTotal = ageStats.count > 0 ? Math.round(ageStats.totalDays / ageStats.count) : 0;
     const avgAgeG = ageStats.gCount > 0 ? Math.round(ageStats.gDays / ageStats.gCount) : 0;
     const avgAgeS = ageStats.sCount > 0 ? Math.round(ageStats.sDays / ageStats.sCount) : 0;
 
-    // KPI 4: Churn Rate (Avg Duration of Redeemed Loans - Last 3 Months)
+    // Fix Churn Rate: Show "-" if no finalised loans in last 90 days
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setDate(threeMonthsAgo.getDate() - 90);
-    
     const recentRedeemed = redeemedLoansList.filter(l => l.end >= threeMonthsAgo);
-    let totalChurnDays = 0;
-    recentRedeemed.forEach(l => totalChurnDays += l.duration);
-    const churnRate = recentRedeemed.length > 0 ? Math.round(totalChurnDays / recentRedeemed.length) : 0;
+    let churnText = "-";
+    if (recentRedeemed.length > 0) {
+        let totalChurnDays = 0;
+        recentRedeemed.forEach(l => totalChurnDays += l.duration);
+        churnText = Math.round(totalChurnDays / recentRedeemed.length) + " Days";
+    }
 
-    // KPI 5: Heatmap (Busiest Month)
+    // Fix Heatmap: Show "-" if no data at all
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const maxVal = Math.max(...monthCounts);
     const maxMonthIndex = monthCounts.indexOf(maxVal);
     const busiestMonth = maxVal > 0 ? monthNames[maxMonthIndex] : "-";
 
-    // KPI 6: Monthly Income
-    const monthlyIncome = totalPrincipal * (rate / 100);
-
-    // --- RENDER KPI TEXT ---
+    // --- RENDER TEXT ---
     document.getElementById('kpiCount').textContent = count; 
     document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
-    
-    // Updated Avg Age Render
     document.getElementById('kpiAvgAge').textContent = `${avgAgeTotal} Days`;
     const splitEl = document.getElementById('kpiAvgAgeSplit');
     if(splitEl) splitEl.textContent = `G: ${avgAgeG}d | S: ${avgAgeS}d`;
-
-    // New KPIs
-    if(document.getElementById('kpiChurn')) document.getElementById('kpiChurn').textContent = `${churnRate} Days`;
+    if(document.getElementById('kpiChurn')) document.getElementById('kpiChurn').textContent = churnText;
     if(document.getElementById('kpiHeatmap')) document.getElementById('kpiHeatmap').textContent = busiestMonth;
+    if (document.getElementById('kpiMonthly')) document.getElementById('kpiMonthly').textContent = `₹${Math.round(monthlyIncome).toLocaleString('en-IN')}`;
 
-    if (document.getElementById('kpiMonthly')) {
-        document.getElementById('kpiMonthly').textContent = `₹${Math.round(monthlyIncome).toLocaleString('en-IN')}`;
-    }
-
-    // --- UPDATE NET WORTH ---
     document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
     document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
     document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
 
-    // --- UPDATE PIE & BAR CHARTS (Same as before) ---
+    // --- CHARTS ---
     if (pieChartInstance) pieChartInstance.destroy();
     if (barChartInstance) barChartInstance.destroy();
 
@@ -1829,10 +1796,8 @@ const renderLiveStats = () => {
         data: { 
             labels: ['Gold', 'Silver'], 
             datasets: [{ 
-                data: [mixStats.goldVal, mixStats.silverVal], 
-                counts: [mixStats.goldCount, mixStats.silverCount],
-                backgroundColor: ['#fca311', '#adb5bd'], 
-                borderWidth: 0 
+                data: [mixStats.goldVal, mixStats.silverVal], counts: [mixStats.goldCount, mixStats.silverCount],
+                backgroundColor: ['#fca311', '#adb5bd'], borderWidth: 0 
             }] 
         },
         options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: currencyTooltip } }
@@ -1844,7 +1809,6 @@ const renderLiveStats = () => {
         data: { 
             labels: ['< 2 Yrs', '2-3 Yrs', '> 3 Yrs'], 
             datasets: [{ 
-                label: 'Value', 
                 data: [agingStats.normalVal, agingStats.midVal, agingStats.oldVal], 
                 counts: [agingStats.normalCount, agingStats.midCount, agingStats.oldCount],
                 backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'], borderRadius: 4 
@@ -1853,38 +1817,38 @@ const renderLiveStats = () => {
         options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: currencyTooltip }, scales: { y: { beginAtZero: true, display: false } } }
     });
 
-    // --- UPDATE GROWTH CHART (Interactive) ---
+    // --- UPDATE GROWTH CHART (Fixed) ---
     if (window.growthChartInstance) window.growthChartInstance.destroy();
 
     const allHistory = [...activeLoansList, ...redeemedLoansList];
     allHistory.sort((a, b) => a.start - b.start);
 
     if (allHistory.length > 0) {
-        // 1. Determine Date Range based on Button
-        let startDateFilter = new Date(allHistory[0].start); // Default ALL
+        // 1. Calculate Start Date based on Filter
+        let startDateFilter = new Date(allHistory[0].start); 
         
         if (currentGrowthTimeframe !== 'ALL') {
             const days = parseInt(currentGrowthTimeframe);
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - days);
-            startDateFilter = cutoff;
+            // If the cutoff is AFTER the first loan, use cutoff. 
+            if (cutoff > startDateFilter) startDateFilter = cutoff;
         }
 
         const chartLabels = [];
         const chartData = [];
-
-        // 2. Build Chart Data
-        // Start loop either from first loan OR from filter date
-        let currentDate = new Date(startDateFilter < allHistory[0].start ? allHistory[0].start : startDateFilter);
-        // Align to previous week to avoid starting mid-air
-        currentDate.setDate(currentDate.getDate() - currentDate.getDay()); 
         
+        // Start from our filter date (aligned to previous week for smoothness)
+        let currentDate = new Date(startDateFilter);
+        currentDate.setDate(currentDate.getDate() - currentDate.getDay()); 
+
         const sevenDays = 7 * 24 * 60 * 60 * 1000;
         let loops = 0;
-        const maxLoops = 500; // Safety break
-
-        while (currentDate <= today && loops < maxLoops) {
+        
+        while (currentDate <= today && loops < 500) {
             let dailyValue = 0;
+            // IMPORTANT: We must calculate TOTAL value alive at this date
+            // even if the loan started before our chart begins.
             for (let loan of allHistory) {
                 const isStarted = loan.start <= currentDate;
                 const isNotEnded = (loan.end === null) || (loan.end > currentDate);
@@ -1893,8 +1857,7 @@ const renderLiveStats = () => {
                     const daysActive = days360(loan.start, currentDate);
                     dailyValue += loan.principal;
                     if (daysActive > 0) {
-                        const accInterest = (loan.principal * loan.rate * daysActive) / 3000;
-                        dailyValue += accInterest;
+                        dailyValue += (loan.principal * loan.rate * daysActive) / 3000;
                     }
                 }
             }
@@ -1903,7 +1866,7 @@ const renderLiveStats = () => {
             currentDate = new Date(currentDate.getTime() + sevenDays);
             loops++;
         }
-        // Always add Today
+        
         chartLabels.push(formatDateToDDMMYYYY(today));
         chartData.push(totalPrincipal + totalInterest);
 
@@ -1930,7 +1893,7 @@ const renderLiveStats = () => {
                 scales: { 
                     x: { ticks: { maxTicksLimit: 6 } }, 
                     y: { 
-                        // UPDATED: Show in Lacs (2.0 L)
+                        // FIXED: Display in Lacs (e.g., 200 L)
                         ticks: { 
                             callback: (v) => (v / 100000).toFixed(1) + ' L' 
                         } 
@@ -1940,44 +1903,27 @@ const renderLiveStats = () => {
         });
     }
 
-    // --- UPDATE TOP LISTS (Same as before) ---
+    // --- TOP LISTS ---
     const activeSorted = activeInventory.map(loan => {
          const p = parseFloat(loan.principal) || 0;
          const loanDate = parseDate(loan.date);
          const days = loanDate ? days360(loanDate, today) : 0;
-         const interest = (p * rate * days) / 3000;
-         return { ...loan, principal: p, days, totalValue: p + interest };
+         return { ...loan, principal: p, days, totalValue: p + (p * rate * days) / 3000 };
     });
 
     const oldestLoans = [...activeSorted].sort((a, b) => b.days - a.days).slice(0, 5);
     document.getElementById('oldestLoansList').innerHTML = oldestLoans.map(l => {
         const years = (l.days / 365).toFixed(1);
         const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
-        return `<li>
-            <div class="list-main">
-                <span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span>
-                <span class="list-sub">${l.date} (${years} Years)</span>
-            </div>
-            <div class="list-val">₹${Math.round(l.principal).toLocaleString('en-IN')}</div>
-        </li>`;
+        return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.principal).toLocaleString('en-IN')}</div></li>`;
     }).join('');
     
     const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
     document.getElementById('highValueList').innerHTML = highValueLoans.map(l => {
         const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
-        return `<li>
-            <div class="list-main">
-                <span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span>
-                <span class="list-sub">Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')}</span>
-            </div>
-            <div class="list-val">
-                ₹${Math.round(l.totalValue).toLocaleString('en-IN')}
-                <div style="font-size:0.7rem; color:#888;">(Incl. Int)</div>
-            </div>
-        </li>`;
+        return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')}</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}<div style="font-size:0.7rem; color:#888;">(Incl. Int)</div></div></li>`;
     }).join('');
 };
-
 // 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
 const renderHistoricalStats = () => {
     // A. Get Date Range
