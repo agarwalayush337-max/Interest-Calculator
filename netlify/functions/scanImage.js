@@ -55,26 +55,29 @@ exports.handler = async function(event) {
         Do not include markdown formatting. Just the JSON.`;
     } else if (scanType === 'loan_entry') {
         promptText = `
-        Analyze this handwritten list of loans for entry.
-        Return a raw JSON array of objects. Each object must have 4 fields:
+        Analyze this handwritten list of loans. 
+        Columns are generally: Number | Amount | Circled Letter (Type) | Hindi Details.
+        
+        Return a raw JSON array (key: "loans") where each object has:
+        
+        1. "no": The loan number (e.g., "11", "12"). 
+           - Do not add prefixes like 'R/' here, just extract the number written.
+        
+        2. "principal": The amount (e.g., "25000"). Digits only.
+        
+        3. "type": 
+           - Look for a circled 'G' or 'S'.
+           - OR look at the Hindi text: "सोना" (Sona) = 'G', "चांदी" (Chandi) = 'S'.
+           - Return exactly "G" or "S".
+        
+        4. "details": Transcribe the Hindi/English details column exactly.
+           - Examples from image: "सोना 4 आना" -> "Sona 4 Aana"
+           - "चांदी 15 Bhari" -> "Chandi 15 Bhari"
+           - "सोना 1 भरी" -> "Sona 1 Bhari"
+           - Keep the numbers and units (Aana/Bhari). 
+           - Transliterate Hindi to English (e.g., write "Sona" not "सोना").
 
-        1. "no": Extract the loan number.
-           - Replace '1' with '/' for 4-digit numbers starting with 1.
-           - Ensure there is a '/' between letter and number.
-        
-        2. "principal": Extract the amount (Digits only).
-        
-        3. "type": Look for the circled letter 'G' or 'S'.
-           - 'G' = Gold (Sona).
-           - 'S' = Silver (Chandi).
-        
-        4. "details": Construct a detail string based on the Hindi text in the last column.
-           - Format: "[Sona/Chandi] [Value] [Bhari/Aana]"
-           - If type is 'G', use "Sona [Value] [Aana/Bhari]".
-           - If type is 'S', use "Chandi [Value] Bhari".
-           - Recognize Hindi: "भरी" as "Bhari" and "आना" as "Aana".
-        
-        Do not include markdown formatting. Just the JSON.`;
+        Output JSON only. No markdown.`;
     } else {
         // ... existing calculator prompt ...
         promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 4-digit numbers starting with it (A1666->A/666) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'." 
