@@ -2335,16 +2335,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             ); 
 
             if (match) {
-                // C. FORCE UPDATE (The Fix)
-                // We now overwrite the values even if the box wasn't empty
                 principalInput.value = match.principal;
                 dateInput.value = match.date;
-                
-                // D. Apply Color
-                // Grey (#e0e0e0) = Silver ('S')
-                // Yellow (#fcf4cf) = Gold ('G')
                 if (match.type === 'G') target.classList.add('found-gold');
                 else if (match.type === 'S') target.classList.add('found-silver');
+            } else {
+                // NEW: Clear fields if the exact loan number is not found in DB
+                principalInput.value = '';
+                dateInput.value = '';
+                target.classList.remove('found-gold', 'found-silver');
             }
         }
         
