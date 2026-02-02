@@ -535,8 +535,9 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 /* --- Fix Calculator Mobile Layout (Side-by-Side + Gap) --- */
 /* --- Fix Calculator Mobile Layout (Smaller Boxes + Big Gap) --- */
 @media (max-width: 768px) {
-    /* 1. Container Settings */
-    #calculatorTab .input-group {
+    /* 1. Container Settings - Updated selector to work in Transactions Tab too */
+    #calculatorTab .input-group,
+    #transactionCalculatorMount .input-group {
         display: flex !important;
         flex-direction: row !important;
         
@@ -549,7 +550,8 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     }
 
     /* 2. Box Settings */
-    #calculatorTab .input-field {
+    #calculatorTab .input-field,
+    #transactionCalculatorMount .input-field {
         flex: 1 !important;      /* Keeps them equal size */
         width: auto !important;
         min-width: 0;
