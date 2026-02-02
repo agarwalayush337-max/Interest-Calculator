@@ -594,7 +594,7 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
 /* New: Mobile Detail Box Scaling */
 @media (max-width: 768px) {
     .batch-note {
-        min-width: 130px !important;
+        min-width: 110px !important;
         font-size: 0.95rem !important;
     }
     #batchTable td:nth-child(5) {
