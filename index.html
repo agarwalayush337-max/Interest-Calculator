@@ -339,19 +339,22 @@
         
                 <div id="invEntryView" style="display: none;">
 
-                    <div class="input-group" style="margin-bottom: 1rem;">
-                        <div class="input-field" style="max-width: 110px;"> 
+                    <div class="input-group" style="margin-bottom: 1rem; display: flex; gap: 20px; align-items: flex-start;">
+    
+                        <div class="input-field" style="width: 120px;"> 
                             <label for="batchDate">Batch Date</label>
                             <input type="text" id="batchDate" placeholder="DD/MM/YYYY">
                         </div>
-                        <div class="input-field" style="max-width: 85px;">
+                    
+                        <div class="input-field" style="width: 80px;">
                             <label for="batchSeries">Series</label>
-                            <select id="batchSeries" style="width: 100%; padding: 0.75rem; border: none; border-radius: 8px; background: var(--background-color); box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark);">
+                            <select id="batchSeries" style="width: 100%; padding: 0.5rem; border: none; border-radius: 8px; background: var(--background-color); box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark); font-size: 1.5rem; font-weight: 800; text-align: center;">
                                 <option value="R">R</option>
                                 <option value="A">A</option>
                                 <option value="B">B</option>
                             </select>
                         </div>
+                    
                     </div>
                 
                     <div class="table-container">
@@ -437,6 +440,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
