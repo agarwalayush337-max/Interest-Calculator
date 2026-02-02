@@ -381,55 +381,41 @@ const handleImageScan = async (fileOrEvent) => {
 // --- Tabs ---
 // REPLACE your entire existing showTab function with this:
 const showTab = (tabId) => {
-    // 1. Standard UI Toggle (No changes here)
+    // 1. Intercept "Transactions" click if we are currently VIEWING a report there
+    if (tabId === 'transactionsTab') {
+        const wrapper = document.getElementById('calculatorMainContent');
+        const mount = document.getElementById('transactionCalculatorMount');
+        // If calculator is currently hijacked inside Transactions tab...
+        if (wrapper && wrapper.parentNode === mount) {
+            // ...then "Back" to list instead of reloading tab
+            exitViewMode(); 
+            return; 
+        }
+    }
+
+    // 2. If switching to ANY other tab (e.g. Dashboard), ensure calculator is put back
+    if (tabId !== 'transactionsTab') {
+        restoreCalculator();
+    }
+
+    // 3. Standard Logic
     document.querySelectorAll('.tab-content, .tab-button').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
 
     if (user) {
-        // 2. NEW: Merged Transactions Tab
         if (tabId === 'transactionsTab') {
-            // Always start on the "Pending" view
             toggleTxView('pending');
-            
-            // Load both lists so the toggle works instantly
-        
             loadRecentTransactions(); 
-            
-            // We load finalised in background if empty
-            if (cachedFinalisedReports.length === 0) {
-                 loadFinalisedTransactions();
-            }
+            if (cachedFinalisedReports.length === 0) loadFinalisedTransactions();
         }
-
-       if (tabId === 'dashboardTab') {
-            renderDashboard();
-        }
-
-        // 4. NEW: Inventory Tab (Renamed from loanSearchTab)
+        if (tabId === 'dashboardTab') renderDashboard();
         if (tabId === 'inventoryTab') {
             loadInventory();
-            
-            // Default to Search View
             toggleInventoryView('search'); 
-
-            // Initialize Search Table (Manual Search)
-            if (loanSearchTableBody.rows.length === 0) {
-                for (let i = 0; i < 3; i++) addSearchRow();
-            }
-
-            // Initialize Batch Table (Stock Entry)
-            const batchBody = document.querySelector('#batchTable tbody');
-            if (batchBody && batchBody.rows.length === 0) {
-                for(let i=0; i<3; i++) addBatchRow();
-            }
-
-            // ... cache logic ...
-             if (cachedFinalisedReports.length === 0) {
-                loadFinalisedTransactions().then(buildLoanSearchCache);
-            } else {
-                buildLoanSearchCache();
-            }
+            if (loanSearchTableBody.rows.length === 0) for (let i = 0; i < 3; i++) addSearchRow();
+            if (cachedFinalisedReports.length === 0) loadFinalisedTransactions().then(buildLoanSearchCache);
+            else buildLoanSearchCache();
         }
     }
 };
@@ -1131,10 +1117,54 @@ const exitViewMode = () => {
     setViewMode(false);
     resetCalculatorState();
     listenForLiveStateChanges();
+    
+    // NEW: Always try to restore DOM when exiting view mode
+    restoreCalculator();
+    restoreDefaultBackButton(); // Reset button text
 };
 const restoreDefaultBackButton = () => {
     exitViewModeBtn.textContent = 'Back to Calculator';
     exitViewModeBtn.onclick = exitViewMode;
+};
+
+// --- NEW: DOM Moving Logic ---
+const moveCalculatorToTransactions = () => {
+    const wrapper = document.getElementById('calculatorMainContent');
+    const mount = document.getElementById('transactionCalculatorMount');
+    if (!wrapper || !mount) return;
+
+    // Move the actual DOM element
+    mount.appendChild(wrapper);
+    mount.style.display = 'block';
+
+    // Hide the Transaction Lists & Toggle to avoid clutter
+    const pendingView = document.getElementById('pendingView');
+    const finalisedView = document.getElementById('finalisedView');
+    const toggle = document.querySelector('#transactionsTab .toggle-container');
+
+    if (pendingView) pendingView.style.display = 'none';
+    if (finalisedView) finalisedView.style.display = 'none';
+    if (toggle) toggle.style.display = 'none';
+};
+
+const restoreCalculator = () => {
+    const wrapper = document.getElementById('calculatorMainContent');
+    const originalParent = document.getElementById('calculatorTab');
+    const mount = document.getElementById('transactionCalculatorMount');
+    
+    // Only move back if it is currently in the mount point
+    if (wrapper && originalParent && wrapper.parentNode === mount) {
+        originalParent.appendChild(wrapper);
+        mount.style.display = 'none';
+        
+        // Restore Transaction Tab UI
+        const toggle = document.querySelector('#transactionsTab .toggle-container');
+        if (toggle) toggle.style.display = 'flex';
+        
+        // Re-trigger view toggle to show the correct list
+        const mode = document.getElementById('txPending').checked ? 'pending' : 'finalised';
+        toggleTxView(mode);
+    }
 };
 
 const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calculatorTab') => {
@@ -1146,36 +1176,32 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
         liveStateUnsubscribe = null;
     }
 
-    // --- FIX: Smart "Back" Button Logic ---
-    if (originTab === 'loanSearchTab') {
+    // --- UPDATED: Back Button & Tab Logic ---
+    if (originTab === 'recentTransactionsTab' || originTab === 'finalisedTransactionsTab') {
+        // 1. Stay in Transactions Tab visually
+        moveCalculatorToTransactions(); 
+        
+        // 2. Configure Back Button to restore list
+        exitViewModeBtn.textContent = 'Back to List';
+        exitViewModeBtn.onclick = () => {
+            exitViewMode(); // This will call restoreCalculator
+        };
+
+    } else if (originTab === 'loanSearchTab') {
+        // Existing logic for Search Tab...
         exitViewModeBtn.textContent = 'Back to Loan Search';
         exitViewModeBtn.onclick = () => {
-            // Fix: Go to 'inventoryTab' (the real ID) instead of 'loanSearchTab'
             showTab('inventoryTab'); 
-            toggleInventoryView('search'); // Ensure we land on Search, not Entry
+            toggleInventoryView('search');
             restoreDefaultBackButton();
         };
-    } else if (originTab === 'recentTransactionsTab') {
-        exitViewModeBtn.textContent = 'Back to Recent';
-        exitViewModeBtn.onclick = () => {
-            // Fix: Go to 'transactionsTab' (the real ID)
-            showTab('transactionsTab'); 
-            toggleTxView('pending'); // Force switch to "Pending" list
-            restoreDefaultBackButton();
-        };
-    } else if (originTab === 'finalisedTransactionsTab') {
-        exitViewModeBtn.textContent = 'Back to Finalised';
-        exitViewModeBtn.onclick = () => {
-            // Fix: Go to 'transactionsTab' (the real ID)
-            showTab('transactionsTab'); 
-            toggleTxView('finalised'); // Force switch to "Finalised" list
-            restoreDefaultBackButton();
-        };
+        showTab('calculatorTab'); // Ensure we are on calc tab
     } else {
         restoreDefaultBackButton();
+        showTab('calculatorTab'); // Standard behavior
     }
 
-    showTab('calculatorTab');
+    // Populate Data
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
     loanTableBody.innerHTML = '';
@@ -1194,7 +1220,6 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
     }
     updateAllCalculations();
 };
-
 
 const deleteReport = async (docId, isFinalised = false) => {
     if (isFinalised) {
