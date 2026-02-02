@@ -877,3 +877,45 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     font-weight: 700;
     color: #333;
 }
+
+/* --- Chart Header & Filters --- */
+.chart-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.chart-header-row h3 {
+    margin: 0;
+    padding: 0;
+    border: none;
+    font-size: 1rem;
+    color: var(--subtle-text-color);
+}
+.chart-filters {
+    display: flex;
+    gap: 5px;
+}
+.btn-mini {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #555;
+    transition: all 0.2s;
+}
+.btn-mini:hover {
+    background: #f5f5f5;
+}
+.btn-mini.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
