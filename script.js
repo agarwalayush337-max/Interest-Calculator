@@ -2295,7 +2295,7 @@ if (duesConfirmBtn) {
                 rows.forEach(row => {
                     const no = row.querySelector('.batch-no').value.trim();
                     const principal = row.querySelector('.batch-principal').value.trim();
-                    const type = row.querySelector('.batch-series').value;
+                    const type = row.querySelector('.batch-type').value;
                     const details = row.querySelector('.batch-note').value.trim();
                     
                     if (no && principal) {
