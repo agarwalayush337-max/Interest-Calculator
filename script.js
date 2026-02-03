@@ -693,7 +693,8 @@ const saveBatchEntries = async () => {
         // If we get here, you clicked "Save Entry"
         if (newDuesVal !== currentPreviousDues) {
             finalDues = newDuesVal;
-            finalDuesDate = document.getElementById('batchDate').value || formatDateToDDMMYYYY(new Date());
+            finalDuesDate = document.getElementById('batchDate').value;
+            if (!finalDuesDate) finalDuesDate = formatDateToDDMMYYYY(new Date());
         }
     } catch (error) {
         // If we get here, you clicked "Cancel"
