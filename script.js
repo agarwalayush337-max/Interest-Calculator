@@ -305,17 +305,36 @@ const fillTableFromScan = (loans) => {
     let emptyRowIndex = 0;
     
     loans.forEach((loan) => {
-        // Formatting: B.673 -> B/673
+        // 1. Clean up the scanned number (e.g. B.673 -> B/673)
         let cleanNo = String(loan.no).toUpperCase();
         cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]+(\d)/g, '$1/$2');
         if (/^[A-Z]\d+$/.test(cleanNo)) {
              cleanNo = cleanNo.replace(/([A-Z])(\d)/, '$1/$2');
         }
 
+        // 2. Prepare default scanned values
+        let finalPrincipal = String(loan.principal).replace(/,/g, '');
+        let finalDate = formatDateToDDMMYYYY(parseDate(loan.date));
+
+        // --- NEW: Database Lookup (Priority Override) ---
+        // Check if this loan exists in your Active Inventory
+        const dbMatch = activeInventory.find(item => 
+            normalizeLoanNo(item.no) === normalizeLoanNo(cleanNo)
+        );
+
+        if (dbMatch) {
+            // Found! Use the Database values instead of the Image values
+            finalPrincipal = dbMatch.principal;
+            finalDate = dbMatch.date;
+            // Optional: You could also fix the 'cleanNo' casing to match DB if needed
+            cleanNo = dbMatch.no;
+        }
+        // ------------------------------------------------
+
         const formattedLoan = {
             no: cleanNo,
-            principal: String(loan.principal).replace(/,/g, ''),
-            date: formatDateToDDMMYYYY(parseDate(loan.date))
+            principal: finalPrincipal,
+            date: finalDate
         };
         
         if (emptyRowIndex < emptyRows.length) {
@@ -715,20 +734,37 @@ const generatePDF = async (action = 'save') => {
         ];
     });
 
-    // 4. Draw Table
+    // --- NEW: Calculate Footer Totals ---
+    const tPrincipal = parseFloat(totalPrincipalEl.textContent) || 0;
+    const tInterest = parseFloat(totalInterestEl.textContent) || 0;
+    const tTableTotal = Math.round(tPrincipal + tInterest);
+
+    // 4. Draw Table with Footer
     doc.autoTable({
         startY: 30,
         head: [['SL', 'No', 'Principal', 'Date', 'Duration (Days)', 'Interest', 'Total']],
         body: tableBodyData,
+        // NEW: Add the footer row here
+        foot: [[
+            '', 
+            'TOTAL', 
+            String(tPrincipal), 
+            '', 
+            '', 
+            String(tInterest), 
+            String(tTableTotal)
+        ]],
         theme: 'striped',
         headStyles: { halign: 'center', fontStyle: 'bold' },
+        // NEW: Style the footer row (Bold text, specific colors if you want)
+        footStyles: { halign: 'center', fontStyle: 'bold', textColor: [0, 0, 0], fillColor: [240, 240, 240] },
         styles: { halign: 'center' }
     });
 
     const finalY = doc.autoTable.previous.finalY;
 
     // ==========================================
-    // 5. NEW TOTALS SECTION (6-Line Layout)
+    // 5. TOTALS SECTION (Summary below table)
     // ==========================================
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
@@ -738,14 +774,9 @@ const generatePDF = async (action = 'save') => {
     // Base Y Position
     let currentY = finalY + 10;
 
-    // Get Values
-    const tPrincipal = parseFloat(totalPrincipalEl.textContent) || 0;
-    const tInterest = parseFloat(totalInterestEl.textContent) || 0;
+    // Get Values for Final Calculation
     const pDues = parseFloat(currentPreviousDues) || 0;
-    
-    // Calculated Totals
-    const subTotal = Math.round(tPrincipal + tInterest); // Total (Principal + Interest)
-    const pdfFinalTotal = Math.round(subTotal + pDues);  // Final Amount
+    const pdfFinalTotal = Math.round(tTableTotal + pDues);  // Final Amount including dues
 
     // Line 1: Total Principal
     currentY += 7;
@@ -760,39 +791,32 @@ const generatePDF = async (action = 'save') => {
     // Line 3: Total (Subtotal)
     currentY += 7;
     doc.setFont("helvetica", "bold");
-    doc.text(String(subTotal), numberColumnX, currentY, { align: 'right' });
+    doc.text(String(tTableTotal), numberColumnX, currentY, { align: 'right' });
     doc.text('Total', labelColumnX, currentY, { align: 'left' });
     doc.setFont("helvetica", "normal"); // Reset font
 
     // Lines 4 & 5: Previous Dues & Date
     if (pDues > 0) {
-        // Line 4: Previous Dues Amount
         currentY += 7;
         doc.text(String(pDues), numberColumnX, currentY, { align: 'right' });
         doc.text('Previous Dues', labelColumnX, currentY, { align: 'left' });
 
-        // Line 5: "of [Date]"
         if (currentPreviousDuesDate) {
-            currentY += 5; // Smaller gap for description
-            doc.setFontSize(10); // Smaller font for date
-            doc.setTextColor(100); // Gray color
+            currentY += 5; 
+            doc.setFontSize(10); 
+            doc.setTextColor(100); 
             doc.text(`of ${currentPreviousDuesDate}`, labelColumnX, currentY, { align: 'left' });
-            
-            // Reset Styles
             doc.setFontSize(12);
             doc.setTextColor(0);
         } else {
-            // Just a spacer if no date is found
             currentY += 2; 
         }
 
-        // Line 6: Final Total Amount
-        currentY += 7; // Extra gap before final total
+        currentY += 7; 
         doc.setFont("helvetica", "bold");
         doc.text(String(pdfFinalTotal), numberColumnX, currentY, { align: 'right' });
         doc.text('Total Amount', labelColumnX, currentY, { align: 'left' });
     } else {
-        // If no dues, just show the Final Total (same as subtotal)
         currentY += 7;
         doc.setFont("helvetica", "bold");
         doc.text(String(pdfFinalTotal), numberColumnX, currentY, { align: 'right' });
@@ -821,7 +845,6 @@ const generatePDF = async (action = 'save') => {
         doc.save(fileName);
     }
 };
-
 
 const isDuplicateReport = (newReport, reportList) => {
     const normalizeLoansForComparison = (loans) => {
