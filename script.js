@@ -484,6 +484,9 @@ const toggleInventoryView = (mode) => {
 const batchTableBody = document.querySelector('#batchTable tbody');
 
 // REPLACE your existing addBatchRow function with this:
+// Search for: const addBatchRow = () => {
+// Replace with:
+
 const addBatchRow = () => {
     const batchTableBody = document.querySelector('#batchTable tbody');
     if (!batchTableBody) return;
@@ -496,7 +499,9 @@ const addBatchRow = () => {
         <td>
             <input type="text" class="batch-no" placeholder="ENTER LOAN NO" style="text-transform: uppercase; width: 100%;">
         </td>
-        <td><input type="number" class="batch-principal" placeholder="0"></td>
+        <td>
+            <input type="number" class="batch-principal" placeholder="0" oninput="updateBatchTotal()">
+        </td>
         <td>
             <select class="batch-type" style="border:none; background:transparent; font-weight:900; font-size: 0.9rem; padding: 5px;">
                 <option value="G">G</option>
@@ -505,7 +510,7 @@ const addBatchRow = () => {
         </td>
         <td><input type="text" class="batch-note" placeholder="Details"></td>
         <td style="text-align: center;">
-            <button class="btn btn-danger btn-sm" onclick="removeBatchRow(this)" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
+            <button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows(); updateBatchTotal();" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
         </td>
     `;
 };
@@ -591,7 +596,7 @@ const saveBatchEntries = async () => {
         const details = row.querySelector('.batch-note').value.trim();
 
         if (rawNo && principal) {
-            const cleanNo = normalizeLoanNo(rawNo); // Normalize: R/01 -> R/1
+            const cleanNo = normalizeLoanNo(rawNo);
 
             entries.push({
                 no: cleanNo,
@@ -609,48 +614,83 @@ const saveBatchEntries = async () => {
         return showConfirm("Empty Batch", "Please enter at least one loan number and principal.", false);
     }
 
-    // --- NEW: DUPLICATE SAFETY CHECK ---
-    // We check against the locally cached 'activeInventory' array
+    // 2. Duplicate Check
     const duplicates = entries.filter(newEntry => 
         activeInventory.some(existing => normalizeLoanNo(existing.no) === newEntry.no)
     );
 
     if (duplicates.length > 0) {
-        // If we find duplicates, we STOP and ask the user.
         const dupList = duplicates.map(d => d.no).join(', ');
         const proceed = await showConfirm(
             "Duplicate Warning", 
             `The following loans already exist: ${dupList}. \n\nDo you want to OVERWRITE them with new values?`
         );
-        
-        if (!proceed) {
-            return; // If you click "Cancel", nothing gets saved. Data is safe.
+        if (!proceed) return;
+    }
+
+    // --- NEW: DUES UPDATE LOGIC ---
+    // We use a prompt window to ask for the latest dues
+    let finalDues = currentPreviousDues;
+    let finalDuesDate = currentPreviousDuesDate;
+
+    // Ask user to update dues
+    const inputDues = prompt("Update Pending Dues Amount?\n\nIf the dues have changed, enter the new amount below. If not, leave it as is.", currentPreviousDues);
+
+    if (inputDues !== null) {
+        const parsedDues = parseFloat(inputDues);
+        if (!isNaN(parsedDues) && parsedDues !== currentPreviousDues) {
+            finalDues = parsedDues;
+            // If dues changed, update the date to Today
+            finalDuesDate = document.getElementById('batchDate').value || formatDateToDDMMYYYY(new Date());
         }
     }
-    // -----------------------------------
+    // -----------------------------
 
-    // 2. Send to Firestore
-    showConfirm("Saving...", "Uploading inventory to cloud...", false);
+    // 3. Send to Firestore (Batch Write)
+    showConfirm("Saving...", "Uploading inventory and updating dues...", false);
     const batch = db.batch();
     
+    // A. Save Loan Entries
     entries.forEach(entry => {
         const docId = `${user.uid}_${entry.no.replace(/\//g, '-')}`;
         const docRef = db.collection('activeInventory').doc(docId);
         batch.set(docRef, entry);
     });
 
+    // B. Update Dues in Live State
+    const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
+    batch.set(liveStateRef, {
+        previousDues: finalDues,
+        previousDuesDate: finalDuesDate
+    }, { merge: true });
+
     try {
         await batch.commit();
-        await showConfirm("Success", `Saved ${entries.length} items to Inventory.`, false);
+        
+        // Update local variables immediately for UI responsiveness
+        currentPreviousDues = finalDues;
+        currentPreviousDuesDate = finalDuesDate;
+
+        await showConfirm("Success", `Saved ${entries.length} items and updated Dues to ₹${finalDues}.`, false);
+        
         batchBody.innerHTML = ''; 
-        for(let i=0; i<3; i++) addBatchRow(); 
+        for(let i=0; i<3; i++) { 
+            // Add rows back ensuring the new function is called
+            addBatchRow(); 
+        }
+        
+        // Reset Total Display
+        if(document.getElementById('batchTotalDisplay')) {
+            document.getElementById('batchTotalDisplay').textContent = '₹0';
+        }
+
         loadInventory(); 
+
     } catch (error) {
         console.error("Batch Save Error:", error);
         await showConfirm("Error", "Failed to save batch. Check internet connection.", false);
     }
 };
-
 // NEW: Auto-Add Row Logic for Batch Table
 const batchTable = document.querySelector('#batchTable tbody');
 
