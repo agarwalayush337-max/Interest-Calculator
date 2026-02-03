@@ -752,7 +752,7 @@ const generatePDF = async (action = 'save') => {
             '', 
             '', 
             String(tInterest), 
-            String(tTableTotal)
+            ''
         ]],
         theme: 'striped',
         headStyles: { halign: 'center', fontStyle: 'bold' },
