@@ -579,6 +579,62 @@ const loadInventory = async () => {
     }
 };
 
+// --- NEW HELPER: Reuse Dues Modal for Batch Entry ---
+const askDuesForBatch = (currentVal) => {
+    return new Promise((resolve, reject) => {
+        const modal = document.getElementById('duesModal');
+        const input = document.getElementById('duesInput');
+        const confirmBtn = document.getElementById('duesConfirmBtn');
+        const cancelBtn = document.getElementById('duesCancelBtn');
+        const title = modal.querySelector('h2');
+        const msg = modal.querySelector('p');
+
+        // 1. Save original text to restore later
+        const origTitle = title.textContent;
+        const origMsg = msg.textContent;
+        const origBtn = confirmBtn.textContent;
+
+        // 2. Customize Modal for Batch Entry
+        title.textContent = "Update Dues Amount";
+        msg.textContent = "Confirm the total pending dues before saving:";
+        confirmBtn.textContent = "Save Entry";
+        input.value = currentVal;
+
+        // 3. Show Modal
+        modal.style.display = 'flex';
+        input.focus();
+
+        // 4. Define Temporary Handlers
+        const onConfirm = () => {
+            const val = parseFloat(input.value);
+            cleanup();
+            // Resolve with new value (or 0 if empty)
+            resolve(isNaN(val) ? 0 : val);
+        };
+
+        const onCancel = () => {
+            cleanup();
+            reject('cancelled'); // Reject Promise to stop saving
+        };
+
+        // 5. Cleanup Function (Restores UI & Removes Listeners)
+        const cleanup = () => {
+            modal.style.display = 'none';
+            confirmBtn.removeEventListener('click', onConfirm);
+            cancelBtn.removeEventListener('click', onCancel);
+            
+            // Restore Original Text for Finalise Report
+            title.textContent = origTitle;
+            msg.textContent = origMsg;
+            confirmBtn.textContent = origBtn;
+        };
+
+        // 6. Attach Listeners
+        confirmBtn.addEventListener('click', onConfirm);
+        cancelBtn.addEventListener('click', onCancel);
+    });
+};
+
 // --- Add this to your script.js ---
 
 const saveBatchEntries = async () => {
@@ -597,7 +653,6 @@ const saveBatchEntries = async () => {
 
         if (rawNo && principal) {
             const cleanNo = normalizeLoanNo(rawNo);
-
             entries.push({
                 no: cleanNo,
                 principal: principal,
@@ -611,7 +666,7 @@ const saveBatchEntries = async () => {
     });
 
     if (entries.length === 0) {
-        return showConfirm("Empty Batch", "Please enter at least one loan number and principal.", false);
+        return showConfirm("Empty Batch", "Please enter at least one loan.", false);
     }
 
     // 2. Duplicate Check
@@ -620,44 +675,44 @@ const saveBatchEntries = async () => {
     );
 
     if (duplicates.length > 0) {
-        const dupList = duplicates.map(d => d.no).join(', ');
         const proceed = await showConfirm(
             "Duplicate Warning", 
-            `The following loans already exist: ${dupList}. \n\nDo you want to OVERWRITE them with new values?`
+            `Loans already exist: ${duplicates.map(d => d.no).join(', ')}. Overwrite?`
         );
         if (!proceed) return;
     }
 
-    // --- NEW: DUES UPDATE LOGIC ---
-    // We use a prompt window to ask for the latest dues
+    // --- NEW: POPUP FOR DUES (Async) ---
     let finalDues = currentPreviousDues;
     let finalDuesDate = currentPreviousDuesDate;
 
-    // Ask user to update dues
-    const inputDues = prompt("Update Pending Dues Amount?\n\nIf the dues have changed, enter the new amount below. If not, leave it as is.", currentPreviousDues);
-
-    if (inputDues !== null) {
-        const parsedDues = parseFloat(inputDues);
-        if (!isNaN(parsedDues) && parsedDues !== currentPreviousDues) {
-            finalDues = parsedDues;
-            // If dues changed, update the date to Today
+    try {
+        // This opens the modal and waits for your click
+        const newDuesVal = await askDuesForBatch(currentPreviousDues);
+        
+        // If we get here, you clicked "Save Entry"
+        if (newDuesVal !== currentPreviousDues) {
+            finalDues = newDuesVal;
             finalDuesDate = document.getElementById('batchDate').value || formatDateToDDMMYYYY(new Date());
         }
+    } catch (error) {
+        // If we get here, you clicked "Cancel"
+        // We stop the function. Data remains in the table.
+        return; 
     }
-    // -----------------------------
+    // -----------------------------------
 
-    // 3. Send to Firestore (Batch Write)
-    showConfirm("Saving...", "Uploading inventory and updating dues...", false);
+    // 3. Save to Firestore
+    showConfirm("Saving...", "Uploading...", false);
     const batch = db.batch();
     
-    // A. Save Loan Entries
     entries.forEach(entry => {
         const docId = `${user.uid}_${entry.no.replace(/\//g, '-')}`;
         const docRef = db.collection('activeInventory').doc(docId);
         batch.set(docRef, entry);
     });
 
-    // B. Update Dues in Live State
+    // Update Dues
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
     batch.set(liveStateRef, {
         previousDues: finalDues,
@@ -667,30 +722,28 @@ const saveBatchEntries = async () => {
     try {
         await batch.commit();
         
-        // Update local variables immediately for UI responsiveness
+        // Update Local State
         currentPreviousDues = finalDues;
         currentPreviousDuesDate = finalDuesDate;
 
-        await showConfirm("Success", `Saved ${entries.length} items and updated Dues to ₹${finalDues}.`, false);
+        await showConfirm("Success", `Saved ${entries.length} items. Dues: ₹${finalDues}`, false);
         
+        // Clear Table and Reset
         batchBody.innerHTML = ''; 
-        for(let i=0; i<3; i++) { 
-            // Add rows back ensuring the new function is called
-            addBatchRow(); 
-        }
+        for(let i=0; i<3; i++) addBatchRow(); 
         
-        // Reset Total Display
         if(document.getElementById('batchTotalDisplay')) {
             document.getElementById('batchTotalDisplay').textContent = '₹0';
         }
-
         loadInventory(); 
 
     } catch (error) {
         console.error("Batch Save Error:", error);
-        await showConfirm("Error", "Failed to save batch. Check internet connection.", false);
+        await showConfirm("Error", "Failed to save. Check internet.", false);
     }
 };
+
+
 // NEW: Auto-Add Row Logic for Batch Table
 const batchTable = document.querySelector('#batchTable tbody');
 
