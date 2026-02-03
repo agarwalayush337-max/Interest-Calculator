@@ -50,7 +50,6 @@ let pendingReportIdToFinalise = null;
 
 // --- Real-time Sync Variables ---
 let liveStateUnsubscribe = null;
-let isBatchSaveMode = false; // Tracks if we are saving a batch or finalising a report
 let isUpdatingFromListener = false;
 const sessionClientId = Date.now().toString() + Math.random().toString();
 
@@ -578,32 +577,77 @@ const loadInventory = async () => {
 // --- Add this to your script.js ---
 
 const saveBatchEntries = async () => {
-    const rows = Array.from(document.querySelectorAll('#batchTable tbody tr'));
+    if (!user) return showConfirm("Error", "You must be logged in to save.", false);
     
-    // 1. Validation
-    if (rows.length === 0) return showConfirm("Error", "No entries to save.", false);
+    const batchBody = document.querySelector('#batchTable tbody');
+    const rows = Array.from(batchBody.querySelectorAll('tr'));
     
-    let hasData = false;
+    // 1. Prepare Data
+    const entries = [];
     rows.forEach(row => {
-        if (row.querySelector('.batch-no').value) hasData = true;
-    });
-    
-    if (!hasData) return showConfirm("Error", "Please fill in at least one loan entry.", false);
+        let rawNo = row.querySelector('.batch-no').value.trim().toUpperCase();
+        const principal = row.querySelector('.batch-principal').value;
+        const type = row.querySelector('.batch-type').value; 
+        const details = row.querySelector('.batch-note').value.trim();
 
-    // 2. Open the Dues Modal instead of saving directly
-    const modal = document.getElementById('finaliseModal');
-    const title = document.getElementById('modalTitle');
-    const input = document.getElementById('duesInput');
+        if (rawNo && principal) {
+            const cleanNo = normalizeLoanNo(rawNo); // Normalize: R/01 -> R/1
+
+            entries.push({
+                no: cleanNo,
+                principal: principal,
+                type: type,
+                details: details,
+                date: document.getElementById('batchDate').value || formatDateToDDMMYYYY(new Date()),
+                userId: user.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    });
+
+    if (entries.length === 0) {
+        return showConfirm("Empty Batch", "Please enter at least one loan number and principal.", false);
+    }
+
+    // --- NEW: DUPLICATE SAFETY CHECK ---
+    // We check against the locally cached 'activeInventory' array
+    const duplicates = entries.filter(newEntry => 
+        activeInventory.some(existing => normalizeLoanNo(existing.no) === newEntry.no)
+    );
+
+    if (duplicates.length > 0) {
+        // If we find duplicates, we STOP and ask the user.
+        const dupList = duplicates.map(d => d.no).join(', ');
+        const proceed = await showConfirm(
+            "Duplicate Warning", 
+            `The following loans already exist: ${dupList}. \n\nDo you want to OVERWRITE them with new values?`
+        );
+        
+        if (!proceed) {
+            return; // If you click "Cancel", nothing gets saved. Data is safe.
+        }
+    }
+    // -----------------------------------
+
+    // 2. Send to Firestore
+    showConfirm("Saving...", "Uploading inventory to cloud...", false);
+    const batch = db.batch();
     
-    if (modal && input) {
-        isBatchSaveMode = true; // Set Flag
-        
-        if(title) title.textContent = "Save Batch & Update Dues";
-        
-        // Pre-fill with current global dues
-        input.value = currentPreviousDues || 0; 
-        
-        modal.style.display = 'flex';
+    entries.forEach(entry => {
+        const docId = `${user.uid}_${entry.no.replace(/\//g, '-')}`;
+        const docRef = db.collection('activeInventory').doc(docId);
+        batch.set(docRef, entry);
+    });
+
+    try {
+        await batch.commit();
+        await showConfirm("Success", `Saved ${entries.length} items to Inventory.`, false);
+        batchBody.innerHTML = ''; 
+        for(let i=0; i<3; i++) addBatchRow(); 
+        loadInventory(); 
+    } catch (error) {
+        console.error("Batch Save Error:", error);
+        await showConfirm("Error", "Failed to save batch. Check internet connection.", false);
     }
 };
 
@@ -2097,32 +2141,16 @@ const listenForLiveStateChanges = () => {
 
 
 // --- DUES FINALISE LOGIC (Updated: Auto-Removes from Inventory) ---
-// --- DUES FINALISE LOGIC ---
 const finaliseReport = (docId) => {
-    // 1. Set the Mode to 'Report' (Not Batch)
-    isBatchSaveMode = false;
-
-    // 2. Store the ID so we know which report to archive later
+    // 1. Store the ID
     pendingReportIdToFinalise = docId;
     
-    // 3. Setup the Modal
-    const modal = document.getElementById('finaliseModal');
-    const title = document.getElementById('modalTitle');
-    const input = document.getElementById('duesInput');
-
-    if (modal && input) {
-        // Update Title
-        if(title) title.textContent = "Finalise & Update Dues";
-        
-        // Pre-fill with current global dues (or 0)
-        input.value = currentPreviousDues || 0; 
-        
-        // Open Modal
-        modal.style.display = 'flex';
-        
-        // Auto-focus input
-        setTimeout(() => input.focus(), 100);
-    }
+    // 2. Clear & Open Dues Modal IMMEDIATELY
+    document.getElementById('duesInput').value = ''; 
+    document.getElementById('duesModal').style.display = 'flex';
+    
+    // 3. Auto-focus input
+    setTimeout(() => document.getElementById('duesInput').focus(), 100);
 };
 
 const confirmFinaliseWithDues = async () => {
@@ -2274,85 +2302,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
     }
     // --- DUES MODAL LISTENERS ---
-    // --- UPDATED Modal Confirm Button Logic ---
-const duesConfirmBtn = document.getElementById('duesConfirmBtn');
-if (duesConfirmBtn) {
-    duesConfirmBtn.addEventListener('click', async () => {
-        const modal = document.getElementById('finaliseModal');
-        const duesInput = document.getElementById('duesInput');
-        const newDues = parseFloat(duesInput.value) || 0;
+    const duesConfirmBtn = document.getElementById('duesConfirmBtn');
+    if (duesConfirmBtn) duesConfirmBtn.addEventListener('click', confirmFinaliseWithDues);
 
-        // --- SCENARIO 1: SAVING BATCH ENTRIES ---
-        if (isBatchSaveMode) {
-            try {
-                // 1. Update Global Dues Variable
-                currentPreviousDues = newDues; 
-
-                // 2. Collect Batch Data
-                const rows = Array.from(document.querySelectorAll('#batchTable tbody tr'));
-                const batchLoans = [];
-                
-                rows.forEach(row => {
-                    const no = row.querySelector('.batch-no').value.trim();
-                    const principal = row.querySelector('.batch-principal').value.trim();
-                    const type = row.querySelector('.batch-type').value;
-                    const details = row.querySelector('.batch-note').value.trim();
-                    
-                    if (no && principal) {
-                        batchLoans.push({
-                            no: `${type}/${no}`, // Combine Series + No (e.g., R/105)
-                            principal: principal,
-                            type: type, 
-                            date: document.getElementById('batchDate').value || todayDateEl.value,
-                            details: details,
-                            status: 'active'
-                        });
-                    }
-                });
-
-                // 3. Save Loans to Firestore
-                const batch = db.batch();
-                batchLoans.forEach(loan => {
-                    const docRef = db.collection('inventory').doc(user.uid).collection('items').doc(); 
-                    batch.set(docRef, loan);
-                });
-
-                // 4. IMPORTANT: Save the New Dues to 'liveCalculatorState'
-                const stateRef = db.collection('liveCalculatorState').doc(user.uid);
-                batch.set(stateRef, { previousDues: newDues }, { merge: true });
-
-                await batch.commit();
-
-                // 5. Cleanup
-                document.querySelector('#batchTable tbody').innerHTML = ''; // Clear table
-                // Add empty rows back
-                if (typeof addBatchRow === 'function') {
-                    for(let i=0; i<3; i++) addBatchRow();
-                }
-                updateBatchTotal(); // Reset total
-                
-                modal.style.display = 'none';
-                isBatchSaveMode = false; // Reset mode
-                showConfirm("Success", "Batch entries saved and Dues updated!", false);
-                
-                // Refresh Dashboard/Inventory
-                loadInventory(); 
-
-            } catch (error) {
-                console.error("Batch Save Error:", error);
-                showConfirm("Error", "Failed to save batch.", false);
-            }
-        } 
-        
-        // --- SCENARIO 2: FINALISING REPORT (Existing Logic) ---
-        else {
-            if (typeof finaliseReport === 'function') {
-                finaliseReport(newDues); 
-            }
-            modal.style.display = 'none';
-        }
+    const duesCancelBtn = document.getElementById('duesCancelBtn');
+    if (duesCancelBtn) duesCancelBtn.addEventListener('click', () => {
+        document.getElementById('duesModal').style.display = 'none';
+        pendingReportIdToFinalise = null;
     });
-}
 
     // 3. Standard Listener (Browser Mode / Already Logged In)
     auth.onAuthStateChanged((firebaseUser) => {
