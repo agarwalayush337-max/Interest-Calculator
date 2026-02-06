@@ -54,28 +54,37 @@ exports.handler = async function(event) {
 
         Do not include markdown formatting. Just the JSON.`;
     } else if (scanType === 'loan_entry') {
+        // --- UPDATED PROMPT WITH NEW REQUIREMENTS ---
         promptText = `
         Analyze this handwritten list of loans. 
-        Columns are generally: Number | Amount | Circled Letter (Type) | Hindi Details.
+        Columns are generally: Number | Amount | Type (G/S) | Hindi Details.
         
         Return a raw JSON array (key: "loans") where each object has:
         
         1. "no": The loan number (e.g., "11", "12"). 
-           - Do not add prefixes like 'R/' here, just extract the number written.
+           - Extract only the number written.
         
         2. "principal": The amount (e.g., "25000"). Digits only.
         
         3. "type": 
-           - Look for a circled 'G' or 'S'.
-           - OR look at the Hindi text: "सोना" (Sona) = 'G', "चांदी" (Chandi) = 'S'.
+           - Look for 'G' or 'S' (they might be circled OR just written plain).
+           - CRITICAL RULE: If BOTH 'G' and 'S' are written (like "G/S" or "S/G"), treat it as "S".
+           - Fallback: If type is unclear, look at details: "सोना" (Sona) = 'G', "चांदी" (Chandi) = 'S'.
            - Return exactly "G" or "S".
         
-        4. "details": Transcribe the Hindi/English details column exactly.
-           - Examples from image: "सोना 4 आना" -> "Sona 4 Aana"
-           - "चांदी 15 Bhari" -> "Chandi 15 Bhari"
-           - "सोना 1 भरी" -> "Sona 1 Bhari"
-           - Keep the numbers and units (Aana/Bhari). 
-           - Transliterate Hindi to English (e.g., write "Sona" not "सोना").
+        4. "details": Format this string strictly based on the Type found:
+           - IF TYPE IS "G": 
+             Start with "Sona". Look for "भरी" (Bhari) or "आना" (Aana). 
+             Format: "Sona [Number] [Unit]". 
+             Examples: "Sona 4 Aana", "Sona 2 Bhari", "Sona 6.5 Aana".
+             
+           - IF TYPE IS "S": 
+             Start with "Chandi". Look for "भरी" (Bhari). 
+             Format: "Chandi [Number] Bhari".
+             Examples: "Chandi 5 Bhari", "Chandi 17 Bhari".
+
+           - Transliterate all Hindi to English: "सोना"->"Sona", "चांदी"->"Chandi", "भरी"->"Bhari", "आना"->"Aana".
+           - Ignore extra index numbers or garbage text at the end.
 
         Output JSON only. No markdown.`;
     } else {
