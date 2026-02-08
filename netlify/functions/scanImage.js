@@ -54,29 +54,30 @@ exports.handler = async function(event) {
 
         Do not include markdown formatting. Just the JSON.`;
     } else if (scanType === 'loan_entry') {
-        // --- HYBRID PROMPT: Old Accuracy + New Logic ---
+        // --- LOGIC-FIRST PROMPT: Context Rules Over Vision ---
         promptText = `
         Analyze this handwritten list of loans. 
-        Columns are generally: Number | Amount | Circled Letter (Type) | Hindi Details.
-        
-        Return a raw JSON array (key: "loans") where each object has:
-        
-        1. "no": The loan number (e.g., "11", "12"). 
-           - Do not add prefixes like 'R/' here, just extract the number written.
-        
-        2. "principal": The amount (e.g., "25000"). Digits only.
-        
-        3. "type": 
-           - Look for a 'G' or 'S' (often circled, but sometimes just written).
-           - CRITICAL: If BOTH are written (e.g., "G/S"), choose "S".
-           - OR look at the Hindi text: "सोना" (Sona) = 'G', "चांदी" (Chandi) = 'S'.
-           - Return exactly "G" or "S".
-        
-        4. "details": Transcribe the details, but strictly follow this format:
-           - If Type is 'G': Start with "Sona". (e.g., "Sona 4 Aana").
-           - If Type is 'S': Start with "Chandi". (e.g., "Chandi 15 Bhari").
-           - Transliterate Hindi to English (e.g., write "Sona" not "सोना").
-           - Keep the numbers and units (Aana/Bhari) exactly as written.
+        Columns: Number | Amount | Type (Symbol) | Details (Hindi/English).
+
+        Return a raw JSON array (key: "loans") by following these steps for EACH row:
+
+        STEP 1: Transcribe the 'Details' column strictly.
+           - Look for keywords: "Aana" (आना), "Ratti" (रत्ती), "Gram" (ग्राम), "Masha" (माशा), "Bhari" (भरी), or just numbers (e.g., "930").
+
+        STEP 2: Determine "type" ('G' or 'S') based on strict rules:
+           - RULE A: If details contain "Aana", "Ratti", "Gram", "Masha", "Sona" -> Type is AUTOMATICALLY 'G' (Ignore the symbol).
+           - RULE B: If details contain "Bhari" or "Chandi" -> Type is AUTOMATICALLY 'S' (Ignore the symbol).
+           - RULE C (Tie-Breaker): If details are ONLY numbers (e.g., "930") or unclear, look at the circled letter to decide.
+           - CRITICAL: "Aana" is NEVER Silver. "Bhari" is NEVER Gold.
+
+        STEP 3: Format the Output JSON:
+           1. "no": Loan number (digits only, e.g., "46").
+           2. "principal": Amount (digits only).
+           3. "type": The final 'G' or 'S' decided in Step 2.
+           4. "details": Format strictly based on the final Type:
+              - If Type 'G': Start with "Sona". (e.g., "Sona 2 Aana", "Sona 930").
+              - If Type 'S': Start with "Chandi". (e.g., "Chandi 7 Bhari").
+              - Keep the numbers and units exactly as written.
 
         Output JSON only. No markdown.`;
     } else {
