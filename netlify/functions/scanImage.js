@@ -118,6 +118,7 @@ exports.handler = async function(event) {
     if (!jsonText) {
       throw new Error("Could not find parsable text in Gemini's response.");
     }
+    console.log("===== RAW AI RESPONSE =====", jsonText);
     
     const regex = /```json\s*([\s\S]*?)\s*```/;
     const match = jsonText.match(regex);
