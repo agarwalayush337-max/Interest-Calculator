@@ -720,6 +720,17 @@ const saveBatchEntries = async () => {
         previousDuesDate: finalDuesDate
     }, { merge: true });
 
+    // --- NEW: Save to Permanent History Ledger ---
+    const duesHistoryRef = db.collection('duesHistory').doc(); // Auto-generates unique ID
+    batch.set(duesHistoryRef, {
+        amount: finalDues,
+        date: finalDuesDate,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        source: 'Batch Entry',
+        updatedBy: user.email || user.uid
+    });
+    // ---------------------------------------------
+
     // Mirror to live state just to keep legacy code happy
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
     batch.set(liveStateRef, {
@@ -2308,13 +2319,24 @@ const confirmFinaliseWithDues = async () => {
                 previousDuesDate: reportData.reportDate 
             }, { merge: true });
 
+            // --- NEW: Save to Permanent History Ledger ---
+            const duesHistoryRef = db.collection('duesHistory').doc();
+            batch.set(duesHistoryRef, {
+                amount: newDues,
+                date: reportData.reportDate,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                source: 'Finalise Report: ' + reportId,
+                updatedBy: user.email || user.uid
+            });
+            // ---------------------------------------------
+
             // Mirror to live state just to keep legacy code happy
             const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
             batch.set(liveStateRef, {
                 previousDues: newDues,
                 previousDuesDate: reportData.reportDate 
             }, { merge: true });
-
+            
             // C. MOVE LOANS: Active -> Redeemed
             let moveCount = 0;
             if (reportData.loans && Array.isArray(reportData.loans)) {
