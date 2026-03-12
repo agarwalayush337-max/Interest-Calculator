@@ -1816,7 +1816,8 @@ const renderLiveStats = () => {
     
     let totalPrincipal = 0, totalInterest = 0;
     let mixStats = { goldVal: 0, silverVal: 0, goldCount: 0, silverCount: 0 };
-    let agingStats = { normalVal: 0, midVal: 0, oldVal: 0 };
+    // --- FIX: Added Count Variables for Aging ---
+    let agingStats = { normalVal: 0, midVal: 0, oldVal: 0, normalCount: 0, midCount: 0, oldCount: 0 };
     let ageStats = { totalDays: 0, count: 0, gDays: 0, gCount: 0, sDays: 0, sCount: 0 };
 
     let activeLoansList = [];
@@ -1848,9 +1849,17 @@ const renderLiveStats = () => {
             totalPrincipal += p; 
             totalInterest += interest;
 
-            if (days < 730) agingStats.normalVal += p; 
-            else if (days < 1095) agingStats.midVal += p; 
-            else agingStats.oldVal += p;
+            // --- FIX: Increment Counts Alongside Values ---
+            if (days < 730) { 
+                agingStats.normalVal += p; 
+                agingStats.normalCount++; 
+            } else if (days < 1095) { 
+                agingStats.midVal += p; 
+                agingStats.midCount++; 
+            } else { 
+                agingStats.oldVal += p; 
+                agingStats.oldCount++; 
+            }
         }
     });
 
@@ -2048,10 +2057,16 @@ const renderLiveStats = () => {
     const activeSorted = activeInventory.map(loan => {
          const p = parseFloat(loan.principal) || 0;
          const loanDate = parseDate(loan.date);
-         const days = loanDate ? days360(loanDate, today) : 0;
-         return { ...loan, principal: p, days, totalValue: p + (p * rate * days) / 3000 };
+         let days = loanDate ? days360(loanDate, today) : 0;
+         if (days < 0) days = 0;
+         
+         // Apply minimum 30 days logic for interest calculation
+         const calcDays = (days > 0 && days < 30) ? 30 : days;
+         const interest = (p * rate * calcDays) / 3000;
+         
+         return { ...loan, principal: p, days, totalValue: p + interest };
     });
-
+    
     const oldestLoans = [...activeSorted].sort((a, b) => b.days - a.days).slice(0, 5);
     document.getElementById('oldestLoansList').innerHTML = oldestLoans.map(l => {
         const years = (l.days / 365).toFixed(1);
