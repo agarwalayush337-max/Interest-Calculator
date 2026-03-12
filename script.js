@@ -1049,10 +1049,16 @@ const exportToPDF = async () => {
     if (isViewMode) {
         generatePDF('save');
     } else {
-        const wasSaved = await saveReport(true); 
-        if (wasSaved) {
-            generatePDF('save');
+        // Prevent silent save from wiping the UI/state before PDF grabs the data.
+        // Check if there are loans, generate the PDF first, and THEN save the report.
+        const currentLoans = getCurrentLoans();
+        if (currentLoans.length === 0) {
+            showConfirm("Cannot Generate PDF", "Please add loan data to generate a report.", false);
+            return;
         }
+        
+        await generatePDF('save');
+        await saveReport(true); 
     }
 };
 
