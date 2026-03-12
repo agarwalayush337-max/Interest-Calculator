@@ -2074,10 +2074,11 @@ const renderLiveStats = () => {
         return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.principal).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(₹${Math.round(l.totalValue).toLocaleString('en-IN')})</div></div></li>`;
     }).join('');
     
-    const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
+   const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
     document.getElementById('highValueList').innerHTML = highValueLoans.map(l => {
+        const years = (l.days / 365).toFixed(1);
         const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
-        return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')}</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}<div style="font-size:0.7rem; color:#888;">(Incl. Int)</div></div></li>`;
+        return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')})</div></div></li>`;
     }).join('');
 };
 // 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
