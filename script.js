@@ -2476,7 +2476,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         listenForLiveStateChanges(); 
         syncData();
+        
+        // --- NEW: EAGER LOADING ---
+        // Fetch everything in the background instantly on login.
+        // It will load from the local cache instantly, then sync.
         loadInventory();
+        loadRecentTransactions();
+        loadFinalisedTransactions();
     }
 
     function handleUserLogout() {
