@@ -713,7 +713,14 @@ const saveBatchEntries = async () => {
         batch.set(docRef, entry);
     });
 
-    // Update Dues
+    // Update Shared Dues Globally
+    const sharedDuesRef = db.collection('globalSettings').doc('sharedDues');
+    batch.set(sharedDuesRef, {
+        previousDues: finalDues,
+        previousDuesDate: finalDuesDate
+    }, { merge: true });
+
+    // Mirror to live state just to keep legacy code happy
     const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
     batch.set(liveStateRef, {
         previousDues: finalDues,
@@ -2188,11 +2195,10 @@ const listenForLiveStateChanges = () => {
 
             isUpdatingFromListener = true;
 
-            // --- CHANGED: Load Silently ---
-            currentPreviousDues = parseFloat(state.previousDues) || 0;
-            currentPreviousDuesDate = state.previousDuesDate || ''; // <--- Load Date
-            // We DO NOT update the UI here.
-            // -----------------------------
+            // --- REMOVED VOLATILE DUES LOADING ---
+            // Dues are now safely handled by the permanent global collection.
+            // We DO NOT overwrite currentPreviousDues here anymore to prevent data loss.
+            // ---------------------------------------------------
 
             // --- FIX 2: FORCE CURRENT DATE ---
             // If the saved date is NOT today, we assume it's old/stale and force Today.
@@ -2295,7 +2301,14 @@ const confirmFinaliseWithDues = async () => {
                 finalisedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // B. Update Live Dues
+            // B. Update Shared Dues Globally
+            const sharedDuesRef = db.collection('globalSettings').doc('sharedDues');
+            batch.set(sharedDuesRef, {
+                previousDues: newDues,
+                previousDuesDate: reportData.reportDate 
+            }, { merge: true });
+
+            // Mirror to live state just to keep legacy code happy
             const liveStateRef = db.collection('liveCalculatorState').doc(user.uid);
             batch.set(liveStateRef, {
                 previousDues: newDues,
@@ -2431,6 +2444,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         loginOverlay.style.display = 'none';
         appContainer.style.display = 'block';
         
+        // --- NEW: Fetch Global Shared Dues ---
+        db.collection('globalSettings').doc('sharedDues').get().then(doc => {
+            if (doc.exists) {
+                currentPreviousDues = parseFloat(doc.data().previousDues) || 0;
+                currentPreviousDuesDate = doc.data().previousDuesDate || '';
+            }
+        }).catch(err => console.error("Error loading shared dues:", err));
+
         listenForLiveStateChanges(); 
         syncData();
         loadInventory();
