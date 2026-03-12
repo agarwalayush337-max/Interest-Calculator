@@ -2064,9 +2064,10 @@ const renderLiveStats = () => {
          const calcDays = (days > 0 && days < 30) ? 30 : days;
          const interest = (p * rate * calcDays) / 3000;
          
-         return { ...loan, principal: p, days, totalValue: p + interest };
+         // Fix: explicitly return the 'interest' variable so we can sort by it later
+         return { ...loan, principal: p, days, interest: interest, totalValue: p + interest };
     });
-    
+
     const oldestLoans = [...activeSorted].sort((a, b) => b.days - a.days).slice(0, 5);
     document.getElementById('oldestLoansList').innerHTML = oldestLoans.map(l => {
         const years = (l.days / 365).toFixed(1);
@@ -2074,12 +2075,34 @@ const renderLiveStats = () => {
         return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.principal).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(₹${Math.round(l.totalValue).toLocaleString('en-IN')})</div></div></li>`;
     }).join('');
     
-   const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
+    const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
     document.getElementById('highValueList').innerHTML = highValueLoans.map(l => {
         const years = (l.days / 365).toFixed(1);
         const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
         return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')})</div></div></li>`;
     }).join('');
+
+    // --- NEW: Top Highest Interest Loans ---
+    const highestInterestListEl = document.getElementById('highestInterestList');
+    if (highestInterestListEl) {
+        const highestInterestLoans = [...activeSorted].sort((a, b) => b.interest - a.interest).slice(0, 5);
+        highestInterestListEl.innerHTML = highestInterestLoans.map(l => {
+            const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
+            // Layout: 
+            // Left Side: Loan No & Tag | Date & Principal
+            // Right Side: Total Value | Interest Generated
+            return `<li>
+                <div class="list-main">
+                    <span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span>
+                    <span class="list-sub">${l.date} &bull; Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')}</span>
+                </div>
+                <div class="list-val">
+                    ₹${Math.round(l.totalValue).toLocaleString('en-IN')}
+                    <div style="font-size:0.75rem; color:#d90429; font-weight:bold; margin-top:3px;">(Int: ₹${Math.round(l.interest).toLocaleString('en-IN')})</div>
+                </div>
+            </li>`;
+        }).join('');
+    }
 };
 // 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
 const renderHistoricalStats = () => {
