@@ -2130,9 +2130,9 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
         }).join('');
     }
 
-    // --- NEW: Series Wise Breakdown ---
-    const seriesListEl = document.getElementById('seriesBreakdownList');
-    if (seriesListEl) {
+    // --- NEW: Series Wise Breakdown Chart ---
+    const seriesCanvas = document.getElementById('seriesBreakdownChart');
+    if (seriesCanvas) {
         const seriesStats = {};
         let totalActivePrincipal = 0;
 
@@ -2140,7 +2140,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             const p = parseFloat(loan.principal) || 0;
             if (p <= 0) return;
 
-            // Extract the series letter (e.g., "R/11" -> "R", "A-52" -> "A")
+            // Extract the series letter
             let series = "OTHER";
             const cleanNo = loan.no ? loan.no.trim().toUpperCase() : "";
             const match = cleanNo.match(/^([A-Z]+)/);
@@ -2152,12 +2152,10 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
                 seriesStats[series] = { count: 0, principal: 0, gCount: 0, sCount: 0, gPrincipal: 0, sPrincipal: 0 };
             }
 
-            // Aggregate Totals
             seriesStats[series].count++;
             seriesStats[series].principal += p;
             totalActivePrincipal += p;
 
-            // Segregate G and S
             if (loan.type === 'G') {
                 seriesStats[series].gCount++;
                 seriesStats[series].gPrincipal += p;
@@ -2170,21 +2168,87 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
         // Sort by highest principal value first
         const sortedSeries = Object.keys(seriesStats).sort((a, b) => seriesStats[b].principal - seriesStats[a].principal);
 
-        seriesListEl.innerHTML = sortedSeries.map(s => {
+        const labels = [];
+        const gData = [];
+        const sData = [];
+        const customTooltipData = [];
+
+        sortedSeries.forEach(s => {
             const stat = seriesStats[s];
             const weight = totalActivePrincipal > 0 ? ((stat.principal / totalActivePrincipal) * 100).toFixed(1) : 0;
             
-            return `<li>
-                <div class="list-main">
-                    <span class="list-no">Series ${s} <span style="font-size: 0.8rem; font-weight:normal; color:#666;">(${weight}% Weightage)</span></span>
-                    <span class="list-sub">Total Loans: ${stat.count} &bull; <span style="color:#d4af37; font-weight:bold;">G: ${stat.gCount}</span> | <span style="color:#555; font-weight:bold;">S: ${stat.sCount}</span></span>
-                </div>
-                <div class="list-val">
-                    ₹${Math.round(stat.principal).toLocaleString('en-IN')}
-                    <div style="font-size:0.75rem; color:#888; margin-top:3px;">(G: ₹${Math.round(stat.gPrincipal).toLocaleString('en-IN')} | S: ₹${Math.round(stat.sPrincipal).toLocaleString('en-IN')})</div>
-                </div>
-            </li>`;
-        }).join('');
+            labels.push(`Series ${s}`);
+            gData.push(stat.gPrincipal);
+            sData.push(stat.sPrincipal);
+            
+            // Store extra data for the smart tooltip
+            customTooltipData.push({
+                weight: weight,
+                totalCount: stat.count,
+                gCount: stat.gCount,
+                sCount: stat.sCount
+            });
+        });
+
+        if (window.seriesChartInstance) window.seriesChartInstance.destroy();
+
+        window.seriesChartInstance = new Chart(seriesCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Gold (G)',
+                        data: gData,
+                        backgroundColor: '#fca311', // Gold Color
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Silver (S)',
+                        data: sData,
+                        backgroundColor: '#adb5bd', // Silver Color
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true },
+                    y: { 
+                        stacked: true,
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '₹' + (value >= 100000 ? (value / 100000).toFixed(1) + 'L' : (value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value));
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return ` ${context.dataset.label}: ₹${context.raw.toLocaleString('en-IN')}`;
+                            },
+                            // Add extra custom data to the bottom of the tooltip
+                            afterBody: function(context) {
+                                if (context.length === 0) return '';
+                                const idx = context[0].dataIndex;
+                                const meta = customTooltipData[idx];
+                                return [
+                                    ``, // Empty line for spacing
+                                    `📊 Total Loans: ${meta.totalCount} Nos`,
+                                    `🏆 G: ${meta.gCount} | S: ${meta.sCount}`,
+                                    `⚖️ Weightage: ${meta.weight}%`
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     } // <--- CLOSES THE TOP LISTS BLOCK
