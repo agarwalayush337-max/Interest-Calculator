@@ -2140,6 +2140,14 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             const p = parseFloat(loan.principal) || 0;
             if (p <= 0) return;
 
+            // --- NEW: Calculate Interest for this specific loan ---
+            const loanDate = parseDate(loan.date);
+            let days = loanDate ? days360(loanDate, today) : 0;
+            if (days < 0) days = 0;
+            const calcDays = (days > 0 && days < 30) ? 30 : days;
+            const interest = (p * rate * calcDays) / 3000;
+            const currentValue = p + interest;
+
             // Extract the series letter
             let series = "OTHER";
             const cleanNo = loan.no ? loan.no.trim().toUpperCase() : "";
@@ -2149,11 +2157,13 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             }
 
             if (!seriesStats[series]) {
-                seriesStats[series] = { count: 0, principal: 0, gCount: 0, sCount: 0, gPrincipal: 0, sPrincipal: 0 };
+                seriesStats[series] = { count: 0, principal: 0, gCount: 0, sCount: 0, gPrincipal: 0, sPrincipal: 0, currentValue: 0, interest: 0 };
             }
 
             seriesStats[series].count++;
             seriesStats[series].principal += p;
+            seriesStats[series].currentValue += currentValue;
+            seriesStats[series].interest += interest;
             totalActivePrincipal += p;
 
             if (loan.type === 'G') {
@@ -2186,7 +2196,9 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
                 weight: weight,
                 totalCount: stat.count,
                 gCount: stat.gCount,
-                sCount: stat.sCount
+                sCount: stat.sCount,
+                currentValue: stat.currentValue,
+                interest: stat.interest
             });
         });
 
@@ -2213,7 +2225,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             },
             options: {
                 maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false }, // <--- Groups the hover for the whole column
+                interaction: { mode: 'index', intersect: false },
                 scales: {
                     x: { stacked: true },
                     y: { 
@@ -2229,28 +2241,27 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
-                        // <--- NEW: Prevent chart from showing duplicate blocks for G and S
                         filter: function(tooltipItem) {
                             return tooltipItem.datasetIndex === 0; 
                         },
                         callbacks: {
-                            // <--- NEW: Custom unified label
                             label: function(context) {
                                 const idx = context.dataIndex;
                                 const totalAmt = gData[idx] + sData[idx];
                                 return [
-                                    ` 💰 Total: ₹${Math.round(totalAmt).toLocaleString('en-IN')}`,
+                                    ` 💰 Total Prin: ₹${Math.round(totalAmt).toLocaleString('en-IN')}`,
                                     `      G: ₹${Math.round(gData[idx]).toLocaleString('en-IN')}`,
                                     `      S: ₹${Math.round(sData[idx]).toLocaleString('en-IN')}`
                                 ];
                             },
-                            // Keep the extra stats
                             afterBody: function(context) {
                                 if (context.length === 0) return '';
                                 const idx = context[0].dataIndex;
                                 const meta = customTooltipData[idx];
                                 return [
                                     ``, // Empty line for spacing
+                                    `📈 Current Value: ₹${Math.round(meta.currentValue).toLocaleString('en-IN')}`,
+                                    `      (Incl. Int: ₹${Math.round(meta.interest).toLocaleString('en-IN')})`,
                                     `📊 Total Loans: ${meta.totalCount} Nos`,
                                     `🏆 G: ${meta.gCount} | S: ${meta.sCount}`,
                                     `⚖️ Weightage: ${meta.weight}%`
