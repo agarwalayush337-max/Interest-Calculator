@@ -2133,7 +2133,6 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
 };
 // 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
 const renderHistoricalStats = () => {
-    // A. Get Date Range
     const startDate = parseDate(dashboardStartDateEl.value);
     const endDate = parseDate(dashboardEndDateEl.value);
     const msgEl = document.getElementById('dashboardMessage');
@@ -2142,58 +2141,139 @@ const renderHistoricalStats = () => {
         if(msgEl) { msgEl.textContent = "Select valid dates for history."; msgEl.style.display = 'block'; }
         return;
     }
-
-    // B. Filter Reports
-    const filteredReports = cachedFinalisedReports.filter(report => {
-        const d = parseDate(report.reportDate);
-        return d && d >= startDate && d <= endDate;
-    });
-
-    if (filteredReports.length === 0) {
-        if(msgEl) { msgEl.textContent = "No finalised reports in this range."; msgEl.style.display = 'block'; }
-        if (histPieInstance) histPieInstance.destroy();
-        if (histBarInstance) histBarInstance.destroy();
-        return;
-    }
     if(msgEl) msgEl.style.display = 'none';
 
-    // C. Aggregate Data
-    let totalPrin = 0, totalInt = 0;
-    filteredReports.forEach(r => {
-        totalPrin += parseFloat(r.totals.principal) || 0;
-        totalInt += parseFloat(r.totals.interest) || 0;
+    // A. Data Aggregation (Group by Month)
+    const monthData = {}; 
+    
+    const getMonthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const getMonthLabel = (d) => {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${months[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`;
+    };
+
+    const addToMonth = (d, type, amount) => {
+        if (!d || d < startDate || d > endDate) return;
+        const key = getMonthKey(d);
+        if (!monthData[key]) {
+            monthData[key] = { label: getMonthLabel(d), given: 0, prin: 0, int: 0 };
+        }
+        monthData[key][type] += amount;
+    };
+
+    // B. Process Loan Given (From Active and Finalised Loans)
+    activeInventory.forEach(loan => {
+        addToMonth(parseDate(loan.date), 'given', parseFloat(loan.principal) || 0);
+    });
+    
+    if (cachedFinalisedReports && cachedFinalisedReports.length > 0) {
+        cachedFinalisedReports.forEach(report => {
+            const loansData = report.loans || report.items || [];
+            if (Array.isArray(loansData)) {
+                loansData.forEach(loan => {
+                    addToMonth(parseDate(loan.date), 'given', parseFloat(loan.principal) || 0);
+                });
+            }
+            
+            // C. Process Collections (From Finalised Reports)
+            const reportDate = parseDate(report.reportDate);
+            if (reportDate && reportDate >= startDate && reportDate <= endDate) {
+                addToMonth(reportDate, 'prin', parseFloat(report.totals?.principal) || 0);
+                addToMonth(reportDate, 'int', parseFloat(report.totals?.interest) || 0);
+            }
+        });
+    }
+
+    // D. Sort and Prepare Chart Data
+    const sortedKeys = Object.keys(monthData).sort();
+    const labels = [];
+    const givenData = [];
+    const prinData = [];
+    const intData = [];
+
+    let totalGiven = 0, totalPrinCollected = 0, totalIntCollected = 0;
+
+    sortedKeys.forEach(key => {
+        labels.push(monthData[key].label);
+        givenData.push(monthData[key].given);
+        prinData.push(monthData[key].prin);
+        intData.push(monthData[key].int);
+        
+        totalGiven += monthData[key].given;
+        totalPrinCollected += monthData[key].prin;
+        totalIntCollected += monthData[key].int;
     });
 
-    // D. Draw Historical Charts
-    if (histPieInstance) histPieInstance.destroy();
-    if (histBarInstance) histBarInstance.destroy();
+    // E. Update Text UI
+    const givenEl = document.getElementById('histGiven');
+    const prinEl = document.getElementById('histPrin');
+    const intEl = document.getElementById('histInt');
+    
+    if(givenEl) givenEl.textContent = `₹${Math.round(totalGiven).toLocaleString('en-IN')}`;
+    if(prinEl) prinEl.textContent = `₹${Math.round(totalPrinCollected).toLocaleString('en-IN')}`;
+    if(intEl) intEl.textContent = `₹${Math.round(totalIntCollected).toLocaleString('en-IN')}`;
 
-    const pieCtx = document.getElementById('totalsPieChart').getContext('2d');
-    histPieInstance = new Chart(pieCtx, {
-        type: 'pie',
-        data: { 
-            labels: ['Principal', 'Interest'], 
-            datasets: [{ 
-                data: [totalPrin, totalInt], 
-                backgroundColor: ['#3D52D5', '#fca311'] 
-            }] 
-        },
-        options: { maintainAspectRatio: false }
-    });
+    // F. Draw Unified Monthly Cash Flow Chart
+    if (window.histPieInstance) window.histPieInstance.destroy();
+    if (window.histBarInstance) window.histBarInstance.destroy();
+    if (window.histCashflowInstance) window.histCashflowInstance.destroy();
 
-    const barCtx = document.getElementById('principalBarChart').getContext('2d');
-    const recent = filteredReports.slice(0, 10).reverse();
-    histBarInstance = new Chart(barCtx, {
+    const canvas = document.getElementById('historicalCashflowChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    window.histCashflowInstance = new Chart(ctx, {
         type: 'bar',
-        data: { 
-            labels: recent.map(r => r.reportDate), 
-            datasets: [{ 
-                label: 'Collected Amount', 
-                data: recent.map(r => parseFloat(r.totals.final)), 
-                backgroundColor: '#3D52D5' 
-            }] 
+        data: {
+            labels: labels.length > 0 ? labels : ['No Data'],
+            datasets: [
+                {
+                    label: 'Loan Given',
+                    data: labels.length > 0 ? givenData : [0],
+                    backgroundColor: '#D90429', // Red for money out
+                    borderRadius: 4,
+                    barPercentage: 0.7
+                },
+                {
+                    label: 'Principal Collected',
+                    data: labels.length > 0 ? prinData : [0],
+                    backgroundColor: '#2a9d8f', // Green for principal back
+                    borderRadius: 4,
+                    barPercentage: 0.7
+                },
+                {
+                    label: 'Interest Collected',
+                    data: labels.length > 0 ? intData : [0],
+                    backgroundColor: '#fca311', // Yellow for profit
+                    borderRadius: 4,
+                    barPercentage: 0.7
+                }
+            ]
         },
-        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        options: {
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return ` ${context.dataset.label}: ₹${context.raw.toLocaleString('en-IN')}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '₹' + (value >= 100000 ? (value / 100000).toFixed(1) + 'L' : (value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value));
+                        }
+                    }
+                }
+            }
+        }
     });
 };
 // --- Authentication ---
