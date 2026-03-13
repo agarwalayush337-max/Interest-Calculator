@@ -301,7 +301,14 @@
                     </div>
                 </div>
 
-                <div class="top-lists-grid" style="margin-top: 2rem;">
+                <div class="dashboard-card" style="margin-top: 2rem; padding: 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0;">📂 Active Loans by Series</h3>
+                    </div>
+                    <ul class="dashboard-list" id="seriesBreakdownList"></ul>
+                </div>
+
+                <div class="top-lists-grid" style="margin-top: 1.5rem;">
                     <div class="list-card warning-border">
                         <h3>⚠️ Oldest Active Loans</h3>
                         <ul class="dashboard-list" id="oldestLoansList"></ul>
@@ -480,6 +487,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
