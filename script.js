@@ -2213,6 +2213,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             },
             options: {
                 maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false }, // <--- Groups the hover for the whole column
                 scales: {
                     x: { stacked: true },
                     y: { 
@@ -2228,11 +2229,22 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
+                        // <--- NEW: Prevent chart from showing duplicate blocks for G and S
+                        filter: function(tooltipItem) {
+                            return tooltipItem.datasetIndex === 0; 
+                        },
                         callbacks: {
+                            // <--- NEW: Custom unified label
                             label: function(context) {
-                                return ` ${context.dataset.label}: ₹${context.raw.toLocaleString('en-IN')}`;
+                                const idx = context.dataIndex;
+                                const totalAmt = gData[idx] + sData[idx];
+                                return [
+                                    ` 💰 Total: ₹${Math.round(totalAmt).toLocaleString('en-IN')}`,
+                                    `      G: ₹${Math.round(gData[idx]).toLocaleString('en-IN')}`,
+                                    `      S: ₹${Math.round(sData[idx]).toLocaleString('en-IN')}`
+                                ];
                             },
-                            // Add extra custom data to the bottom of the tooltip
+                            // Keep the extra stats
                             afterBody: function(context) {
                                 if (context.length === 0) return '';
                                 const idx = context[0].dataIndex;
