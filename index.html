@@ -281,18 +281,23 @@
                     <button class="btn btn-primary" id="applyDateFilterBtn">Apply Filter</button>
                 </div>
 
-                <div class="dashboard-grid">
-                    <div class="chart-container">
-                        <h3>Collected: Principal vs Interest</h3>
-                        <div style="height: 250px; position: relative;">
-                            <canvas id="totalsPieChart"></canvas>
+                <div class="dashboard-card" style="padding: 1.5rem; margin-top: 20px; background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase;">Loan Given</div>
+                            <div id="histGiven" style="font-size: 1.5rem; font-weight: 700; color: var(--danger-color);">₹0</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase;">Principal Collected</div>
+                            <div id="histPrin" style="font-size: 1.5rem; font-weight: 700; color: var(--success-color);">₹0</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase;">Interest Collected</div>
+                            <div id="histInt" style="font-size: 1.5rem; font-weight: 700; color: var(--warning-color);">₹0</div>
                         </div>
                     </div>
-                    <div class="chart-container">
-                        <h3>Total Collected (Per Report)</h3>
-                        <div style="height: 250px; position: relative;">
-                            <canvas id="principalBarChart"></canvas>
-                        </div>
+                    <div style="height: 350px;">
+                        <canvas id="historicalCashflowChart"></canvas>
                     </div>
                 </div>
 
@@ -475,6 +480,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
