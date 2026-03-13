@@ -1805,12 +1805,12 @@ const updateGrowthChart = (days, btnElement) => {
         btnElement.classList.add('active');
     }
 
-    // 3. Re-render
-    renderLiveStats();
+    // 3. Re-render ONLY the Growth Chart
+    renderLiveStats(true);
 };
 
 // 2. LIVE STATS (Fixed: Buttons, Lacs Axis, Heatmap, Churn)
-const renderLiveStats = () => {
+const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
     
@@ -1912,6 +1912,9 @@ const renderLiveStats = () => {
     const maxMonthIndex = monthCounts.indexOf(maxVal);
     const busiestMonth = maxVal > 0 ? monthNames[maxMonthIndex] : "-";
 
+    // --- PREVENT FLICKER: Skip if only updating growth chart ---
+    if (!onlyUpdateGrowthChart) {
+
     // --- RENDER TEXT ---
     document.getElementById('kpiCount').textContent = count; 
     document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
@@ -1966,6 +1969,8 @@ const renderLiveStats = () => {
         },
         options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: currencyTooltip }, scales: { y: { beginAtZero: true, display: false } } }
     });
+    
+    } // <--- CLOSES THE PREVENT FLICKER BLOCK
 
     // --- UPDATE GROWTH CHART (Fixed) ---
     if (window.growthChartInstance) window.growthChartInstance.destroy();
@@ -1988,38 +1993,56 @@ const renderLiveStats = () => {
         const chartLabels = [];
         const chartData = [];
         
-        // Start from our filter date (aligned to previous week for smoothness)
-        let currentDate = new Date(startDateFilter);
-        currentDate.setDate(currentDate.getDate() - currentDate.getDay()); 
+        // --- FIX: Event-Based Time Steps ---
+        // 1. Collect every exact date a transaction happened
+        const uniqueDateStrings = new Set();
+        const dateObjects = [];
 
-        const sevenDays = 7 * 24 * 60 * 60 * 1000;
-        let loops = 0;
-        
-        while (currentDate <= today && loops < 500) {
+        const addDate = (d) => {
+            if (!d) return;
+            // Normalize time to midnight to prevent duplicate dates
+            const normalized = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            const str = formatDateToDDMMYYYY(normalized);
+            if (!uniqueDateStrings.has(str)) {
+                uniqueDateStrings.add(str);
+                dateObjects.push(normalized);
+            }
+        };
+
+        // Add all batch entry dates (start) and finalised dates (end)
+        allHistory.forEach(loan => {
+            addDate(loan.start);
+            if (loan.end) addDate(loan.end);
+        });
+        addDate(today); // Always include today's current value
+
+        // 2. Sort dates chronologically
+        dateObjects.sort((a, b) => a - b);
+
+        // 3. Filter out dates that are older than our selected timeframe
+        const filterStart = new Date(startDateFilter.getFullYear(), startDateFilter.getMonth(), startDateFilter.getDate());
+        const timelineDates = dateObjects.filter(d => d >= filterStart);
+
+        // 4. Calculate portfolio value at each exact transaction date
+        for (let targetDate of timelineDates) {
             let dailyValue = 0;
-            // IMPORTANT: We must calculate TOTAL value alive at this date
-            // even if the loan started before our chart begins.
+            
             for (let loan of allHistory) {
-                const isStarted = loan.start <= currentDate;
-                const isNotEnded = (loan.end === null) || (loan.end > currentDate);
+                const isStarted = loan.start <= targetDate;
+                const isNotEnded = (loan.end === null) || (loan.end > targetDate);
 
                 if (isStarted && isNotEnded) {
-                    const daysActive = days360(loan.start, currentDate);
+                    const daysActive = days360(loan.start, targetDate);
                     dailyValue += loan.principal;
                     if (daysActive > 0) {
                         dailyValue += (loan.principal * loan.rate * daysActive) / 3000;
                     }
                 }
             }
-            chartLabels.push(formatDateToDDMMYYYY(currentDate));
+            chartLabels.push(formatDateToDDMMYYYY(targetDate));
             chartData.push(dailyValue);
-            currentDate = new Date(currentDate.getTime() + sevenDays);
-            loops++;
         }
         
-        chartLabels.push(formatDateToDDMMYYYY(today));
-        chartData.push(totalPrincipal + totalInterest);
-
         const growthCtx = document.getElementById('growthChart').getContext('2d');
         window.growthChartInstance = new Chart(growthCtx, {
             type: 'line',
@@ -2052,6 +2075,9 @@ const renderLiveStats = () => {
             }
         });
     }
+
+    // --- PREVENT FLICKER: Skip lists if only updating growth chart ---
+    if (!onlyUpdateGrowthChart) {
 
     // --- TOP LISTS ---
     const activeSorted = activeInventory.map(loan => {
@@ -2102,6 +2128,7 @@ const renderLiveStats = () => {
                 </div>
             </li>`;
         }).join('');
+    }
     }
 };
 // 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
