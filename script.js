@@ -2129,7 +2129,65 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             </li>`;
         }).join('');
     }
+
+    // --- NEW: Series Wise Breakdown ---
+    const seriesListEl = document.getElementById('seriesBreakdownList');
+    if (seriesListEl) {
+        const seriesStats = {};
+        let totalActivePrincipal = 0;
+
+        activeInventory.forEach(loan => {
+            const p = parseFloat(loan.principal) || 0;
+            if (p <= 0) return;
+
+            // Extract the series letter (e.g., "R/11" -> "R", "A-52" -> "A")
+            let series = "OTHER";
+            const cleanNo = loan.no ? loan.no.trim().toUpperCase() : "";
+            const match = cleanNo.match(/^([A-Z]+)/);
+            if (match) {
+                series = match[1];
+            }
+
+            if (!seriesStats[series]) {
+                seriesStats[series] = { count: 0, principal: 0, gCount: 0, sCount: 0, gPrincipal: 0, sPrincipal: 0 };
+            }
+
+            // Aggregate Totals
+            seriesStats[series].count++;
+            seriesStats[series].principal += p;
+            totalActivePrincipal += p;
+
+            // Segregate G and S
+            if (loan.type === 'G') {
+                seriesStats[series].gCount++;
+                seriesStats[series].gPrincipal += p;
+            } else {
+                seriesStats[series].sCount++;
+                seriesStats[series].sPrincipal += p;
+            }
+        });
+
+        // Sort by highest principal value first
+        const sortedSeries = Object.keys(seriesStats).sort((a, b) => seriesStats[b].principal - seriesStats[a].principal);
+
+        seriesListEl.innerHTML = sortedSeries.map(s => {
+            const stat = seriesStats[s];
+            const weight = totalActivePrincipal > 0 ? ((stat.principal / totalActivePrincipal) * 100).toFixed(1) : 0;
+            
+            return `<li>
+                <div class="list-main">
+                    <span class="list-no">Series ${s} <span style="font-size: 0.8rem; font-weight:normal; color:#666;">(${weight}% Weightage)</span></span>
+                    <span class="list-sub">Total Loans: ${stat.count} &bull; <span style="color:#d4af37; font-weight:bold;">G: ${stat.gCount}</span> | <span style="color:#555; font-weight:bold;">S: ${stat.sCount}</span></span>
+                </div>
+                <div class="list-val">
+                    ₹${Math.round(stat.principal).toLocaleString('en-IN')}
+                    <div style="font-size:0.75rem; color:#888; margin-top:3px;">(G: ₹${Math.round(stat.gPrincipal).toLocaleString('en-IN')} | S: ₹${Math.round(stat.sPrincipal).toLocaleString('en-IN')})</div>
+                </div>
+            </li>`;
+        }).join('');
     }
+
+    } // <--- CLOSES THE TOP LISTS BLOCK
 };
 // 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
 const renderHistoricalStats = () => {
