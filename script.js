@@ -1901,10 +1901,9 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
                     const actualRate = getInterestRateForLoan(item.no, baseRate); // NEW
 
                     if (start && end && p > 0) {
-                        // Make sure we push 'actualRate' instead of 'r' in the line below this
                         monthCounts[start.getMonth()]++; // Heatmap
                         redeemedLoansList.push({
-                            start: start, end: end, principal: p, rate: r,
+                            start: start, end: end, principal: p, rate: actualRate, // <-- FIXED: Changed 'r' to 'actualRate'
                             duration: Math.max(0, days360(start, end))
                         });
                     }
