@@ -200,6 +200,24 @@ const formatDateToDDMMYYYY = (date) => {
 };
 const roundToNearest = (num, nearest) => Math.round(num / nearest) * nearest;
 
+// --- NEW: Series-Specific Interest Rate Helper ---
+const getInterestRateForLoan = (loanNo, defaultRate) => {
+    if (!loanNo) return defaultRate;
+    const cleanNo = loanNo.trim().toUpperCase();
+    const match = cleanNo.match(/^([A-Z]+)/);
+    
+    if (match) {
+        const series = match[1];
+        // Apply 1.70% specifically for Series R
+        if (series === 'R') {
+            return 1.70; 
+        }
+        // You can easily add more series here later if needed
+        // else if (series === 'A') { return 1.80; }
+    }
+    return defaultRate; // Fallback to 1.75% for A, B, D, etc.
+};
+
 const days360 = (startDate, endDate) => {
     if (!startDate || !endDate || startDate > endDate) return 0;
     let d1 = startDate.getDate(), m1 = startDate.getMonth() + 1, y1 = startDate.getFullYear();
@@ -230,12 +248,16 @@ const updateAllCalculations = () => {
     let totalPrincipal = 0, totalInterestRaw = 0;
     document.querySelectorAll('#loanTable tbody tr').forEach(row => {
         const principal = parseFloat(row.querySelector('.principal').value) || 0;
+        const loanNo = row.querySelector('.no').value; // NEW: Get loan number
         const loanDate = parseDate(row.querySelector('.date').value);
         const durationEl = row.querySelector('.duration');
         const interestEl = row.querySelector('.interest');
         
+        // NEW: Calculate specific rate for this row
+        const actualRate = getInterestRateForLoan(loanNo, interestRate);
+        
         const duration = days360(loanDate, todayDate);
-        const interest = calculateInterest(principal, interestRate, duration);
+        const interest = calculateInterest(principal, actualRate, duration); // Use actualRate
         const roundedInterest = roundToNearest(interest, 5);
         const displayDuration = (duration > 0 && duration < 30) ? 30 : duration;
 
@@ -1836,8 +1858,11 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             // Heatmap: Count the month (0=Jan, 11=Dec)
             monthCounts[loanDate.getMonth()]++;
 
+            // NEW: Get exact rate for this specific active loan
+            const actualRate = getInterestRateForLoan(loan.no, rate);
+
             // Active Graph Data
-            activeLoansList.push({ start: loanDate, end: null, principal: p, rate: rate });
+            activeLoansList.push({ start: loanDate, end: null, principal: p, rate: actualRate }); // Use actualRate
 
             // Stats
             ageStats.totalDays += days; ageStats.count++;
@@ -1845,7 +1870,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             else { ageStats.sDays += days; ageStats.sCount++; mixStats.silverVal += p; mixStats.silverCount++; }
 
             const calcDays = Math.max(30, days);
-            const interest = (p * rate * calcDays) / 3000;
+            const interest = (p * actualRate * calcDays) / 3000; // Use actualRate
             totalPrincipal += p; 
             totalInterest += interest;
 
@@ -1872,9 +1897,11 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
                     const start = parseDate(item.date);
                     const end = parseDate(report.reportDate);
                     const p = parseFloat(item.principal) || 0;
-                    const r = parseFloat(report.interestRate) || rate; 
+                    const baseRate = parseFloat(report.interestRate) || rate; 
+                    const actualRate = getInterestRateForLoan(item.no, baseRate); // NEW
 
                     if (start && end && p > 0) {
+                        // Make sure we push 'actualRate' instead of 'r' in the line below this
                         monthCounts[start.getMonth()]++; // Heatmap
                         redeemedLoansList.push({
                             start: start, end: end, principal: p, rate: r,
@@ -2087,8 +2114,9 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
          if (days < 0) days = 0;
          
          // Apply minimum 30 days logic for interest calculation
+         const actualRate = getInterestRateForLoan(loan.no, rate); // NEW
          const calcDays = (days > 0 && days < 30) ? 30 : days;
-         const interest = (p * rate * calcDays) / 3000;
+         const interest = (p * actualRate * calcDays) / 3000; // Use actualRate
          
          // Fix: explicitly return the 'interest' variable so we can sort by it later
          return { ...loan, principal: p, days, interest: interest, totalValue: p + interest };
@@ -2144,8 +2172,9 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             const loanDate = parseDate(loan.date);
             let days = loanDate ? days360(loanDate, today) : 0;
             if (days < 0) days = 0;
+            const actualRate = getInterestRateForLoan(loan.no, rate); // NEW
             const calcDays = (days > 0 && days < 30) ? 30 : days;
-            const interest = (p * rate * calcDays) / 3000;
+            const interest = (p * actualRate * calcDays) / 3000; // Use actualRate
             const currentValue = p + interest;
 
             // Extract the series letter
