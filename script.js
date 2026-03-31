@@ -1836,7 +1836,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     const today = new Date();
     const rate = parseFloat(interestRateEl.value) || 1.75; 
     
-    let totalPrincipal = 0, totalInterest = 0;
+    let totalPrincipal = 0, totalInterest = 0, totalMonthlyIncome = 0; // NEW: Added totalMonthlyIncome
     let mixStats = { goldVal: 0, silverVal: 0, goldCount: 0, silverCount: 0 };
     // --- FIX: Added Count Variables for Aging ---
     let agingStats = { normalVal: 0, midVal: 0, oldVal: 0, normalCount: 0, midCount: 0, oldCount: 0 };
@@ -1860,6 +1860,9 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
 
             // NEW: Get exact rate for this specific active loan
             const actualRate = getInterestRateForLoan(loan.no, rate);
+            
+            // NEW: Add this loan's exact monthly interest to the total
+            totalMonthlyIncome += p * (actualRate / 100);
 
             // Active Graph Data
             activeLoansList.push({ start: loanDate, end: null, principal: p, rate: actualRate }); // Use actualRate
@@ -1915,7 +1918,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     // --- UPDATE KPIs ---
     const count = activeInventory.length;
     const avgSize = count > 0 ? totalPrincipal / count : 0;
-    const monthlyIncome = totalPrincipal * (rate / 100);
+    // monthlyIncome is now calculated perfectly inside the loop above
 
     const avgAgeTotal = ageStats.count > 0 ? Math.round(ageStats.totalDays / ageStats.count) : 0;
     const avgAgeG = ageStats.gCount > 0 ? Math.round(ageStats.gDays / ageStats.gCount) : 0;
@@ -1949,8 +1952,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     if(splitEl) splitEl.textContent = `G: ${avgAgeG}d | S: ${avgAgeS}d`;
     if(document.getElementById('kpiChurn')) document.getElementById('kpiChurn').textContent = churnText;
     if(document.getElementById('kpiHeatmap')) document.getElementById('kpiHeatmap').textContent = busiestMonth;
-    if (document.getElementById('kpiMonthly')) document.getElementById('kpiMonthly').textContent = `₹${Math.round(monthlyIncome).toLocaleString('en-IN')}`;
-
+    if (document.getElementById('kpiMonthly')) document.getElementById('kpiMonthly').textContent = `₹${Math.round(totalMonthlyIncome).toLocaleString('en-IN')}`;
     document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
     document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
     document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
