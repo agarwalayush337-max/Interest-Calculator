@@ -1603,6 +1603,59 @@ const injectOldLoans = () => {
         renumberSearchRows();
         console.log(`Auto-added ${selectedLoans.length} old loans. Total Value: ₹${Math.round(addedTotal)}`);
     }
+    updateSearchTotals(); // <--- ADD THIS LINE HERE
+};
+
+// --- NEW: Remove Auto-Added Old Loans ---
+const removeOldLoans = () => {
+    document.querySelectorAll('.auto-added-row').forEach(row => row.remove());
+    renumberSearchRows();
+    updateSearchTotals(); // Recalculate totals after removing
+};
+
+// --- NEW: Calculate Totals for Search Tab ---
+const updateSearchTotals = () => {
+    let totalPrin = 0;
+    let totalInt = 0;
+    const globalRate = parseFloat(interestRateEl.value) || 1.75;
+    const today = new Date();
+
+    const rows = document.querySelectorAll('#loanSearchTable tbody tr');
+    
+    rows.forEach(row => {
+        const statusCell = row.querySelector('.status-cell');
+        const input = row.querySelector('.search-no');
+        const principalCell = row.querySelector('.principal-result');
+        
+        // Only sum rows that are "Available", have a loan number typed in, and are not hidden by filters
+        if (statusCell && statusCell.classList.contains('status-available') && input.value.trim() && row.style.display !== 'none') {
+            const p = parseFloat(principalCell.textContent.replace(/,/g, '')) || 0;
+            const loanNo = input.value.trim().toUpperCase();
+
+            // Find date from activeInventory to calculate interest accurately
+            let loanDate = null;
+            const match = activeInventory.find(inv => normalizeLoanNo(inv.no) === normalizeLoanNo(loanNo));
+            if (match) loanDate = parseDate(match.date);
+
+            let days = loanDate ? days360(loanDate, today) : 0;
+            if (days < 0) days = 0;
+
+            const actualRate = getInterestRateForLoan(loanNo, globalRate);
+            const calcDays = (days > 0 && days < 30) ? 30 : days;
+            const interest = (p * actualRate * calcDays) / 3000;
+
+            totalPrin += p;
+            totalInt += interest;
+        }
+    });
+
+    const searchTotalPrinEl = document.getElementById('searchTotalPrincipal');
+    const searchTotalIntEl = document.getElementById('searchTotalInterest');
+    const searchFinalTotalEl = document.getElementById('searchFinalTotal');
+
+    if (searchTotalPrinEl) searchTotalPrinEl.textContent = `₹${Math.round(totalPrin).toLocaleString('en-IN')}`;
+    if (searchTotalIntEl) searchTotalIntEl.textContent = `₹${Math.round(totalInt).toLocaleString('en-IN')}`;
+    if (searchFinalTotalEl) searchFinalTotalEl.textContent = `₹${Math.round(totalPrin + totalInt).toLocaleString('en-IN')}`;
 };
 
 // UPDATED: addSearchRow now stores scan data (Principal/Date) for the report
@@ -1640,6 +1693,7 @@ const removeSearchRow = (button) => {
     if (loanSearchTableBody.rows.length > 0) {
         row.remove();
         renumberSearchRows();
+        updateSearchTotals(); // <--- ADD THIS
     }
 };
 
@@ -3037,9 +3091,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loanSearchTableBody.addEventListener('input', (e) => {
         if (e.target.matches('.search-no')) {
             performLoanSearch(e.target);
+            updateSearchTotals(); // <--- ADD THIS
         }
     });
-
     searchFiltersContainer.addEventListener('click', (e) => {
         if (e.target.matches('.btn')) {
             searchFiltersContainer.querySelector('.active-filter').classList.remove('active-filter');
@@ -3047,6 +3101,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             filterSearchResults(e.target.dataset.filter);
         }
     });
+
+    // --- NEW: Dynamic Toggle Listener ---
+    const autoFillToggle = document.getElementById('autoFillToggle');
+    if (autoFillToggle) {
+        autoFillToggle.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                injectOldLoans();
+            } else {
+                removeOldLoans();
+            }
+        });
+    }
 
     // Listen for messages from the Service Worker (for shared images)
     navigator.serviceWorker.addEventListener('message', event => {
@@ -3337,25 +3403,25 @@ const fillSearchTableFromScan = async (loanData) => {
 
     renumberSearchRows();
     
-    // Setup Download Button
+    // Setup Download Button (Reverted to just generate)
     const dlBtn = document.getElementById('downloadErasedBtn');
     if(dlBtn) {
         if (foundAvailable) {
             dlBtn.style.display = 'inline-flex';
-            
-            // NEW: Trigger injection before drawing if toggle is ON
-            dlBtn.onclick = () => {
-                const autoFillToggle = document.getElementById('autoFillToggle');
-                if (autoFillToggle && autoFillToggle.checked) {
-                    injectOldLoans();
-                }
-                generateSortedImage();
-            }; 
+            dlBtn.onclick = generateSortedImage; 
         } else {
             dlBtn.style.display = 'none';
         }
     }
     
+    // --- NEW: Real-time Toggle Check after Scan ---
+    const autoFillToggle = document.getElementById('autoFillToggle');
+    if (autoFillToggle && autoFillToggle.checked) {
+        injectOldLoans();
+    } else {
+        updateSearchTotals(); // Ensure totals update even if toggle is off
+    }
+
     showConfirm('Scan Complete', `Found ${loanData.length}. Erased ${erasedCount}.`, false);
 };
     
