@@ -3108,6 +3108,7 @@ const generateSortedImage = () => {
         if (item.isOld) finalNo += " [OLD]";
 
         if (match) {
+            // FOUND: Use Database Values (Ignore Scan Errors)
             return { 
                 no: finalNo, // Uses tagged number
                 principal: String(match.principal), 
@@ -3115,16 +3116,9 @@ const generateSortedImage = () => {
                 detail: match.type || "?" 
             };
         } else {
-            return { 
-                no: finalNo, // Uses tagged number
-                principal: item.principal ? String(item.principal) : '-', 
-                date: item.date || '-', 
-                detail: "?" 
-            };
-        }
             // NOT FOUND: Fallback to what's in the table (Scanned Data)
             return { 
-                no: item.no, 
+                no: finalNo, // Uses tagged number
                 principal: item.principal ? String(item.principal) : '-', 
                 date: item.date || '-', 
                 detail: "?" 
