@@ -1529,30 +1529,48 @@ const buildLoanSearchCache = () => {
     console.log(`Cache Built. Total unique loans in DB: ${loanSearchCache.size}`);
 };
 
-// --- NEW: Smart Liquidation (Auto-Fill Old Loans) ---
+// --- NEW: Smart Liquidation (Dynamic Budget & Whale Hunting) ---
 const injectOldLoans = () => {
-    // 1. Clear any previously auto-added rows (prevents duplicate adding on double-clicks)
+    // 1. Clear any previously auto-added rows
     document.querySelectorAll('.auto-added-row').forEach(row => row.remove());
     renumberSearchRows();
 
     // 2. Get currently visible loans in the table so we don't duplicate them
     const currentTableLoans = getAvailableLoansFromTable().map(l => l.no);
 
-    // 3. Prep data to calculate age and value
+    // 3. Calculate "Freed Capital" from "Not Available" loans
+    let freedCapital = 0;
+    document.querySelectorAll('#loanSearchTable tbody tr').forEach(row => {
+        const statusCell = row.querySelector('.status-cell');
+        const input = row.querySelector('.search-no');
+        const principalCell = row.querySelector('.principal-result');
+        
+        // If row is Not Available, add its value to our extra budget
+        if (statusCell && statusCell.classList.contains('status-not-available') && input.value.trim()) {
+            const p = parseFloat(principalCell.textContent.replace(/,/g, '')) || 0;
+            freedCapital += p;
+        }
+    });
+
+    // --- BUDGET RULES ---
+    const baseTarget = 50000; 
+    const dynamicTarget = baseTarget + freedCapital;
+    const whaleThreshold = 50000; // Anything above this is a "Whale"
+
+    // 4. Prep data to calculate age and value
     const today = new Date();
     const globalRate = parseFloat(interestRateEl.value) || 1.75;
 
-    // Filter, Calculate, and Sort Active Inventory
     let availableOldLoans = activeInventory.filter(loan => !currentTableLoans.includes(normalizeLoanNo(loan.no))).map(loan => {
         const loanDate = parseDate(loan.date);
         let days = loanDate ? days360(loanDate, today) : 0;
         if (days < 0) days = 0;
-        
+
         const actualRate = getInterestRateForLoan(loan.no, globalRate);
         const p = parseFloat(loan.principal) || 0;
         const calcDays = (days > 0 && days < 30) ? 30 : days;
         const interest = (p * actualRate * calcDays) / 3000;
-        
+
         return {
             ...loan,
             days: days,
@@ -1563,25 +1581,49 @@ const injectOldLoans = () => {
     // Sort by oldest (highest days first)
     availableOldLoans.sort((a, b) => b.days - a.days);
 
-    // 4. Greedy Algorithm: Add up to ₹50k (±10% variance)
     let addedTotal = 0;
-    const targetMin = 45000;
-    const targetMax = 55000;
     const selectedLoans = [];
+    let whaleFound = false;
+
+    // --- STEP 5: WHALE HUNTING (Check Top 10 Oldest) ---
+    const searchDepth = Math.min(10, availableOldLoans.length);
+    for (let i = 0; i < searchDepth; i++) {
+        const loan = availableOldLoans[i];
+        
+        // If it's a Whale AND it fits inside our Dynamic Budget today
+        if (loan.totalValue > whaleThreshold && loan.totalValue <= dynamicTarget) {
+            selectedLoans.push(loan);
+            addedTotal += loan.totalValue;
+            whaleFound = true;
+            
+            // Remove the whale from the pool so we don't process it again
+            availableOldLoans.splice(i, 1);
+            break; // Only hunt ONE whale per scan to keep it safe
+        }
+    }
+
+    // --- STEP 6: REGULAR FILLING (If no Whale took the budget) ---
+    // If a whale was added, 'addedTotal' is > 50k, so this loop will instantly break.
+    // The extra dynamic budget is strictly reserved for Whales, not for adding dozens of small loans.
+    const smallLoanLimit = 55000; // Absolute max allowed for small loans
+    const targetSweetSpot = 45000; // Point where we stop looking for more
 
     for (let i = 0; i < availableOldLoans.length; i++) {
-        if (addedTotal >= targetMin) break; // Reached minimum sweet spot
+        if (addedTotal >= targetSweetSpot) break; // Reached our standard 50k budget
 
         const loan = availableOldLoans[i];
         
-        // Option A Logic: If it fits under the max, add it. If not, skip to a smaller one.
-        if (addedTotal + loan.totalValue <= targetMax) {
+        // Safety: Skip other whales. They only get added during the Whale Hunt above.
+        if (loan.totalValue > whaleThreshold) continue;
+
+        // Greedy fit logic
+        if (addedTotal + loan.totalValue <= smallLoanLimit) {
             selectedLoans.push(loan);
             addedTotal += loan.totalValue;
         }
     }
 
-    // 5. Inject selected loans into the physical table
+    // 7. Inject selected loans into the physical table
     if (selectedLoans.length > 0) {
         selectedLoans.forEach(loan => {
             const extraData = {
@@ -1589,7 +1631,6 @@ const injectOldLoans = () => {
                 date: loan.date
             };
             
-            // Add row
             addSearchRow(loan.no, null, extraData);
             
             // Trigger search to populate "Available" badge
@@ -1601,11 +1642,12 @@ const injectOldLoans = () => {
             lastInput.closest('tr').classList.add('auto-added-row');
         });
         renumberSearchRows();
-        console.log(`Auto-added ${selectedLoans.length} old loans. Total Value: ₹${Math.round(addedTotal)}`);
+        console.log(`Auto-added ${selectedLoans.length} loans. Total: ₹${Math.round(addedTotal)}. Whale included: ${whaleFound}`);
     }
-    updateSearchTotals(); // <--- ADD THIS LINE HERE
+    
+    // Update Totals Card
+    updateSearchTotals();
 };
-
 // --- NEW: Remove Auto-Added Old Loans ---
 const removeOldLoans = () => {
     document.querySelectorAll('.auto-added-row').forEach(row => row.remove());
