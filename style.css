@@ -919,25 +919,35 @@ input.found-silver { background-color: #e0e0e0 !important; color: #000; font-wei
     color: white;
     border-color: var(--primary-color);
 }
-/* --- Auto-Fill Toggle & Highlights --- */
-.switch input:checked + .slider {
-    background-color: var(--primary-color);
+/* --- Modern Toggle & Highlights --- */
+.modern-toggle-container {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--background-color);
+    padding: 8px 16px; border-radius: 30px;
+    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
 }
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 16px;
-    width: 16px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: .4s;
-    border-radius: 50%;
+.toggle-label {
+    font-size: 0.9rem; font-weight: 600; cursor: pointer; color: var(--subtle-text-color);
+    transition: color 0.3s ease;
 }
-.switch input:checked + .slider:before {
-    transform: translateX(18px);
+.modern-switch {
+    position: relative; display: inline-block; width: 44px; height: 24px;
 }
-/* Highlights the row inside the table */
+.modern-switch input { opacity: 0; width: 0; height: 0; }
+.modern-slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc; transition: .4s; border-radius: 24px;
+    box-shadow: inset 2px 2px 4px rgba(0,0,0,0.2);
+}
+.modern-slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background-color: white; transition: .4s; border-radius: 50%;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+.modern-switch input:checked + .modern-slider { background-color: var(--primary-color); }
+.modern-switch input:checked + .modern-slider:before { transform: translateX(20px); }
+.modern-switch input:checked ~ .toggle-label { color: var(--primary-color); }
+
 .auto-added-row {
     background-color: rgba(61, 82, 213, 0.08) !important; 
     border-left: 4px solid var(--primary-color);
