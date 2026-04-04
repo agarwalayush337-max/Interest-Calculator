@@ -1529,6 +1529,82 @@ const buildLoanSearchCache = () => {
     console.log(`Cache Built. Total unique loans in DB: ${loanSearchCache.size}`);
 };
 
+// --- NEW: Smart Liquidation (Auto-Fill Old Loans) ---
+const injectOldLoans = () => {
+    // 1. Clear any previously auto-added rows (prevents duplicate adding on double-clicks)
+    document.querySelectorAll('.auto-added-row').forEach(row => row.remove());
+    renumberSearchRows();
+
+    // 2. Get currently visible loans in the table so we don't duplicate them
+    const currentTableLoans = getAvailableLoansFromTable().map(l => l.no);
+
+    // 3. Prep data to calculate age and value
+    const today = new Date();
+    const globalRate = parseFloat(interestRateEl.value) || 1.75;
+
+    // Filter, Calculate, and Sort Active Inventory
+    let availableOldLoans = activeInventory.filter(loan => !currentTableLoans.includes(normalizeLoanNo(loan.no))).map(loan => {
+        const loanDate = parseDate(loan.date);
+        let days = loanDate ? days360(loanDate, today) : 0;
+        if (days < 0) days = 0;
+        
+        const actualRate = getInterestRateForLoan(loan.no, globalRate);
+        const p = parseFloat(loan.principal) || 0;
+        const calcDays = (days > 0 && days < 30) ? 30 : days;
+        const interest = (p * actualRate * calcDays) / 3000;
+        
+        return {
+            ...loan,
+            days: days,
+            totalValue: p + interest
+        };
+    });
+
+    // Sort by oldest (highest days first)
+    availableOldLoans.sort((a, b) => b.days - a.days);
+
+    // 4. Greedy Algorithm: Add up to ₹50k (±10% variance)
+    let addedTotal = 0;
+    const targetMin = 45000;
+    const targetMax = 55000;
+    const selectedLoans = [];
+
+    for (let i = 0; i < availableOldLoans.length; i++) {
+        if (addedTotal >= targetMin) break; // Reached minimum sweet spot
+
+        const loan = availableOldLoans[i];
+        
+        // Option A Logic: If it fits under the max, add it. If not, skip to a smaller one.
+        if (addedTotal + loan.totalValue <= targetMax) {
+            selectedLoans.push(loan);
+            addedTotal += loan.totalValue;
+        }
+    }
+
+    // 5. Inject selected loans into the physical table
+    if (selectedLoans.length > 0) {
+        selectedLoans.forEach(loan => {
+            const extraData = {
+                principal: String(loan.principal),
+                date: loan.date
+            };
+            
+            // Add row
+            addSearchRow(loan.no, null, extraData);
+            
+            // Trigger search to populate "Available" badge
+            const newRowInputs = document.querySelectorAll('#loanSearchTable .search-no');
+            const lastInput = newRowInputs[newRowInputs.length - 1];
+            performLoanSearch(lastInput);
+            
+            // Highlight row visually
+            lastInput.closest('tr').classList.add('auto-added-row');
+        });
+        renumberSearchRows();
+        console.log(`Auto-added ${selectedLoans.length} old loans. Total Value: ₹${Math.round(addedTotal)}`);
+    }
+};
+
 // UPDATED: addSearchRow now stores scan data (Principal/Date) for the report
 // Updated: Stores scan data in memory (row.scanData) but DOES NOT fill the UI cells
 const addSearchRow = (loanNo = '', box = null, extraData = null) => {
@@ -3027,15 +3103,25 @@ const generateSortedImage = () => {
         // Find the "Truth" in your Database
         const match = activeInventory.find(inv => normalizeLoanNo(inv.no) === normalizeLoanNo(item.no));
         
+        // NEW: Tag the number if it's auto-added
+        let finalNo = item.no;
+        if (item.isOld) finalNo += " [OLD]";
+
         if (match) {
-            // FOUND: Use Database Values (Ignore Scan Errors)
             return { 
-                no: match.no, // Use correct casing (A/52 instead of A-52)
+                no: finalNo, // Uses tagged number
                 principal: String(match.principal), 
                 date: match.date, 
                 detail: match.type || "?" 
             };
         } else {
+            return { 
+                no: finalNo, // Uses tagged number
+                principal: item.principal ? String(item.principal) : '-', 
+                date: item.date || '-', 
+                detail: "?" 
+            };
+        }
             // NOT FOUND: Fallback to what's in the table (Scanned Data)
             return { 
                 no: item.no, 
@@ -3196,13 +3282,16 @@ const getAvailableLoansFromTable = () => {
         // Only grab rows marked as "Available"
         if (statusCell && statusCell.classList.contains('status-available') && input.value.trim()) {
             const normalizedKey = normalizeLoanNo(input.value.trim().toUpperCase());
-            // Use stored scan data if it exists, otherwise default
             const storedData = row.scanData || { principal: '-', date: '-' };
+            
+            // NEW: Check if this row is an auto-added old loan
+            const isOld = row.classList.contains('auto-added-row');
             
             availableLoans.push({ 
                 no: normalizedKey,
                 principal: storedData.principal,
-                date: storedData.date
+                date: storedData.date,
+                isOld: isOld // Passing the flag to the canvas generator
             });
         }
     });
@@ -3259,7 +3348,15 @@ const fillSearchTableFromScan = async (loanData) => {
     if(dlBtn) {
         if (foundAvailable) {
             dlBtn.style.display = 'inline-flex';
-            dlBtn.onclick = generateSortedImage; 
+            
+            // NEW: Trigger injection before drawing if toggle is ON
+            dlBtn.onclick = () => {
+                const autoFillToggle = document.getElementById('autoFillToggle');
+                if (autoFillToggle && autoFillToggle.checked) {
+                    injectOldLoans();
+                }
+                generateSortedImage();
+            }; 
         } else {
             dlBtn.style.display = 'none';
         }
