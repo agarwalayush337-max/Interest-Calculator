@@ -347,11 +347,21 @@
                 <div id="invSearchView">
                     <h2>Loan Search</h2>
         
-                    <div class="search-filters">
-                        <button class="btn btn-secondary active-filter" data-filter="all">All</button>
-                        <button class="btn btn-success" data-filter="available">Available</button>
-                        <button class="btn btn-warning" data-filter="not-available">Not Available</button>
-                    </div>
+                    <div class="search-filters-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px;">
+                <div class="search-filters" style="margin-bottom: 0;">
+                    <button class="btn btn-secondary active-filter" data-filter="all">All</button>
+                    <button class="btn btn-success" data-filter="available">Available</button>
+                    <button class="btn btn-warning" data-filter="not-available">Not Available</button>
+                </div>
+                
+                <div class="auto-fill-toggle" style="display: flex; align-items: center; gap: 10px; background: white; padding: 8px 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <label for="autoFillToggle" style="font-size: 0.9rem; font-weight: 600; cursor: pointer; color: #333;">Auto-fill Old Inventory (~₹50k)</label>
+                    <label class="switch" style="position: relative; display: inline-block; width: 40px; height: 22px;">
+                        <input type="checkbox" id="autoFillToggle" style="opacity: 0; width: 0; height: 0;">
+                        <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 22px;"></span>
+                    </label>
+                </div>
+            </div>
         
                     <div class="table-container">
                         <table id="loanSearchTable">
