@@ -1120,9 +1120,9 @@ const clearSearchTable = async () => {
         for (let i = 0; i < 3; i++) {
             addSearchRow();
         }
+        updateSearchTotals(); // <--- NEW: Forces the totals card back to zero
     }
 };
-
 // --- Recent & Finalised Transactions ---
 const renderRecentTransactions = (filter = '') => {
     recentTransactionsListEl.innerHTML = '';
@@ -1653,9 +1653,12 @@ const updateSearchTotals = () => {
     const searchTotalIntEl = document.getElementById('searchTotalInterest');
     const searchFinalTotalEl = document.getElementById('searchFinalTotal');
 
+    // Round total interest to nearest 10
+    const roundedTotalInt = Math.round(totalInt / 10) * 10;
+
     if (searchTotalPrinEl) searchTotalPrinEl.textContent = `₹${Math.round(totalPrin).toLocaleString('en-IN')}`;
-    if (searchTotalIntEl) searchTotalIntEl.textContent = `₹${Math.round(totalInt).toLocaleString('en-IN')}`;
-    if (searchFinalTotalEl) searchFinalTotalEl.textContent = `₹${Math.round(totalPrin + totalInt).toLocaleString('en-IN')}`;
+    if (searchTotalIntEl) searchTotalIntEl.textContent = `₹${roundedTotalInt.toLocaleString('en-IN')}`;
+    if (searchFinalTotalEl) searchFinalTotalEl.textContent = `₹${Math.round(totalPrin + roundedTotalInt).toLocaleString('en-IN')}`;
 };
 
 // UPDATED: addSearchRow now stores scan data (Principal/Date) for the report
@@ -3171,7 +3174,7 @@ const generateSortedImage = () => {
         
         // NEW: Tag the number if it's auto-added
         let finalNo = item.no;
-        if (item.isOld) finalNo += " [OLD]";
+        if (item.isOld) finalNo += "*"; // <--- Changed from [OLD] to *
 
         if (match) {
             // FOUND: Use Database Values (Ignore Scan Errors)
