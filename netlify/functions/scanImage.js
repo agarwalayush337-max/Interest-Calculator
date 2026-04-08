@@ -58,64 +58,41 @@ exports.handler = async function(event) {
         Analyze this handwritten list of loans.
         Columns: Number | Amount | Date (IGNORE) | Hindi Details | Circled Letter (rightmost)
         
-        Return a raw JSON array of objects with exactly 4 fields:
+        Return a raw JSON array of objects with exactly 4 fields: "no", "principal", "type", "details".
         
         1. "no": Loan number with '/' between letter and digits.
-           - If a 4-digit number starts with 1, replace that 1 with '/' (R155 -> R/155).
-           - Otherwise just add '/' (R766 -> R/766).
+           - If 4-digit number starts with 1, replace that 1 with '/' (R155 -> R/155).
+           - Otherwise just add '/' between letter and number (R766 -> R/766).
         
         2. "principal": Numeric amount only, no commas (e.g., "110000").
         
-        3. "type": Look ONLY at the circled letter at the FAR RIGHT of each row.
+        3. "type": 
+           STEP 1 — Zoom into the rightmost symbol of the row. It is a letter inside a circle.
+           STEP 2 — Describe the shape of the letter to yourself:
+              - Does it look like a backwards C with a horizontal bar poking inward? → G
+              - Does it look like two waves / a snake / the number 5? → S
+           STEP 3 — Output "G" or "S" based on your description.
            
-           HOW TO DISTINGUISH G vs S IN A CIRCLE:
-           - Circled 'G': The letter inside has a horizontal bar/shelf stroke going inward 
-             on the right side. Looks like the English letter G.
-           - Circled 'S': The letter inside has two opposite curves like a snake or the 
-             number 5. No horizontal bar. No gap on the right.
-           - In this handwriting, S and G can look similar. If there is NO horizontal 
-             inward stroke, it is S. If there IS a horizontal inward stroke, it is G.
-           - Take extra time on this — it is the most critical field.
-           - Output ONLY "G" or "S".
+           IMPORTANT BIAS WARNING: Do NOT default to G. 
+           In this list, SOME entries are S. Actively look for S shapes.
+           If the symbol looks rounded with no inward horizontal bar → it is S, output "S".
         
         4. "details":
-           STEP A — Read the Hindi/Devanagari unit word carefully:
-           - "भरी" or "भर" or "बरी" = Bhari
-           - "आना" or "आन" = Aana  
-           - "रत्ती" or "रती" = Ratti → DISCARD this word AND its preceding digit entirely
+           STEP A — Read the Hindi unit:
+           - "भरी" / "भर" = Bhari
+           - "आना" / "आन" = Aana
+           - "रत्ती" / "रती" = Ratti → DISCARD this word and its preceding digit
            
-           CRITICAL UNIT DISTINCTION:
-           - भरी (Bhari) has a distinct hook/curve at the bottom right
-           - आना (Aana) starts with the vowel 'आ' which has a vertical stroke on the left
-           - When unsure between भरी and आना, look for the initial 'आ' shape — 
-             if absent, it is भरी
+           STEP B — Extract number and unit:
+           - Read each digit carefully. 9 ≠ 1. 5 ≠ 1.
+           - Discard any Ratti portion completely.
            
-           STEP B — Extract primary number and unit after discarding Ratti:
-           - "1 भरी" → "1 Bhari"
-           - "5 भरी" → "5 Bhari"  
-           - "9 भरी" → "9 Bhari"  ← NOTE: 9 and 1 look different, do not confuse them
-           - "4 आना" → "4 Aana"
-           - "10 आना" → "10 Aana"
-           - "1 आना 3 रत्ती" → "1 Aana" (discard रत्ती part)
-           
-           CRITICAL NUMBER READING:
-           - The digit 9 has a circular top with a descending tail going down-right
-           - The digit 1 is just a single vertical stroke, sometimes with a small top serif
-           - Do NOT confuse 9 with 1 under any circumstance
-           
-           STEP C — Format based on type:
-           - type "G": "Sona [number] [unit]"   → e.g., "Sona 1 Bhari", "Sona 10 Aana"
-           - type "S": "Chandi [number] [unit]" → e.g., "Chandi 5 Bhari", "Chandi 9 Bhari"
-           - The unit (Bhari/Aana) comes STRICTLY from the Hindi text, NOT from the type.
-           - S-type can have Bhari. G-type can have Bhari. Read the Hindi carefully.
+           STEP C — Format:
+           - type "G" → "Sona [number] [unit]"
+           - type "S" → "Chandi [number] [unit]"
+           - Unit comes from Hindi text ONLY, not from type.
         
-        KNOWN PATTERNS IN THIS HANDWRITING:
-        - Most entries in this list are G type. Be extra careful to not auto-assume G.
-        - भरी is far more common than आना in this list. If unsure of unit, prefer भरी.
-        - The writer's circled S can look rounded and may resemble G — look for the 
-          horizontal inward bar to confirm G. No bar = S.
-        
-        Output raw JSON array only. No markdown, no explanation.`;
+        Output raw JSON array only. No markdown.`;
     } else {
         // ... existing calculator prompt ...
         promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 4-digit numbers starting with it (A1666->A/666) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'. CRITICAL INSTRUCTIONS: If you only see loan numbers but no amounts or dates, extract the numbers anyway and leave \"principal\" and \"date\" as empty strings \"\". If you find absolutely nothing in the image, return []. Output JSON only. No markdown. No conversational text." 
