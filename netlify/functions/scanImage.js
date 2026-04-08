@@ -54,45 +54,97 @@ exports.handler = async function(event) {
 
         Do not include markdown formatting. Just the JSON.`;
     } else if (scanType === 'loan_entry') {
-        promptText = `
-        Analyze this handwritten list of loans.
-        Columns: Number | Amount | Date (IGNORE) | Hindi Details | Circled Letter (rightmost)
-        
-        Return a raw JSON array of objects with exactly 4 fields: "no", "principal", "type", "details".
-        
-        1. "no": Loan number with '/' between letter and digits.
-           - If 4-digit number starts with 1, replace that 1 with '/' (R155 -> R/155).
-           - Otherwise just add '/' between letter and number (R766 -> R/766).
-        
-        2. "principal": Numeric amount only, no commas (e.g., "110000").
-        
-        3. "type": 
-           STEP 1 — Zoom into the rightmost symbol of the row. It is a letter inside a circle.
-           STEP 2 — Describe the shape of the letter to yourself:
-              - Does it look like a backwards C with a horizontal bar poking inward? → G
-              - Does it look like two waves / a snake / the number 5? → S
-           STEP 3 — Output "G" or "S" based on your description.
-           
-           IMPORTANT BIAS WARNING: Do NOT default to G. 
-           In this list, SOME entries are S. Actively look for S shapes.
-           If the symbol looks rounded with no inward horizontal bar → it is S, output "S".
-        
-        4. "details":
-           STEP A — Read the Hindi unit:
-           - "भरी" / "भर" = Bhari
-           - "आना" / "आन" = Aana
-           - "रत्ती" / "रती" = Ratti → DISCARD this word and its preceding digit
-           
-           STEP B — Extract number and unit:
-           - Read each digit carefully. 9 ≠ 1. 5 ≠ 1.
-           - Discard any Ratti portion completely.
-           
-           STEP C — Format:
-           - type "G" → "Sona [number] [unit]"
-           - type "S" → "Chandi [number] [unit]"
-           - Unit comes from Hindi text ONLY, not from type.
-        
-        Output raw JSON array only. No markdown.`;
+
+    const pass1Prompt = `
+    Analyze this handwritten list of loans.
+    Columns: Number | Amount | Date (IGNORE) | Hindi Details | Circled Letter (IGNORE FOR NOW)
+
+    Return a raw JSON array. Each object has exactly 3 fields: "no", "principal", "details".
+
+    1. "no": Loan number with '/' between letter and digits.
+       - If digits part starts with 1 and total is 4 chars (letter + 3 digits), replace leading 1 with '/'.
+         Example: R155 → R/155, R1234 → R/234.
+       - Otherwise add '/' between letter and number. Example: R766 → R/766.
+
+    2. "principal": Numeric amount only, no commas. Example: "110000".
+
+    3. "details":
+       STEP A — Read the Hindi/Devanagari text:
+       - "भरी" or "भर" or "बरी" = Bhari
+       - "आना" or "आन" = Aana
+       - "रत्ती" or "रती" = Ratti → COMPLETELY DISCARD this word AND the digit before it
+
+       STEP B — Examples:
+       - "5 भरी" → "5 Bhari"
+       - "9 भरी" → "9 Bhari"  (9 has a round top with descending tail, it is NOT 1)
+       - "1 भरी" → "1 Bhari"
+       - "4 आना" → "4 Aana"
+       - "10 आना" → "10 Aana"
+       - "1 आना 3 रत्ती" → "1 Aana"  (discard रत्ती part)
+
+       CRITICAL: Do NOT add "Sona" or "Chandi" prefix. Just number + unit.
+
+    Output raw JSON array only. No markdown.`;
+
+    const pass2Prompt = `
+    This image has a handwritten list of loans.
+    Each row ends with a CIRCLED LETTER at the far right — either a circled G or circled S.
+
+    Your ONLY job: return "G" or "S" for each row.
+
+    HOW TO DISTINGUISH:
+    - Circled G: has a horizontal bar/shelf pointing INWARD on the right side.
+    - Circled S: looks like two opposite curves / a snake. NO horizontal bar at all.
+
+    CRITICAL: Do NOT default everything to G. Some rows are definitely S.
+    If there is NO inward horizontal bar → it is S.
+
+    Return a raw JSON array of strings, one per row, in order.
+    Example: ["S", "G", "S", "G", "G"]
+    Output JSON only. No markdown.`;
+
+    const makeApiCall = async (prompt) => {
+        const body = {
+            contents: [{
+                role: 'user',
+                parts: [
+                    { inline_data: { mimeType: mimeType, data: image } },
+                    { text: prompt }
+                ]
+            }]
+        };
+        const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d?.error?.message || "Gemini API error");
+        let text = d?.candidates[0]?.content?.parts[0]?.text || '';
+        console.log("===== RAW AI RESPONSE =====", text);
+        const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (fenceMatch) text = fenceMatch[1];
+        const jsonMatch = text.match(/[\[{][\s\S]*[\]}]/);
+        if (jsonMatch) text = jsonMatch[0];
+        return JSON.parse(text);
+    };
+
+    const [pass1Data, pass2Data] = await Promise.all([
+        makeApiCall(pass1Prompt),
+        makeApiCall(pass2Prompt)
+    ]);
+
+    const loans = (Array.isArray(pass1Data) ? pass1Data : []).map((loan, i) => {
+        const type = (Array.isArray(pass2Data) && pass2Data[i] === 'G') ? 'G' : 'S';
+        const prefix = type === 'G' ? 'Sona' : 'Chandi';
+        const details = loan.details ? `${prefix} ${loan.details}` : '';
+        return { no: loan.no, principal: loan.principal, type, details };
+    });
+
+    return {
+        statusCode: 200,
+        body: JSON.stringify({ loans }),
+    };
     } else {
         // ... existing calculator prompt ...
         promptText = "From the image, extract loan entries into a raw JSON array (keys: \"no\", \"principal\", \"date\") with perfect transcription accuracy (e.g., B1680 is B/680, NOT B/1680)(e.g, D1319 IS D/319, NOT D/1319)(B1455 IS B/455, NOT B/1455)(A11005 IS A/1005); format dates to 'DD/MM/YYYY', and for the 'no' field, replace '1' with '/' for 4-digit numbers starting with it (A1666->A/666) but otherwise add '/' between the letter and number (B766->B/766), also replacing any '.', ' ', or '-' with '/'. CRITICAL INSTRUCTIONS: If you only see loan numbers but no amounts or dates, extract the numbers anyway and leave \"principal\" and \"date\" as empty strings \"\". If you find absolutely nothing in the image, return []. Output JSON only. No markdown. No conversational text." 
