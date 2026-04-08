@@ -348,8 +348,13 @@ const fillTableFromScan = (loans) => {
             // Found! Use the Database values instead of the Image values
             finalPrincipal = dbMatch.principal;
             finalDate = dbMatch.date;
-            // Optional: You could also fix the 'cleanNo' casing to match DB if needed
-            cleanNo = dbMatch.no;
+            
+            // Retain the asterisk if it was scanned, but fix the casing
+            if (cleanNo.includes('*')) {
+                cleanNo = dbMatch.no + '*';
+            } else {
+                cleanNo = dbMatch.no;
+            }
         }
         // ------------------------------------------------
 
@@ -1483,12 +1488,12 @@ const deleteReport = async (docId, isFinalised = false) => {
 const normalizeLoanNo = (loanNo) => {
     if (!loanNo) return '';
     
-    // 1. Clean basic junk (spaces, uppercase)
-    const cleanStr = loanNo.trim().toUpperCase();
+    // 1. Clean basic junk (spaces, uppercase, and silently remove asterisks for searching)
+    const cleanStr = loanNo.replace(/\*/g, '').trim().toUpperCase();
 
     // 2. INTELLIGENT REGEX
-    // Capture Letters -> Ignore Middle Junk -> Capture Numbers
-    const match = cleanStr.match(/^([A-Z]+)[^A-Z0-9]*([0-9]+)$/);
+    // Capture Letters -> Ignore Middle Junk -> Capture Numbers (ignores trailing junk)
+    const match = cleanStr.match(/^([A-Z]+)[^A-Z0-9]*([0-9]+)/);
 
     if (match) {
         const prefix = match[1];      // e.g., "R"
@@ -1553,9 +1558,9 @@ const injectOldLoans = () => {
     });
 
     // --- BUDGET RULES ---
-    const baseTarget = 50000; 
+    const baseTarget = 100000; 
     const dynamicTarget = baseTarget + freedCapital;
-    const whaleThreshold = 50000; // Anything above this is a "Whale"
+    const whaleThreshold = 100000; // Anything above this is a "Whale"
 
     // 4. Prep data to calculate age and value
     const today = new Date();
@@ -1603,11 +1608,11 @@ const injectOldLoans = () => {
     }
 
     // --- STEP 6: REGULAR FILLING (If no Whale took the budget) ---
-    // If a whale was added, 'addedTotal' is > 50k, so this loop will instantly break.
+    // If a whale was added, 'addedTotal' is > 100k, so this loop will instantly break.
     // The extra dynamic budget is strictly reserved for Whales, not for adding dozens of small loans.
-    const smallLoanLimit = 55000; // Absolute max allowed for small loans
-    const targetSweetSpot = 45000; // Point where we stop looking for more
-
+    const smallLoanLimit = 110000; // Absolute max allowed for small loans (1 Lakh + 10% variance)
+    const targetSweetSpot = 95000; // Point where we stop looking for more
+    
     for (let i = 0; i < availableOldLoans.length; i++) {
         if (addedTotal >= targetSweetSpot) break; // Reached our standard 50k budget
 
