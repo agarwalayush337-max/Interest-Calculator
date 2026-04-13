@@ -2057,11 +2057,11 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             totalPrincipal += p; 
             totalInterest += interest;
 
-            // --- FIX: Increment Counts Alongside Values ---
-            if (days < 730) { 
+            // --- FIX: Increment Counts Alongside Values (360-Day Math) ---
+            if (days < 720) { // 2 Years * 360
                 agingStats.normalVal += p; 
                 agingStats.normalCount++; 
-            } else if (days < 1095) { 
+            } else if (days < 1080) { // 3 Years * 360
                 agingStats.midVal += p; 
                 agingStats.midCount++; 
             } else { 
