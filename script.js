@@ -2175,7 +2175,13 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
                 backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'], borderRadius: 4 
             }] 
         },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: currencyTooltip }, scales: { y: { beginAtZero: true, display: false } } }
+        options: { 
+            maintainAspectRatio: false, 
+            // --- THE FIX: Make the entire vertical column hoverable ---
+            interaction: { mode: 'index', intersect: false }, 
+            plugins: { legend: { display: false }, tooltip: currencyTooltip }, 
+            scales: { y: { beginAtZero: true, display: false } } 
+        }
     });
     
     } // <--- CLOSES THE PREVENT FLICKER BLOCK
