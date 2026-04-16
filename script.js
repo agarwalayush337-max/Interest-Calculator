@@ -2202,10 +2202,10 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     document.getElementById('kpiAvgAge').textContent = `${avgAgeTotal} Days`;
     const splitEl = document.getElementById('kpiAvgAgeSplit');
     if(splitEl) splitEl.textContent = `G: ${avgAgeG}d | S: ${avgAgeS}d`;
-    if(document.getElementById('kpiChurn')) document.getElementById('kpiChurn').textContent = redemptionText;
-    if(document.getElementById('redemptionLabel')) document.getElementById('redemptionLabel').textContent = `Avg Redemption ${currentFilter.label}`;
-    if(document.getElementById('kpiHeatmap')) document.getElementById('kpiHeatmap').textContent = busiestMonth;
-    if (document.getElementById('kpiMonthly')) document.getElementById('kpiMonthly').textContent = `₹${Math.round(totalMonthlyIncome).toLocaleString('en-IN')}`;
+    
+    // (Note: kpiChurn and redemptionLabel are now handled exclusively by window.updateRedemptionKPI)
+    
+    if(document.getElementById('kpiHeatmap')) document.getElementById('kpiHeatmap').textContent = busiestMonth;    if (document.getElementById('kpiMonthly')) document.getElementById('kpiMonthly').textContent = `₹${Math.round(totalMonthlyIncome).toLocaleString('en-IN')}`;
     document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
     document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
     document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
