@@ -811,6 +811,33 @@ if (batchTable) {
     });
 }
 
+// --- NEW: Dynamic Sona/Chandi Prefix Logic ---
+    batchTable.addEventListener('change', (e) => {
+        // Only trigger when the Type dropdown is changed
+        if (e.target.classList.contains('batch-type')) {
+            const newType = e.target.value; // 'G' or 'S'
+            const row = e.target.closest('tr');
+            const noteInput = row.querySelector('.batch-note');
+            
+            if (noteInput && noteInput.value.trim() !== '') {
+                let currentText = noteInput.value.trim();
+                const targetPrefix = newType === 'G' ? 'Sona ' : 'Chandi ';
+                
+                // Regex to check if the string already starts with Sona or Chandi
+                const prefixRegex = /^(Sona|Chandi)\s+/i;
+                
+                if (prefixRegex.test(currentText)) {
+                    // Replace existing prefix seamlessly
+                    noteInput.value = currentText.replace(prefixRegex, targetPrefix);
+                } else {
+                    // Prepend the prefix if it didn't exist at all
+                    noteInput.value = targetPrefix + currentText;
+                }
+            }
+        }
+    });
+
+
 const resetCalculatorState = () => {
     if (!user) return;
     const defaultLoans = Array(3).fill({ no: '', principal: '', date: '' });
