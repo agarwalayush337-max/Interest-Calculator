@@ -40,13 +40,58 @@ let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
 
 let currentGrowthTimeframe = 'ALL'; // Default setting
-let redemptionTimeframeIndex = 0; // NEW: Tracks the current timeframe filter
+let redemptionTimeframeIndex = 0; 
 
-// NEW: Click handler to cycle through timeframes
+// 1. The Click Event: Only triggers the lightweight text updater
 window.toggleRedemptionAge = () => {
-    // Cycles from 0 to 4, then resets back to 0
     redemptionTimeframeIndex = (redemptionTimeframeIndex + 1) % 5; 
-    renderLiveStats(false); // Re-run the stats engine instantly
+    window.updateRedemptionKPI(); 
+};
+
+// 2. The Lightweight Updater: Calculates and updates ONLY the text box
+window.updateRedemptionKPI = () => {
+    const rTimeframes = [
+        { label: '(All)', days: Infinity },
+        { label: '(1 Yr)', days: 365 },
+        { label: '(6M)', days: 180 },
+        { label: '(3M)', days: 90 },
+        { label: '(1M)', days: 30 }
+    ];
+    
+    const currentFilter = rTimeframes[redemptionTimeframeIndex];
+    let totalDays = 0;
+    let count = 0;
+
+    const cutoff = new Date();
+    if (currentFilter.days !== Infinity) {
+        cutoff.setDate(cutoff.getDate() - currentFilter.days);
+    }
+
+    // Instantly scan cached reports without touching the DOM or charts
+    if (typeof cachedFinalisedReports !== 'undefined') {
+        cachedFinalisedReports.forEach(report => {
+            const end = parseDate(report.reportDate);
+            if (!end) return;
+
+            // Only count loans if the report was finalised within our timeframe
+            if (currentFilter.days === Infinity || end >= cutoff) {
+                const loansData = report.loans || report.items || [];
+                loansData.forEach(item => {
+                    const start = parseDate(item.date);
+                    if (start) {
+                        totalDays += Math.max(0, days360(start, end));
+                        count++;
+                    }
+                });
+            }
+        });
+    }
+
+    const redemptionText = count > 0 ? Math.round(totalDays / count) + " Days" : "-";
+
+    // Update the UI instantly without reloading any graphs
+    if(document.getElementById('kpiChurn')) document.getElementById('kpiChurn').textContent = redemptionText;
+    if(document.getElementById('redemptionLabel')) document.getElementById('redemptionLabel').textContent = `Avg Redemption ${currentFilter.label}`;
 };
 
 // --- GLOBALS FOR SCANNING & SHEETS ---
@@ -2140,35 +2185,8 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     const avgAgeG = ageStats.gCount > 0 ? Math.round(ageStats.gDays / ageStats.gCount) : 0;
     const avgAgeS = ageStats.sCount > 0 ? Math.round(ageStats.sDays / ageStats.sCount) : 0;
 
-    // --- NEW: Dynamic Avg Redemption Age ---
-    const rTimeframes = [
-        { label: '(All)', days: Infinity },
-        { label: '(1 Yr)', days: 365 },
-        { label: '(6M)', days: 180 },
-        { label: '(3M)', days: 90 },
-        { label: '(1M)', days: 30 }
-    ];
-    
-    // Use the global index to pick the current timeframe
-    if (typeof window.redemptionTimeframeIndex === 'undefined') window.redemptionTimeframeIndex = 0;
-    const currentFilter = rTimeframes[window.redemptionTimeframeIndex];
-    
-    let recentRedeemed = redeemedLoansList;
-    
-    // Filter the list if it's not set to 'All'
-    if (currentFilter.days !== Infinity) {
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - currentFilter.days);
-        recentRedeemed = redeemedLoansList.filter(l => l.end >= cutoff);
-    }
-
-    let redemptionText = "-";
-    if (recentRedeemed.length > 0) {
-        let totalDays = 0;
-        recentRedeemed.forEach(l => totalDays += l.duration);
-        redemptionText = Math.round(totalDays / recentRedeemed.length) + " Days";
-    }
-
+    // Trigger the lightweight redemption KPI updater
+    if (typeof window.updateRedemptionKPI === 'function') window.updateRedemptionKPI();
     // Fix Heatmap: Show "-" if no data at all
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const maxVal = Math.max(...monthCounts);
