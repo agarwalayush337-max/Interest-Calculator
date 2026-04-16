@@ -2849,7 +2849,9 @@ const confirmFinaliseWithDues = async () => {
             if (reportData.loans && Array.isArray(reportData.loans)) {
                 reportData.loans.forEach(loan => {
                     if (loan.no) {
-                        let cleanNo = loan.no.trim().toUpperCase();
+                        // --- FIX: Strip out the asterisk (*) before searching the database ---
+                        let cleanNo = normalizeLoanNo(loan.no); 
+                        
                         // Create unique ID (e.g. USER123_A-52)
                         const docId = `${user.uid}_${cleanNo.replace(/\//g, '-')}`;
                         
