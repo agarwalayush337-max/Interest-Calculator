@@ -37,7 +37,6 @@ let cachedFinalisedReports = [];
 let activeInventory = []; // NEW: Stores active stock
 let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
-let currentGrowthTimeframe = 'ALL'; // Default setting
 let currentlyEditingReportId = null; 
 
 let currentGrowthTimeframe = 'ALL'; // Default setting
