@@ -40,6 +40,16 @@ let pieChartInstance, barChartInstance;
 let currentGrowthTimeframe = 'ALL'; // Default setting
 let currentlyEditingReportId = null; 
 
+let currentGrowthTimeframe = 'ALL'; // Default setting
+let redemptionTimeframeIndex = 0; // NEW: Tracks the current timeframe filter
+
+// NEW: Click handler to cycle through timeframes
+window.toggleRedemptionAge = () => {
+    // Cycles from 0 to 4, then resets back to 0
+    redemptionTimeframeIndex = (redemptionTimeframeIndex + 1) % 5; 
+    renderLiveStats(false); // Re-run the stats engine instantly
+};
+
 // --- GLOBALS FOR SCANNING & SHEETS ---
 let currentScanCoordinates = []; 
 let scanCanvas = null;           
@@ -2131,15 +2141,33 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     const avgAgeG = ageStats.gCount > 0 ? Math.round(ageStats.gDays / ageStats.gCount) : 0;
     const avgAgeS = ageStats.sCount > 0 ? Math.round(ageStats.sDays / ageStats.sCount) : 0;
 
-    // Fix Churn Rate: Show "-" if no finalised loans in last 90 days
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setDate(threeMonthsAgo.getDate() - 90);
-    const recentRedeemed = redeemedLoansList.filter(l => l.end >= threeMonthsAgo);
-    let churnText = "-";
+    // --- NEW: Dynamic Avg Redemption Age ---
+    const rTimeframes = [
+        { label: '(All)', days: Infinity },
+        { label: '(1 Yr)', days: 365 },
+        { label: '(6M)', days: 180 },
+        { label: '(3M)', days: 90 },
+        { label: '(1M)', days: 30 }
+    ];
+    
+    // Use the global index to pick the current timeframe
+    if (typeof window.redemptionTimeframeIndex === 'undefined') window.redemptionTimeframeIndex = 0;
+    const currentFilter = rTimeframes[window.redemptionTimeframeIndex];
+    
+    let recentRedeemed = redeemedLoansList;
+    
+    // Filter the list if it's not set to 'All'
+    if (currentFilter.days !== Infinity) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - currentFilter.days);
+        recentRedeemed = redeemedLoansList.filter(l => l.end >= cutoff);
+    }
+
+    let redemptionText = "-";
     if (recentRedeemed.length > 0) {
-        let totalChurnDays = 0;
-        recentRedeemed.forEach(l => totalChurnDays += l.duration);
-        churnText = Math.round(totalChurnDays / recentRedeemed.length) + " Days";
+        let totalDays = 0;
+        recentRedeemed.forEach(l => totalDays += l.duration);
+        redemptionText = Math.round(totalDays / recentRedeemed.length) + " Days";
     }
 
     // Fix Heatmap: Show "-" if no data at all
@@ -2157,7 +2185,8 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     document.getElementById('kpiAvgAge').textContent = `${avgAgeTotal} Days`;
     const splitEl = document.getElementById('kpiAvgAgeSplit');
     if(splitEl) splitEl.textContent = `G: ${avgAgeG}d | S: ${avgAgeS}d`;
-    if(document.getElementById('kpiChurn')) document.getElementById('kpiChurn').textContent = churnText;
+    if(document.getElementById('kpiChurn')) document.getElementById('kpiChurn').textContent = redemptionText;
+    if(document.getElementById('redemptionLabel')) document.getElementById('redemptionLabel').textContent = `Avg Redemption ${currentFilter.label}`;
     if(document.getElementById('kpiHeatmap')) document.getElementById('kpiHeatmap').textContent = busiestMonth;
     if (document.getElementById('kpiMonthly')) document.getElementById('kpiMonthly').textContent = `₹${Math.round(totalMonthlyIncome).toLocaleString('en-IN')}`;
     document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
