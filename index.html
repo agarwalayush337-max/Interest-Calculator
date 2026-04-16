@@ -202,11 +202,12 @@
                         </div>
                     </div>
                 
-                    <div class="kpi-card">
+                    <div class="kpi-card" onclick="toggleRedemptionAge()" style="cursor: pointer; position: relative;" title="Click to change timeframe">
                         <div class="kpi-icon">🔄</div>
                         <div class="kpi-info">
-                            <span class="kpi-label">Churn Rate (3M)</span>
+                            <span class="kpi-label" id="redemptionLabel">Avg Redemption (All)</span>
                             <span class="kpi-val" id="kpiChurn">0 Days</span>
+                            <div style="font-size: 0.65rem; color: #2a9d8f; font-weight: 600; margin-top: 2px;">Tap to change time</div>
                         </div>
                     </div>
                 
