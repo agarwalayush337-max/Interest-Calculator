@@ -3689,94 +3689,124 @@ const handleBatchScan = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    showConfirm('Scanning...', 'Analyzing handwritten list for Entry...', false);
+    showConfirm('Scanning...', 'Optimizing and analyzing image...', false);
 
     try {
+        // --- FIX: Client-Side Image Compression ---
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
         const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                const base64Image = reader.result.split(',')[1];
-                
-                // --- FIX 1: Send 'loan_entry' scanType ---
-                const response = await fetch('/.netlify/functions/scanImage', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        image: base64Image, 
-                        mimeType: file.type,
-                        scanType: 'loan_entry' // <--- CRITICAL FIX
-                    })
-                });
+        
+        reader.onload = (e) => {
+            img.onload = async () => {
+                try {
+                    // 1. Resize if the image is too large (keeps aspect ratio)
+                    const MAX_DIMENSION = 2400; // (Pushes the limit, but keeps extreme detail)
+                    let width = img.width;
+                    let height = img.height;
 
-                if (!response.ok) throw new Error("Scan failed. Server error.");
-                
-                const result = await response.json();
-                const loans = result.loans; 
-
-                if (!loans || loans.length === 0) {
-                    closeConfirm();
-                    showConfirm("No Data", "No legible loans found in the image.", false);
-                    return;
-                }
-
-                const batchBody = document.querySelector('#batchTable tbody');
-                // Remove empty rows first
-                Array.from(batchBody.rows).forEach(row => {
-                   const noVal = row.querySelector('.batch-no').value;
-                   if(!noVal) row.remove();
-                });
-
-                // --- FIX 2: Get Selected Series ---
-                const selectedSeries = document.getElementById('batchSeries')?.value || 'R';
-
-                loans.forEach(l => {
-                    const row = batchBody.insertRow();
-                    const count = batchBody.rows.length;
-                    
-                    // --- FIX 3: Apply Series Prefix Immediately ---
-                    let cleanNo = String(l.no).toUpperCase().trim();
-                    if (/^\d+$/.test(cleanNo)) {
-                        cleanNo = `${selectedSeries}/${cleanNo}`; // R/11
-                    } else {
-                         // Standard cleanup just in case
-                        cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]*(\d+)/g, '$1/$2');
+                    if (width > height && width > MAX_DIMENSION) {
+                        height *= MAX_DIMENSION / width;
+                        width = MAX_DIMENSION;
+                    } else if (height > MAX_DIMENSION) {
+                        width *= MAX_DIMENSION / height;
+                        height = MAX_DIMENSION;
                     }
 
-                    // --- FIX 4: Map Type & Details ---
-                    // Default to 'S' if undefined, but use scan result if present
-                    const typeVal = (l.type === 'G' || l.type === 'S') ? l.type : 'S';
-                    const detailVal = l.details || '';
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
 
-                    row.innerHTML = `
-                        <td>${count}</td>
-                        <td>
-                            <input type="text" class="batch-no" value="${cleanNo}" placeholder="LOAN NO" style="text-transform: uppercase; width: 100%;">
-                        </td>
-                        <td><input type="number" class="batch-principal" value="${l.principal}" placeholder="0" oninput="updateBatchTotal()"></td>
-                        <td>
-                            <select class="batch-type" style="border:none; background:transparent; font-weight:900; font-size: 0.9rem;">
-                                <option value="S" ${typeVal === 'S' ? 'selected' : ''}>S</option>
-                                <option value="G" ${typeVal === 'G' ? 'selected' : ''}>G</option>
-                            </select>
-                        </td>
-                        <td><input type="text" class="batch-note" placeholder="Details" value="${detailVal}"></td>
-                        <td style="text-align: center;">
-                            <button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows(); updateBatchTotal();" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
-                        </td>
-                    `;
-                });
-                
-                renumberBatchRows();
-                updateBatchTotal(); // Calculate total immediately
-                closeConfirm();
-                showConfirm("Success", `Added ${loans.length} loans.`, false);
+                    // 2. Compress to Base64 JPEG (80% Quality)
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    const base64Image = compressedDataUrl.split(',')[1];
+                    
+                    // 3. Send the smaller, optimized image to the Server
+                    const response = await fetch('/.netlify/functions/scanImage', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            image: base64Image, 
+                            mimeType: 'image/jpeg', // Force jpeg since we compressed it
+                            scanType: 'loan_entry' 
+                        })
+                    });
+
+                    // 4. Improved Error Handling (Reads actual server error instead of generic text)
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.error || "Upload limit exceeded. Try taking the photo from further back.");
+                    }
+                    
+                    const result = await response.json();
+                    const loans = result.loans; 
+
+                    if (!loans || loans.length === 0) {
+                        closeConfirm();
+                        showConfirm("No Data", "No legible loans found in the image.", false);
+                        return;
+                    }
+
+                    const batchBody = document.querySelector('#batchTable tbody');
+                    // Remove empty rows first
+                    Array.from(batchBody.rows).forEach(row => {
+                       const noVal = row.querySelector('.batch-no').value;
+                       if(!noVal) row.remove();
+                    });
+
+                    const selectedSeries = document.getElementById('batchSeries')?.value || 'R';
+
+                    loans.forEach(l => {
+                        const row = batchBody.insertRow();
+                        const count = batchBody.rows.length;
+                        
+                        let cleanNo = String(l.no).toUpperCase().trim();
+                        if (/^\d+$/.test(cleanNo)) {
+                            cleanNo = `${selectedSeries}/${cleanNo}`; 
+                        } else {
+                            cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]*(\d+)/g, '$1/$2');
+                        }
+
+                        const typeVal = (l.type === 'G' || l.type === 'S') ? l.type : 'S';
+                        const detailVal = l.details || '';
+
+                        row.innerHTML = `
+                            <td>${count}</td>
+                            <td>
+                                <input type="text" class="batch-no" value="${cleanNo}" placeholder="LOAN NO" style="text-transform: uppercase; width: 100%;">
+                            </td>
+                            <td><input type="number" class="batch-principal" value="${l.principal}" placeholder="0" oninput="updateBatchTotal()"></td>
+                            <td>
+                                <select class="batch-type" style="border:none; background:transparent; font-weight:900; font-size: 0.9rem;">
+                                    <option value="S" ${typeVal === 'S' ? 'selected' : ''}>S</option>
+                                    <option value="G" ${typeVal === 'G' ? 'selected' : ''}>G</option>
+                                </select>
+                            </td>
+                            <td><input type="text" class="batch-note" placeholder="Details" value="${detailVal}"></td>
+                            <td style="text-align: center;">
+                                <button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); renumberBatchRows(); updateBatchTotal();" style="padding: 5px 12px; font-size: 1.5rem; line-height: 1;">&times;</button>
+                            </td>
+                        `;
+                    });
+                    
+                    renumberBatchRows();
+                    updateBatchTotal(); 
+                    closeConfirm();
+                    showConfirm("Success", `Added ${loans.length} loans.`, false);
+
+                } catch (err) {
+                    closeConfirm();
+                    showConfirm("Error", err.message, false);
+                }
+            };
             
-            } catch (err) {
-                closeConfirm();
-                showConfirm("Error", err.message, false);
-            }
+            // Trigger the image load
+            img.src = e.target.result;
         };
+        
         reader.readAsDataURL(file);
+
     } catch (e) {
         closeConfirm();
         showConfirm("Error", e.message, false);
