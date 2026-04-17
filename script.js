@@ -433,6 +433,57 @@ const fillTableFromScan = (loans) => {
     showConfirm('Scan Complete', `${loans.length} loan(s) were successfully added to the table.`, false);
 };
 
+// ==========================================
+// SMART VALUATION ENGINE (AI OCR Corrector)
+// ==========================================
+const applyValuationRules = (principalText, rawType, rawDetails) => {
+    const principal = parseFloat(principalText) || 0;
+    if (principal <= 0) return { type: rawType, details: rawDetails };
+
+    // 1. Extract the number from the AI's details (e.g., "Chandi 5 Bhari" -> 5)
+    const match = rawDetails.match(/(\d+(\.\d+)?)/);
+    if (!match) return { type: rawType, details: rawDetails }; // No number found
+    
+    const weight = parseFloat(match[1]);
+
+    // 2. Define the Valuation Rules (with a small 10% safety buffer for outliers)
+    const silverPerBhariMin = 700;   // User standard: 800
+    const silverPerBhariMax = 1700;  // User standard: 1500
+    
+    const goldPerBhariMin = 70000;   // User standard: 75000
+    const goldPerBhariMax = 130000;  // User standard: 120000
+    
+    // 1 Bhari = 16 Aana
+    const goldPerAanaMin = goldPerBhariMin / 16; 
+    const goldPerAanaMax = goldPerBhariMax / 16; 
+
+    // 3. Mathematical Cross-Validation
+    const isSilverBhari = principal >= (weight * silverPerBhariMin) && principal <= (weight * silverPerBhariMax);
+    const isGoldAana = principal >= (weight * goldPerAanaMin) && principal <= (weight * goldPerAanaMax);
+    const isGoldBhari = principal >= (weight * goldPerBhariMin) && principal <= (weight * goldPerBhariMax);
+
+    // 4. Correction & Formatting Logic
+    if (isGoldAana) {
+        return { type: 'G', details: `Sona ${weight} Aana` };
+    } else if (isSilverBhari) {
+        return { type: 'S', details: `Chandi ${weight} Bhari` };
+    } else if (isGoldBhari) {
+        return { type: 'G', details: `Sona ${weight} Bhari` };
+    }
+
+    // 5. Fallback if the amount falls outside standard rules
+    if (rawType === 'S') {
+        return { type: 'S', details: `Chandi ${weight} Bhari` }; // Enforce Bhari for Silver
+    } else if (rawType === 'G') {
+        if (rawDetails.toLowerCase().includes('bhari')) {
+            return { type: 'G', details: `Sona ${weight} Bhari` };
+        }
+        return { type: 'G', details: `Sona ${weight} Aana` };
+    }
+    
+    return { type: rawType, details: rawDetails };
+};
+
 const handleImageScan = async (fileOrEvent) => {
     const file = fileOrEvent.target ? fileOrEvent.target.files[0] : fileOrEvent;
 
@@ -3768,8 +3819,13 @@ const handleBatchScan = async (event) => {
                             cleanNo = cleanNo.replace(/([A-Z])[\.\-\s]*(\d+)/g, '$1/$2');
                         }
 
-                        const typeVal = (l.type === 'G' || l.type === 'S') ? l.type : 'S';
-                        const detailVal = l.details || '';
+                        const rawType = (l.type === 'G' || l.type === 'S') ? l.type : 'S';
+                        const rawDetails = l.details || '';
+
+                        // --- NEW: Run the AI Data through the Smart Valuation Engine ---
+                        const correctedData = applyValuationRules(l.principal, rawType, rawDetails);
+                        const typeVal = correctedData.type;
+                        const detailVal = correctedData.details;
 
                         row.innerHTML = `
                             <td>${count}</td>
