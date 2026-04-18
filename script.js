@@ -610,32 +610,30 @@ const toggleTxView = (mode) => {
 // ==========================================
 // NEW: LOAN ENTRIES (DAILY BATCH REPORT)
 // ==========================================
-const renderLoanEntries = () => {
+const renderLoanEntries = (filter = '') => {
     const listEl = document.getElementById('loanEntriesList');
     if (!listEl) return;
-    listEl.innerHTML = '<li><div style="text-align:center; padding: 20px;">Calculating entries...</div></li>';
-
+    
+    const searchTerm = filter.toLowerCase();
     const entriesByDate = {};
+    const compiledLoansByDate = {}; // Stores actual loan data for viewing
 
     // Helper to group loans by their specific Entry Date
     const addLoanToGroup = (loan) => {
         const d = loan.date || 'Unknown';
         if (!entriesByDate[d]) {
              entriesByDate[d] = { date: d, count: 0, principal: 0, gCount: 0, sCount: 0 };
+             compiledLoansByDate[d] = [];
         }
         entriesByDate[d].count++;
         entriesByDate[d].principal += parseFloat(loan.principal) || 0;
-        
         if (loan.type === 'G') entriesByDate[d].gCount++;
         else entriesByDate[d].sCount++;
+        
+        compiledLoansByDate[d].push(loan);
     };
 
-    // 1. Scan Active Inventory
-    if (typeof activeInventory !== 'undefined') {
-        activeInventory.forEach(addLoanToGroup);
-    }
-
-    // 2. Scan Finalised Reports (So you don't lose history of redeemed loans)
+    if (typeof activeInventory !== 'undefined') activeInventory.forEach(addLoanToGroup);
     if (typeof cachedFinalisedReports !== 'undefined') {
         cachedFinalisedReports.forEach(report => {
             const loansData = report.loans || report.items || [];
@@ -643,7 +641,6 @@ const renderLoanEntries = () => {
         });
     }
 
-    // 3. Sort by Date (Newest at the top)
     const sortedDates = Object.values(entriesByDate).sort((a, b) => {
         const dateA = parseDate(a.date);
         const dateB = parseDate(b.date);
@@ -652,32 +649,72 @@ const renderLoanEntries = () => {
         return dateB - dateA;
     });
 
-    if (sortedDates.length === 0) {
-        listEl.innerHTML = '<li>No loan entries found.</li>';
+    // Apply Search Filter
+    const filteredDates = sortedDates.filter(entry => entry.date.toLowerCase().includes(searchTerm));
+
+    if (filteredDates.length === 0) {
+        listEl.innerHTML = '<li style="text-align:center; padding:20px; box-shadow:none;">No loan entries found.</li>';
         return;
     }
 
-    listEl.innerHTML = ''; // Clear loader
+    listEl.innerHTML = ''; 
 
-    // 4. Build the UI
-    sortedDates.forEach(entry => {
+    filteredDates.forEach(entry => {
+        // Save the compiled virtual report to memory so the View button can open it
+        const tempId = `temp_entry_${entry.date.replace(/\//g, '')}`;
+        window[tempId] = {
+            id: tempId,
+            reportDate: entry.date,
+            reportName: `Daily Entry: ${entry.date}`,
+            interestRate: document.getElementById('interestRate').value || '1.75',
+            loans: compiledLoansByDate[entry.date]
+        };
+
         const li = document.createElement('li');
         li.innerHTML = `
             <div style="flex-grow: 1;">
-                <span style="font-weight: 600; font-size: 1.1rem; color: #3D52D5;">Entry: ${entry.date}</span>
-                <div style="font-size: 0.85rem; color: var(--subtle-text-color); margin-top: 4px; font-weight: 500;">
-                    Total Items: ${entry.count} &nbsp;|&nbsp; <span style="color: #fca311;">G: ${entry.gCount}</span> &nbsp;|&nbsp; <span>S: ${entry.sCount}</span>
+                <span style="font-weight: 600;">Entry: ${entry.date}</span>
+                <div style="font-size: 0.8rem; color: var(--subtle-text-color);">
+                    Total Items: ${entry.count} (G: ${entry.gCount} | S: ${entry.sCount})
                 </div>
             </div>
-            <div style="text-align: right;">
-                <div style="font-size: 0.75rem; color: #888; margin-bottom: 2px;">Total Principal</div>
-                <div style="font-weight: bold; color: #2a9d8f; font-size: 1.1rem;">
+            <div style="text-align: left; width: 100%; margin-bottom: 8px;">
+                <div style="font-weight: bold; color: var(--success-color); font-size: 1.1rem;">
                     ₹${Math.round(entry.principal).toLocaleString('en-IN')}
                 </div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="viewEntryReport('${entry.date}')">View Entries</button>
             </div>
         `;
         listEl.appendChild(li);
     });
+};
+
+// --- NEW: Virtual Report Viewer ---
+window.viewEntryReport = (dateString) => {
+    const tempId = `temp_entry_${dateString.replace(/\//g, '')}`;
+    const virtualReport = window[tempId];
+    
+    if (!virtualReport) return showConfirm("Error", "Could not load entry data.", false);
+
+    // Inject into cache temporarily so viewReport can find it
+    const existingIndex = cachedReports.findIndex(r => r.id === virtualReport.id);
+    if (existingIndex > -1) cachedReports[existingIndex] = virtualReport;
+    else cachedReports.push(virtualReport);
+
+    // Open it using your existing read-only viewer
+    viewReport(virtualReport.id, false, false, 'recentTransactionsTab');
+    
+    // Customize the Back button to return to the Entries tab instead of Recent
+    const exitBtn = document.getElementById('exitViewModeBtn');
+    if (exitBtn) {
+        exitBtn.textContent = 'Back to Entries';
+        exitBtn.onclick = () => {
+            exitViewMode();
+            toggleTxView('entries');
+        };
+    }
 };
 
 // NEW: Toggle between Search and Entry Views
@@ -3253,6 +3290,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('finalisedReportSearchInput').addEventListener('input', e => { 
         renderFinalisedTransactions(e.target.value); 
     });
+
+    // --- NEW: Loan Entries Search Listener ---
+    document.getElementById('entriesSearchInput').addEventListener('input', e => { renderLoanEntries(e.target.value); });
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
     // ---------------------------------------------------------
