@@ -125,8 +125,13 @@
                     <div class="segment-control">
                         <input type="radio" name="txType" id="txPending" value="pending" checked onclick="toggleTxView('pending')">
                         <label for="txPending">Pending</label>
+                        
                         <input type="radio" name="txType" id="txFinalised" value="finalised" onclick="toggleTxView('finalised')">
                         <label for="txFinalised">Finalised</label>
+
+                        <input type="radio" name="txType" id="txEntries" value="entries" onclick="toggleTxView('entries')">
+                        <label for="txEntries">Entries</label>
+                        
                         <div class="segment-marker"></div>
                     </div>
                 </div>
@@ -147,6 +152,13 @@
                     </div>
                     <div id="finalisedTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
                     <ul id="finalisedTransactionsList"></ul>
+                </div>
+                <div id="entriesView" style="display: none;">
+                    <div style="padding: 10px 0; text-align: center; color: #666; font-size: 0.85rem;">
+                        Daily Summary of Capital Deployed
+                    </div>
+                    <ul id="loanEntriesList">
+                        </ul>
                 </div>
             </div>
         </div>
