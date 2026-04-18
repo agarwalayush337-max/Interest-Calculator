@@ -331,15 +331,12 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 .print-header { display: none; }
 
 /* --- Width Adjustments --- */
-#interestRateContainer {
-    width: 100px;
-}
-#todayDateContainer {
-    max-width: 110px;
-}
+#interestRateContainer { width: 100px; }
+#todayDateContainer { max-width: 110px; }
 #recentSearchContainer,
-#finalisedSearchContainer {
-    max-width: 270px;
+#finalisedSearchContainer,
+#entriesSearchContainer { 
+    max-width: 270px; 
 }
 /* --- Responsive Styles for Mobile --- */
 @media screen and (max-width: 768px) {
@@ -507,48 +504,54 @@ td.read-only { font-weight: 500; font-size: 1rem; }
     box-shadow: none !important;
 }
 
-/* --- Transaction Toggle Styles --- */
+/* --- Transaction & Inventory Toggle Styles --- */
 .toggle-container { display: flex; justify-content: center; margin-bottom: 1.5rem; }
+
+/* Default Base (Used perfectly by Inventory 2-Way Toggle) */
 .segment-control {
-    background: #e0e5ec; position: relative; display: flex;
-    border-radius: 8px; padding: 4px; width: 100%; max-width: 400px;
+    background: #e0e5ec; position: relative; display: inline-flex;
+    border-radius: 8px; padding: 4px; 
     box-shadow: inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff;
 }
 .segment-control input { display: none; }
 .segment-control label {
-    flex: 1; text-align: center; padding: 8px 0; cursor: pointer; z-index: 2; font-weight: 600; 
-    font-size: 0.9rem; color: #777; transition: color 0.3s;
+    padding: 8px 25px; cursor: pointer; z-index: 2; font-weight: 600; 
+    font-size: 0.9rem; color: #777; transition: color 0.3s; text-align: center;
 }
 .segment-control input:checked + label { color: #3D52D5; }
 .segment-marker {
-    position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(33.33% - 8px);
+    position: absolute; top: 4px; bottom: 4px; left: 4px; 
+    width: calc(50% - 4px); /* Default for 2 items */
     background: #e0e5ec; border-radius: 6px;
     box-shadow: 3px 3px 6px #a3b1c6, -3px -3px 6px #ffffff;
     transition: transform 0.3s ease; z-index: 1;
 }
+
+/* OVERRIDE: Specific rules for Transactions Tab (3-Way Toggle) */
+#transactionsTab .segment-control {
+    display: flex; width: 100%; max-width: 350px;
+}
+#transactionsTab .segment-control label {
+    flex: 1; padding: 8px 0;
+}
+#transactionsTab .segment-marker {
+    width: calc(33.333% - 2.66px); /* Exact math to eliminate the gap */
+}
+
+/* Toggle Animations */
 #txPending:checked ~ .segment-marker { transform: translateX(0); }
 #txFinalised:checked ~ .segment-marker { transform: translateX(100%); }
 #txEntries:checked ~ .segment-marker { transform: translateX(200%); }
+#invEntry:checked ~ .segment-marker { transform: translateX(100%); }
 
-/* Ensure the Entries list shares the same styling as the other lists */
+/* Unified List Heights */
 #recentTransactionsList li,
 #finalisedTransactionsList li,
 #loanEntriesList li {
-    flex-direction: column !important; align-items: flex-start !important;
-    gap: 12px !important; padding: 15px !important; height: auto !important;
-    border-radius: 8px; margin-bottom: 1rem; display: flex;
+    padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 1rem;
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
     box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
                calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
-}
-#recentTransactionsList li span,
-#finalisedTransactionsList li span,
-#loanEntriesList li span {
-    width: 100% !important; font-weight: bold; margin-bottom: 5px; display: block;
-}
-#recentTransactionsList .button-group,
-#finalisedTransactionsList .button-group,
-#loanEntriesList .button-group {
-    width: 100% !important; display: flex !important; justify-content: space-between !important; gap: 10px !important;
 }
 
 
