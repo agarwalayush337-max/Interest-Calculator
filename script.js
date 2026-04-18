@@ -649,18 +649,26 @@ const renderLoanEntries = (filter = '') => {
         return dateB - dateA;
     });
 
-    // Apply Search Filter
-    const filteredDates = sortedDates.filter(entry => entry.date.toLowerCase().includes(searchTerm));
+    // Apply Search Filter (Now checks Date OR Specific Loan Number)
+    const filteredDates = sortedDates.filter(entry => {
+        // 1. Check if the date matches the search
+        if (entry.date.toLowerCase().includes(searchTerm)) return true;
+        
+        // 2. Check if ANY loan typed on this date matches the search
+        const loansForThisDate = compiledLoansByDate[entry.date] || [];
+        return loansForThisDate.some(loan => 
+            loan.no && String(loan.no).toLowerCase().includes(searchTerm)
+        );
+    });
 
     if (filteredDates.length === 0) {
-        listEl.innerHTML = '<li style="text-align:center; padding:20px; box-shadow:none;">No loan entries found.</li>';
+        listEl.innerHTML = '<li style="text-align:center; padding:20px; box-shadow:none; flex-direction: row !important;">No loan entries found.</li>';
         return;
     }
 
     listEl.innerHTML = ''; 
 
     filteredDates.forEach(entry => {
-        // Save the compiled virtual report to memory so the View button can open it
         const tempId = `temp_entry_${entry.date.replace(/\//g, '')}`;
         window[tempId] = {
             id: tempId,
@@ -671,20 +679,17 @@ const renderLoanEntries = (filter = '') => {
         };
 
         const li = document.createElement('li');
+        // Mobile-friendly inline styling to exactly match the Finalised Tab
         li.innerHTML = `
             <div style="flex-grow: 1;">
-                <span style="font-weight: 600;">Entry: ${entry.date}</span>
+                <span style="font-weight: 600; display: block; margin-bottom: 5px;">Entry: ${entry.date}</span>
                 <div style="font-size: 0.8rem; color: var(--subtle-text-color);">
-                    Total Items: ${entry.count} (G: ${entry.gCount} | S: ${entry.sCount})
+                    <span style="color: var(--success-color); font-weight: bold;">₹${Math.round(entry.principal).toLocaleString('en-IN')}</span> 
+                    &bull; ${entry.count} Items (G: ${entry.gCount} | S: ${entry.sCount})
                 </div>
             </div>
-            <div style="text-align: left; width: 100%; margin-bottom: 8px;">
-                <div style="font-weight: bold; color: var(--success-color); font-size: 1.1rem;">
-                    ₹${Math.round(entry.principal).toLocaleString('en-IN')}
-                </div>
-            </div>
-            <div class="button-group">
-                <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="viewEntryReport('${entry.date}')">View Entries</button>
+            <div class="button-group" style="min-width: 80px;">
+                <button class="btn btn-secondary" style="width: 100%; justify-content: center;" onclick="viewEntryReport('${entry.date}')">View</button>
             </div>
         `;
         listEl.appendChild(li);
