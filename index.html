@@ -154,11 +154,14 @@
                     <ul id="finalisedTransactionsList"></ul>
                 </div>
                 <div id="entriesView" style="display: none;">
-                    <div style="padding: 10px 0; text-align: center; color: #666; font-size: 0.85rem;">
+                    <div class="input-field search-bar" id="entriesSearchContainer">
+                        <label>Search Entries</label>
+                        <input type="search" id="entriesSearchInput" placeholder="Search by Date (e.g. 13/04)...">
+                    </div>
+                    <div style="padding: 0 0 10px 0; text-align: center; color: #666; font-size: 0.85rem;">
                         Daily Summary of Capital Deployed
                     </div>
-                    <ul id="loanEntriesList">
-                        </ul>
+                    <ul class="transaction-list" id="loanEntriesList" style="list-style: none; padding: 0;"></ul>
                 </div>
             </div>
         </div>
