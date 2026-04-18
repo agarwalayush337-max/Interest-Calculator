@@ -511,22 +511,46 @@ td.read-only { font-weight: 500; font-size: 1rem; }
 .toggle-container { display: flex; justify-content: center; margin-bottom: 1.5rem; }
 .segment-control {
     background: #e0e5ec; position: relative; display: flex;
-    border-radius: 8px; padding: 4px; 
+    border-radius: 8px; padding: 4px; width: 100%; max-width: 400px;
     box-shadow: inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff;
 }
 .segment-control input { display: none; }
 .segment-control label {
-    padding: 8px 25px; cursor: pointer; z-index: 2; font-weight: 600; 
+    flex: 1; text-align: center; padding: 8px 0; cursor: pointer; z-index: 2; font-weight: 600; 
     font-size: 0.9rem; color: #777; transition: color 0.3s;
 }
 .segment-control input:checked + label { color: #3D52D5; }
 .segment-marker {
-    position: absolute; top: 4px; bottom: 4px; left: 4px; width: 50%;
+    position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(33.33% - 8px);
     background: #e0e5ec; border-radius: 6px;
     box-shadow: 3px 3px 6px #a3b1c6, -3px -3px 6px #ffffff;
     transition: transform 0.3s ease; z-index: 1;
 }
+#txPending:checked ~ .segment-marker { transform: translateX(0); }
 #txFinalised:checked ~ .segment-marker { transform: translateX(100%); }
+#txEntries:checked ~ .segment-marker { transform: translateX(200%); }
+
+/* Ensure the Entries list shares the same styling as the other lists */
+#recentTransactionsList li,
+#finalisedTransactionsList li,
+#loanEntriesList li {
+    flex-direction: column !important; align-items: flex-start !important;
+    gap: 12px !important; padding: 15px !important; height: auto !important;
+    border-radius: 8px; margin-bottom: 1rem; display: flex;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+#recentTransactionsList li span,
+#finalisedTransactionsList li span,
+#loanEntriesList li span {
+    width: 100% !important; font-weight: bold; margin-bottom: 5px; display: block;
+}
+#recentTransactionsList .button-group,
+#finalisedTransactionsList .button-group,
+#loanEntriesList .button-group {
+    width: 100% !important; display: flex !important; justify-content: space-between !important; gap: 10px !important;
+}
+
 
 /* --- Auto-Fill Highlights --- */
 input.found-gold { background-color: #fcf4cf !important; color: #333; font-weight: 700; border: 1px solid #f1c40f; }
