@@ -590,11 +590,94 @@ const showTab = (tabId) => {
 
 const toggleTxView = (mode) => {
     const isPending = (mode === 'pending');
-    document.getElementById('txPending').checked = isPending;
-    document.getElementById('txFinalised').checked = !isPending;
+    const isFinalised = (mode === 'finalised');
+    const isEntries = (mode === 'entries');
+
+    if(document.getElementById('txPending')) document.getElementById('txPending').checked = isPending;
+    if(document.getElementById('txFinalised')) document.getElementById('txFinalised').checked = isFinalised;
+    if(document.getElementById('txEntries')) document.getElementById('txEntries').checked = isEntries;
     
-    document.getElementById('pendingView').style.display = isPending ? 'block' : 'none';
-    document.getElementById('finalisedView').style.display = !isPending ? 'block' : 'none';
+    if(document.getElementById('pendingView')) document.getElementById('pendingView').style.display = isPending ? 'block' : 'none';
+    if(document.getElementById('finalisedView')) document.getElementById('finalisedView').style.display = isFinalised ? 'block' : 'none';
+    if(document.getElementById('entriesView')) document.getElementById('entriesView').style.display = isEntries ? 'block' : 'none';
+
+    // Trigger the render function if they switch to the Entries tab
+    if (isEntries) {
+        renderLoanEntries();
+    }
+};
+
+// ==========================================
+// NEW: LOAN ENTRIES (DAILY BATCH REPORT)
+// ==========================================
+const renderLoanEntries = () => {
+    const listEl = document.getElementById('loanEntriesList');
+    if (!listEl) return;
+    listEl.innerHTML = '<li><div style="text-align:center; padding: 20px;">Calculating entries...</div></li>';
+
+    const entriesByDate = {};
+
+    // Helper to group loans by their specific Entry Date
+    const addLoanToGroup = (loan) => {
+        const d = loan.date || 'Unknown';
+        if (!entriesByDate[d]) {
+             entriesByDate[d] = { date: d, count: 0, principal: 0, gCount: 0, sCount: 0 };
+        }
+        entriesByDate[d].count++;
+        entriesByDate[d].principal += parseFloat(loan.principal) || 0;
+        
+        if (loan.type === 'G') entriesByDate[d].gCount++;
+        else entriesByDate[d].sCount++;
+    };
+
+    // 1. Scan Active Inventory
+    if (typeof activeInventory !== 'undefined') {
+        activeInventory.forEach(addLoanToGroup);
+    }
+
+    // 2. Scan Finalised Reports (So you don't lose history of redeemed loans)
+    if (typeof cachedFinalisedReports !== 'undefined') {
+        cachedFinalisedReports.forEach(report => {
+            const loansData = report.loans || report.items || [];
+            loansData.forEach(addLoanToGroup);
+        });
+    }
+
+    // 3. Sort by Date (Newest at the top)
+    const sortedDates = Object.values(entriesByDate).sort((a, b) => {
+        const dateA = parseDate(a.date);
+        const dateB = parseDate(b.date);
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return dateB - dateA;
+    });
+
+    if (sortedDates.length === 0) {
+        listEl.innerHTML = '<li>No loan entries found.</li>';
+        return;
+    }
+
+    listEl.innerHTML = ''; // Clear loader
+
+    // 4. Build the UI
+    sortedDates.forEach(entry => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <div style="flex-grow: 1;">
+                <span style="font-weight: 600; font-size: 1.1rem; color: #3D52D5;">Entry: ${entry.date}</span>
+                <div style="font-size: 0.85rem; color: var(--subtle-text-color); margin-top: 4px; font-weight: 500;">
+                    Total Items: ${entry.count} &nbsp;|&nbsp; <span style="color: #fca311;">G: ${entry.gCount}</span> &nbsp;|&nbsp; <span>S: ${entry.sCount}</span>
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 0.75rem; color: #888; margin-bottom: 2px;">Total Principal</div>
+                <div style="font-weight: bold; color: #2a9d8f; font-size: 1.1rem;">
+                    ₹${Math.round(entry.principal).toLocaleString('en-IN')}
+                </div>
+            </div>
+        `;
+        listEl.appendChild(li);
+    });
 };
 
 // NEW: Toggle between Search and Entry Views
