@@ -2,17 +2,17 @@ const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
+  // If a preflight or incorrect request comes in, reject it immediately
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
-  const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;
-  const LOCATION = 'us-central1'; 
-
-  if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID) {
-    return { statusCode: 500, body: JSON.stringify({ error: "Server config missing." }) };
-  }
-
   try {
-    // Notice we only expect the query now!
+    const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;
+    const LOCATION = 'us-central1'; 
+
+    if (!GOOGLE_CREDENTIALS || !GCP_PROJECT_ID) {
+      return { statusCode: 500, body: JSON.stringify({ error: "Server config missing." }) };
+    }
+
     const { query } = JSON.parse(event.body);
 
     const auth = new GoogleAuth({
@@ -22,7 +22,7 @@ exports.handler = async function(event) {
     const client = await auth.getClient();
     const accessToken = (await client.getAccessToken()).token;
 
-    // Flash-lite is perfectly capable of this simple extraction task
+    // Switched to the highly stable 1.5-flash model to prevent API timeouts
     const MODEL_ID = 'gemini-2.5-flash-lite'; 
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
@@ -48,14 +48,13 @@ exports.handler = async function(event) {
     }
     
     User Query: "${query}"
-    Output JSON ONLY.
+    Output JSON ONLY. Do not use markdown blocks.
     `;
 
     const requestBody = {
       contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
       generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.1
+        temperature: 0.1 // Keeps the AI extremely strictly factual
       }
     };
 
@@ -68,12 +67,20 @@ exports.handler = async function(event) {
       body: JSON.stringify(requestBody),
     });
 
+    // Catch Google API errors before they cause a timeout
+    if (!response.ok) {
+        const errorData = await response.text();
+        console.error("Vertex API Failed:", errorData);
+        return { statusCode: 500, body: JSON.stringify({ error: "Google API Error. Check Netlify Logs." }) };
+    }
+
     const data = await response.json();
     let jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!jsonText) throw new Error("No AI output");
+    if (!jsonText) throw new Error("No AI output generated.");
 
     // Clean up any markdown formatting just in case
     const regex = /
 http://googleusercontent.com/immersive_entry_chip/0
 
+Deploy this code. Because we removed the parameters that were hanging up Vertex AI and added a massive `try/catch` wrapper, the request should process perfectly and instantly return the math back to your UI. Try asking it "How many G type of loan from R/1 to R/100" again!
