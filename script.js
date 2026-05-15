@@ -1449,9 +1449,19 @@ const renderRecentTransactions = (filter = '') => {
         const li = document.createElement('li');
         if (report.isLocal) li.classList.add('unsynced');
         li.dataset.reportId = report.id;
+        let photoButtonHtml = '';
+        if (!report.isLocal) { // Only allow attaching to synced cloud reports
+            if (report.imageUrl) {
+                photoButtonHtml = `<button class="btn btn-success" onclick="window.open('${report.imageUrl}', '_blank')">Photo</button>`;
+            } else {
+                photoButtonHtml = `<button class="btn btn-secondary" style="border: 1px solid var(--primary-color); color: var(--primary-color); background: transparent;" onclick="triggerListAttachPhoto('${report.id}', false)">📎 Attach</button>`;
+            }
+        }
+
         li.innerHTML = `
             <span>${report.reportName || `Report from ${report.reportDate}`}</span>
             <div class="button-group">
+                ${photoButtonHtml}
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, false, 'recentTransactionsTab')">View</button>
                 <button class="btn btn-primary" onclick="viewReport('${report.id}', true, false, 'recentTransactionsTab')">Edit</button>
                 <button class="btn btn-success" onclick="finaliseReport('${report.id}')">Finalise</button>
@@ -1533,12 +1543,20 @@ const renderFinalisedTransactions = (filter = '') => {
             }).toLowerCase();
         }
 
+        let photoButtonHtml = '';
+        if (report.imageUrl) {
+            photoButtonHtml = `<button class="btn btn-success" onclick="window.open('${report.imageUrl}', '_blank')">View Photo</button>`;
+        } else {
+            photoButtonHtml = `<button class="btn btn-secondary" style="border: 1px solid var(--primary-color); color: var(--primary-color); background: transparent;" onclick="triggerListAttachPhoto('${report.id}', true)">📎 Attach</button>`;
+        }
+
         li.innerHTML = `
             <div style="flex-grow: 1;">
                 <span style="font-weight: 600;">${report.reportName || `Report from ${report.reportDate}`}</span>
                 <div style="font-size: 0.8rem; color: var(--subtle-text-color);">${creationDate}</div>
             </div>
             <div class="button-group">
+                ${photoButtonHtml}
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, true, 'finalisedTransactionsTab')">View</button>
                 <button class="btn btn-danger" onclick="deleteReport('${report.id}', true)">Delete</button>
             </div>`;
@@ -4240,4 +4258,82 @@ const updateBatchTotal = () => {
     inputs.forEach(inp => total += (parseFloat(inp.value) || 0));
     const display = document.getElementById('batchTotalDisplay');
     if(display) display.textContent = `₹${total.toLocaleString('en-IN')}`;
+};
+// ==========================================
+// LIST VIEW: ATTACH PHOTO LOGIC
+// ==========================================
+let pendingListAttachReportId = null;
+let pendingListAttachIsFinalised = false;
+
+window.triggerListAttachPhoto = (reportId, isFinalised) => {
+    pendingListAttachReportId = reportId;
+    pendingListAttachIsFinalised = isFinalised;
+    
+    let input = document.getElementById('listAttachReceiptInput');
+    
+    // Create the hidden input if it doesn't exist yet
+    if (!input) {
+        input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'listAttachReceiptInput';
+        input.accept = 'image/*';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+
+        input.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            const reportIdToUpdate = pendingListAttachReportId;
+            const isFinalisedUpdate = pendingListAttachIsFinalised;
+            
+            if (!file || !reportIdToUpdate) return;
+
+            const confirmed = await showConfirm("Attach Image", "Upload and attach this image to the report?");
+            if (!confirmed) {
+                event.target.value = ''; 
+                return;
+            }
+
+            showConfirm("Uploading...", "Please wait...", false);
+
+            try {
+                // A. Upload to Firebase
+                const imgRef = storage.ref().child(`report_images/${reportIdToUpdate}_${Date.now()}.jpg`);
+                await imgRef.put(file);
+                const uploadedImageUrl = await imgRef.getDownloadURL();
+
+                // B. Save URL to Database
+                await reportsCollection.doc(reportIdToUpdate).update({
+                    imageUrl: uploadedImageUrl,
+                    lastUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // C. Update Local Arrays so you don't have to refresh the page
+                const reportArray = isFinalisedUpdate ? cachedFinalisedReports : cachedReports;
+                const reportIndex = reportArray.findIndex(r => r.id === reportIdToUpdate);
+                if (reportIndex > -1) {
+                    reportArray[reportIndex].imageUrl = uploadedImageUrl;
+                }
+
+                closeConfirm();
+                showConfirm("Success", "Image attached successfully!", false);
+                
+                // D. Re-render the specific list
+                if (isFinalisedUpdate) {
+                    renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
+                } else {
+                    renderRecentTransactions(document.getElementById('reportSearchInput').value);
+                }
+
+            } catch (error) {
+                console.error("Upload failed:", error);
+                closeConfirm();
+                showConfirm("Error", "Failed to upload image. Please check your connection.", false);
+            }
+
+            event.target.value = ''; // Reset input
+        });
+    }
+    
+    // Trigger the file browser
+    input.click();
 };
