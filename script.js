@@ -682,8 +682,24 @@ const renderLoanEntries = (filter = '') => {
             loans: compiledLoansByDate[entry.date]
         };
 
+        // --- NEW: Setup the Attach/View Photo Button for Batch Entries ---
+        let entryImageUrl = null;
+        const loansForThisDate = compiledLoansByDate[entry.date] || [];
+        
+        // Check if any individual loan in this daily batch already has an image
+        const loanWithImage = loansForThisDate.find(l => l.imageUrl);
+        if (loanWithImage) {
+            entryImageUrl = loanWithImage.imageUrl;
+        }
+
+        let photoButtonHtml = '';
+        if (entryImageUrl) {
+            photoButtonHtml = `<button class="btn btn-success" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="window.open('${entryImageUrl}', '_blank')">View Photo</button>`;
+        } else {
+            photoButtonHtml = `<button class="btn btn-secondary" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="triggerListAttachPhoto('${tempId}', false)">📎 Attach</button>`;
+        }
+
         const li = document.createElement('li');
-        // Mobile-friendly inline styling to exactly match the Finalised Tab
         li.innerHTML = `
             <div style="flex-grow: 1;">
                 <span style="font-weight: 600; display: block; margin-bottom: 5px;">Entry: ${entry.date}</span>
@@ -692,7 +708,8 @@ const renderLoanEntries = (filter = '') => {
                     &bull; ${entry.count} Items (G: ${entry.gCount} | S: ${entry.sCount})
                 </div>
             </div>
-            <div class="button-group" style="min-width: 80px;">
+            <div class="button-group" style="min-width: 80px; flex-direction: column;">
+                ${photoButtonHtml}
                 <button class="btn btn-secondary" style="width: 100%; justify-content: center;" onclick="viewEntryReport('${entry.date}')">View</button>
             </div>
         `;
@@ -1449,19 +1466,9 @@ const renderRecentTransactions = (filter = '') => {
         const li = document.createElement('li');
         if (report.isLocal) li.classList.add('unsynced');
         li.dataset.reportId = report.id;
-        let photoButtonHtml = '';
-        if (!report.isLocal) { // Only allow attaching to synced cloud reports
-            if (report.imageUrl) {
-                photoButtonHtml = `<button class="btn btn-success" onclick="window.open('${report.imageUrl}', '_blank')">Photo</button>`;
-            } else {
-                photoButtonHtml = `<button class="btn btn-secondary" style="border: 1px solid var(--primary-color); color: var(--primary-color); background: transparent;" onclick="triggerListAttachPhoto('${report.id}', false)">📎 Attach</button>`;
-            }
-        }
-
         li.innerHTML = `
             <span>${report.reportName || `Report from ${report.reportDate}`}</span>
             <div class="button-group">
-                ${photoButtonHtml}
                 <button class="btn btn-secondary" onclick="viewReport('${report.id}', false, false, 'recentTransactionsTab')">View</button>
                 <button class="btn btn-primary" onclick="viewReport('${report.id}', true, false, 'recentTransactionsTab')">Edit</button>
                 <button class="btn btn-success" onclick="finaliseReport('${report.id}')">Finalise</button>
@@ -1547,9 +1554,9 @@ const renderFinalisedTransactions = (filter = '') => {
         if (report.imageUrl) {
             photoButtonHtml = `<button class="btn btn-success" onclick="window.open('${report.imageUrl}', '_blank')">View Photo</button>`;
         } else {
-            photoButtonHtml = `<button class="btn btn-secondary" style="border: 1px solid var(--primary-color); color: var(--primary-color); background: transparent;" onclick="triggerListAttachPhoto('${report.id}', true)">📎 Attach</button>`;
+            photoButtonHtml = `<button class="btn btn-secondary" onclick="triggerListAttachPhoto('${report.id}', true)">📎 Attach</button>`;
         }
-
+        
         li.innerHTML = `
             <div style="flex-grow: 1;">
                 <span style="font-weight: 600;">${report.reportName || `Report from ${report.reportDate}`}</span>
