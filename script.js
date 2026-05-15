@@ -3946,23 +3946,55 @@ document.addEventListener('DOMContentLoaded', () => {
         aiResponseArea.style.display = 'none';
 
         try {
-            // Compress data to save bandwidth
-            const inventoryContext = activeInventory.map(l => ({ no: l.no, prin: l.principal, type: l.type, date: l.date }));
-            const statsContext = {
-                totalActivePrin: document.getElementById('dashPrincipal').textContent,
-                totalActiveLoans: document.getElementById('kpiCount').textContent
-            };
-
+            // NEW: Send ONLY the question. Do not send the heavy database!
             const response = await fetch('/.netlify/functions/askDashboardAI', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, inventory: inventoryContext, stats: statsContext })
+                body: JSON.stringify({ query })
             });
 
             if (!response.ok) throw new Error("AI failed to respond.");
             
-            const data = await response.json();
-            aiResponseArea.innerHTML = `<strong>AI:</strong> ${data.answer}`;
+            const intentData = await response.json();
+            
+            if (!intentData.isDataQuery) {
+                // If it's just a general question ("Hello", "What is this app?")
+                aiResponseArea.innerHTML = `<strong>AI:</strong> ${intentData.generalAnswer}`;
+            } else {
+                // INTENT PARSING: JAVASCRIPT DOES THE PERFECT MATH
+                let filteredList = activeInventory;
+                const f = intentData.filters;
+                
+                // 1. Filter by Type (G or S)
+                if (f.type) {
+                    filteredList = filteredList.filter(l => l.type === f.type);
+                }
+                
+                // 2. Filter by Series and Number Range
+                if (f.series) {
+                    filteredList = filteredList.filter(l => {
+                        const match = String(l.no).toUpperCase().match(/^([A-Z]+)\/(\d+)/);
+                        if (!match) return false;
+                        
+                        if (match[1] !== f.series.toUpperCase()) return false;
+                        
+                        const num = parseInt(match[2], 10);
+                        if (f.minNumber !== null && num < f.minNumber) return false;
+                        if (f.maxNumber !== null && num > f.maxNumber) return false;
+                        
+                        return true;
+                    });
+                }
+
+                // 3. Execute the Math
+                if (intentData.operation === 'count') {
+                    aiResponseArea.innerHTML = `<strong>AI Result:</strong> I found exactly <b>${filteredList.length}</b> loans matching your criteria.`;
+                } else if (intentData.operation === 'sum') {
+                    const total = filteredList.reduce((acc, curr) => acc + (parseFloat(curr.principal) || 0), 0);
+                    aiResponseArea.innerHTML = `<strong>AI Result:</strong> The total principal amount for these loans is <b>₹${Math.round(total).toLocaleString('en-IN')}</b>.`;
+                }
+            }
+            
             aiResponseArea.style.display = 'block';
         } catch (err) {
             console.error(err);
