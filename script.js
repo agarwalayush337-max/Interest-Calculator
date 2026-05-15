@@ -40,6 +40,8 @@ let activeInventory = []; // NEW: Stores active stock
 let loanSearchCache = new Map();
 let pieChartInstance, barChartInstance;
 let currentlyEditingReportId = null; 
+let currentViewedReportId = null; 
+let currentViewedReportIsFinalised = false;
 
 let currentGrowthTimeframe = 'ALL'; // Default setting
 let redemptionTimeframeIndex = 0; 
@@ -1704,19 +1706,30 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
         setViewMode(true);
     }
 
-    // --- NEW: Handle Image Viewing ---
+    /// --- NEW: Handle Image Viewing & Attaching ---
+    currentViewedReportId = reportId;
+    currentViewedReportIsFinalised = isFinalised;
+
     const viewReceiptBtn = document.getElementById('viewReceiptBtn');
-    if (viewReceiptBtn) {
+    const attachReceiptBtn = document.getElementById('attachReceiptBtn');
+
+    if (viewReceiptBtn && attachReceiptBtn) {
+        const newViewBtn = viewReceiptBtn.cloneNode(true);
+        viewReceiptBtn.parentNode.replaceChild(newViewBtn, viewReceiptBtn);
+
         if (report.imageUrl) {
-            viewReceiptBtn.style.display = 'inline-flex';
-            // Replace node to clear old event listeners so photos don't overlap
-            const newBtn = viewReceiptBtn.cloneNode(true);
-            viewReceiptBtn.parentNode.replaceChild(newBtn, viewReceiptBtn);
-            newBtn.addEventListener('click', () => {
+            newViewBtn.style.display = 'inline-flex';
+            attachReceiptBtn.style.display = 'none';
+            newViewBtn.addEventListener('click', () => {
                 window.open(report.imageUrl, '_blank');
             });
         } else {
-            viewReceiptBtn.style.display = 'none';
+            newViewBtn.style.display = 'none';
+            if (!report.isLocal) {
+                attachReceiptBtn.style.display = 'inline-flex';
+            } else {
+                attachReceiptBtn.style.display = 'none';
+            }
         }
     }
     // --- POPULATE DATA (Common for all) ---
@@ -4030,6 +4043,57 @@ document.addEventListener('DOMContentLoaded', () => {
         aiSendBtn.textContent = "Ask";
         aiQueryInput.value = '';
     });
+
+    // --- NEW: Attach Photo to Existing Report Logic ---
+    const attachReceiptBtn = document.getElementById('attachReceiptBtn');
+    const attachReceiptInput = document.getElementById('attachReceiptInput');
+
+    if (attachReceiptBtn && attachReceiptInput) {
+        attachReceiptBtn.addEventListener('click', () => {
+            attachReceiptInput.click();
+        });
+
+        attachReceiptInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file || !currentViewedReportId) return;
+
+            const confirmed = await showConfirm("Attach Image", "Upload and attach this image to the report?");
+            if (!confirmed) {
+                event.target.value = ''; 
+                return;
+            }
+
+            showConfirm("Uploading...", "Please wait...", false);
+
+            try {
+                const imgRef = storage.ref().child(`report_images/${currentViewedReportId}_${Date.now()}.jpg`);
+                await imgRef.put(file);
+                const uploadedImageUrl = await imgRef.getDownloadURL();
+
+                await reportsCollection.doc(currentViewedReportId).update({
+                    imageUrl: uploadedImageUrl,
+                    lastUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                const reportArray = currentViewedReportIsFinalised ? cachedFinalisedReports : cachedReports;
+                const reportIndex = reportArray.findIndex(r => r.id === currentViewedReportId);
+                if (reportIndex > -1) {
+                    reportArray[reportIndex].imageUrl = uploadedImageUrl;
+                }
+
+                closeConfirm();
+                viewReport(currentViewedReportId, false, currentViewedReportIsFinalised);
+                showConfirm("Success", "Image attached successfully!", false);
+
+            } catch (error) {
+                console.error("Upload failed:", error);
+                closeConfirm();
+                showConfirm("Error", "Failed to upload image. Please check your connection.", false);
+            }
+
+            event.target.value = ''; 
+        });
+    }
 
 });
 
