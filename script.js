@@ -19,7 +19,7 @@ const firebaseConfig = {
     apiKey: "AIzaSyA7_nnw_BRziSVyjbZ-2UMxTKIKVW_K_JQ",
     authDomain: "ayush337.netlify.app",
     projectId: "interest-calculator-8d997",
-    storageBucket: "interest-calculator-8d997.appspot.com",
+    storageBucket: "interest-calculator-8d997.firebasestorage.app", // <-- Updated to the correct bucket!
     messagingSenderId: "187925519090",
     appId: "1:187925519090:web:c875d2fb788d02b5bf4e6b"
 };
