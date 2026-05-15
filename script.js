@@ -29,7 +29,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
+const storage = firebase.storage(); // NEW: Initialize Storage
 let user = null;
+let currentBatchImageBase64 = null; // NEW: Holds batch scan image temporarily
 let reportsCollection = null;
 let localDb = null;
 let cachedReports = [];
@@ -960,11 +962,26 @@ const saveBatchEntries = async () => {
     }
     // -----------------------------------
 
-    // 3. Save to Firestore
-    showConfirm("Saving...", "Uploading...", false);
+    // 3. Save to Firestore & Storage
+    showConfirm("Saving...", "Uploading Data and Images...", false);
+    
+    // --- NEW: Upload Batch Image if it exists ---
+    let uploadedImageUrl = null;
+    if (currentBatchImageBase64) {
+        try {
+            const imgRef = storage.ref().child(`batch_images/${user.uid}_${Date.now()}.jpg`);
+            await imgRef.putString(currentBatchImageBase64, 'base64', { contentType: 'image/jpeg' });
+            uploadedImageUrl = await imgRef.getDownloadURL();
+        } catch (imgError) {
+            console.error("Failed to upload batch image:", imgError);
+        }
+    }
+    // ------------------------------------------
+
     const batch = db.batch();
     
     entries.forEach(entry => {
+        if (uploadedImageUrl) entry.imageUrl = uploadedImageUrl; // Attach URL to entry
         const docId = `${user.uid}_${entry.no.replace(/\//g, '-')}`;
         const docRef = db.collection('activeInventory').doc(docId);
         batch.set(docRef, entry);
@@ -1012,6 +1029,9 @@ const saveBatchEntries = async () => {
             document.getElementById('batchTotalDisplay').textContent = '₹0';
         }
         loadInventory(); 
+        
+        // NEW: Clear the stored image so it doesn't attach to the next batch
+        currentBatchImageBase64 = null;
 
     } catch (error) {
         console.error("Batch Save Error:", error);
@@ -1662,6 +1682,17 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
         restoreDefaultBackButton();
         currentlyEditingReportId = null;
         setViewMode(true);
+    }
+
+    // --- NEW: Handle Image Viewing ---
+    const viewReceiptBtn = document.getElementById('viewReceiptBtn');
+    if (viewReceiptBtn) {
+        if (report.imageUrl) {
+            viewReceiptBtn.style.display = 'inline-flex';
+            viewReceiptBtn.onclick = () => window.open(report.imageUrl, '_blank');
+        } else {
+            viewReceiptBtn.style.display = 'none';
+        }
     }
 
     // --- POPULATE DATA (Common for all) ---
@@ -3049,6 +3080,18 @@ const confirmFinaliseWithDues = async () => {
         try {
             showConfirm("Archiving...", "Moving loans to Redeemed Inventory...", false);
             
+            // --- NEW: Upload Finalise Image if provided ---
+            const fileInput = document.getElementById('finaliseImageInput');
+            const file = fileInput ? fileInput.files[0] : null;
+            let uploadedImageUrl = null;
+            
+            if (file) {
+                const imgRef = storage.ref().child(`finalised_images/${reportId}.jpg`);
+                await imgRef.put(file);
+                uploadedImageUrl = await imgRef.getDownloadURL();
+            }
+            // ----------------------------------------------
+
             const reportRef = reportsCollection.doc(reportId);
             const reportDoc = await reportRef.get();
             
@@ -3065,7 +3108,8 @@ const confirmFinaliseWithDues = async () => {
                 status: 'finalised', 
                 reportName: newName,
                 finalisedDues: newDues,
-                finalisedAt: firebase.firestore.FieldValue.serverTimestamp()
+                finalisedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                imageUrl: uploadedImageUrl || reportData.imageUrl || null // NEW: Save the image URL
             });
 
             // B. Update Shared Dues Globally
@@ -3862,6 +3906,75 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('batchImageInput').click();
         });
     }
+    // --- NEW: Dashboard AI Voice Assistant ---
+    const aiQueryInput = document.getElementById('aiQueryInput');
+    const aiVoiceBtn = document.getElementById('aiVoiceBtn');
+    const aiSendBtn = document.getElementById('aiSendBtn');
+    const aiResponseArea = document.getElementById('aiResponseArea');
+
+    // Speech Recognition Setup
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.lang = 'en-IN'; // Can handle English and Hindi mixed
+        
+        aiVoiceBtn.addEventListener('click', () => {
+            aiQueryInput.placeholder = "Listening...";
+            recognition.start();
+        });
+
+        recognition.onresult = (event) => {
+            aiQueryInput.value = event.results[0][0].transcript;
+            aiQueryInput.placeholder = "Ask AI about your data...";
+        };
+        
+        recognition.onerror = () => {
+            aiQueryInput.placeholder = "Ask AI about your data...";
+        };
+    } else {
+        aiVoiceBtn.style.display = 'none'; // Hide if browser doesn't support
+    }
+
+    // Send to Netlify Function
+    aiSendBtn.addEventListener('click', async () => {
+        const query = aiQueryInput.value.trim();
+        if (!query) return;
+
+        aiSendBtn.disabled = true;
+        aiSendBtn.textContent = "Thinking...";
+        aiResponseArea.style.display = 'none';
+
+        try {
+            // Compress data to save bandwidth
+            const inventoryContext = activeInventory.map(l => ({ no: l.no, prin: l.principal, type: l.type, date: l.date }));
+            const statsContext = {
+                totalActivePrin: document.getElementById('dashPrincipal').textContent,
+                totalActiveLoans: document.getElementById('kpiCount').textContent
+            };
+
+            const response = await fetch('/.netlify/functions/askDashboardAI', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, inventory: inventoryContext, stats: statsContext })
+            });
+
+            if (!response.ok) throw new Error("AI failed to respond.");
+            
+            const data = await response.json();
+            aiResponseArea.innerHTML = `<strong>AI:</strong> ${data.answer}`;
+            aiResponseArea.style.display = 'block';
+        } catch (err) {
+            console.error(err);
+            aiResponseArea.innerHTML = `<strong>Error:</strong> Could not reach AI.`;
+            aiResponseArea.style.display = 'block';
+        }
+
+        aiSendBtn.disabled = false;
+        aiSendBtn.textContent = "Ask";
+        aiQueryInput.value = '';
+    });
+
 });
 
 const handleBatchScan = async (event) => {
@@ -3901,9 +4014,11 @@ const handleBatchScan = async (event) => {
                     const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
                     const base64Image = compressedDataUrl.split(',')[1];
                     
+                    // NEW: Save it globally so we can upload it when they click 'Save Entries'
+                    currentBatchImageBase64 = base64Image;
+                    
                     // 3. Send the smaller, optimized image to the Server
                     const response = await fetch('/.netlify/functions/scanImage', {
-                        method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             image: base64Image, 
