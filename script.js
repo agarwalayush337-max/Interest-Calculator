@@ -894,6 +894,23 @@ const askDuesForBatch = (currentVal) => {
     });
 };
 
+// --- NEW: Handle Manual Batch Image Upload ---
+window.handleManualBatchImage = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        // Extract just the Base64 data part from the URL
+        const base64 = e.target.result.split(',')[1];
+        currentBatchImageBase64 = base64; // Save it to the global variable
+        
+        // Show the success checkmark
+        document.getElementById('batchImageIndicator').style.display = 'inline';
+    };
+    reader.readAsDataURL(file);
+};
+
 // --- Add this to your script.js ---
 
 const saveBatchEntries = async () => {
@@ -1032,6 +1049,9 @@ const saveBatchEntries = async () => {
         
         // NEW: Clear the stored image so it doesn't attach to the next batch
         currentBatchImageBase64 = null;
+        if(document.getElementById('batchImageIndicator')) {
+            document.getElementById('batchImageIndicator').style.display = 'none';
+        }
 
     } catch (error) {
         console.error("Batch Save Error:", error);
@@ -1689,12 +1709,16 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
     if (viewReceiptBtn) {
         if (report.imageUrl) {
             viewReceiptBtn.style.display = 'inline-flex';
-            viewReceiptBtn.onclick = () => window.open(report.imageUrl, '_blank');
+            // Replace node to clear old event listeners so photos don't overlap
+            const newBtn = viewReceiptBtn.cloneNode(true);
+            viewReceiptBtn.parentNode.replaceChild(newBtn, viewReceiptBtn);
+            newBtn.addEventListener('click', () => {
+                window.open(report.imageUrl, '_blank');
+            });
         } else {
             viewReceiptBtn.style.display = 'none';
         }
     }
-
     // --- POPULATE DATA (Common for all) ---
     todayDateEl.value = report.reportDate;
     interestRateEl.value = report.interestRate;
