@@ -92,6 +92,7 @@
                  <div class="action-bar" id="viewModeActionBar" style="display: none;">
                     <button class="btn btn-secondary" id="exitViewModeBtn">Back to Calculator</button>
                     <button class="btn btn-primary" id="exportViewPdfBtn">Export PDF</button>
+                    <button class="btn btn-success" id="viewReceiptBtn" style="display: none;">View Photo</button>
                 </div>
 
                 <div class="totals-summary">
@@ -169,6 +170,13 @@
         <div id="dashboardTab" class="tab-content">
             <div class="main-content">
                 
+                <div style="display: flex; gap: 10px; margin-bottom: 1.5rem; align-items: center; background: white; padding: 10px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                    <input type="text" id="aiQueryInput" placeholder="Ask AI about your data..." style="flex-grow: 1; border: none; outline: none; font-size: 1rem; padding: 5px;">
+                    <button id="aiVoiceBtn" class="btn btn-primary" style="padding: 8px 12px; border-radius: 50%;">🎤</button>
+                    <button id="aiSendBtn" class="btn btn-success" style="padding: 8px 15px;">Ask</button>
+                </div>
+                <div id="aiResponseArea" style="display: none; margin-bottom: 1.5rem; padding: 15px; background: #e3f2fd; color: #1976d2; border-radius: 12px; font-weight: 500; font-size: 0.95rem; border-left: 4px solid #1976d2;"></div>
+
                 <div class="dashboard-header">
                     <h2>Live Portfolio</h2>
                     <span class="live-badge">● Live Updates (1.75%)</span>
@@ -508,6 +516,11 @@
             <input type="number" id="duesInput" placeholder="0" 
                    style="width: 100%; padding: 10px; font-size: 1.2rem; margin: 15px 0; border: 2px solid #ddd; border-radius: 6px;">
             
+            <div style="text-align: left; margin-bottom: 15px;">
+                <label style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600;">Attach Ledger Photo (Optional):</label>
+                <input type="file" id="finaliseImageInput" accept="image/*" style="width: 100%; margin-top: 5px;">
+            </div>
+
             <div class="modal-actions">
                 <button id="duesCancelBtn" class="btn btn-secondary">Cancel</button>
                 <button id="duesConfirmBtn" class="btn btn-success">Save & Finalise</button>
