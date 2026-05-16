@@ -4023,8 +4023,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // This creates a function that accepts both 'activeInventory' and 'finalisedReports' as arguments
                     const aiFunction = new Function('activeInventory', 'finalisedReports', dynamicCode);
                     
-                    // Execute the function factually against your local active AND history data
-                    const responseHtml = aiFunction(activeInventory, cachedFinalisedReports);
+                    // --- PHASE 2: FRONTEND DATA PROTECTION (DEEP CLONING) ---
+                    // We create perfect, disconnected copies of your data so the AI cannot mutate the originals
+                    const safeActive = JSON.parse(JSON.stringify(activeInventory));
+                    const safeHistory = JSON.parse(JSON.stringify(cachedFinalisedReports));
+                    
+                    // Execute the function factually against the SAFE COPIES
+                    const responseHtml = aiFunction(safeActive, safeHistory);
                     
                     aiResponseArea.innerHTML = responseHtml;
                 } catch (codeError) {
