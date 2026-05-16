@@ -3992,75 +3992,97 @@ document.addEventListener('DOMContentLoaded', () => {
         aiVoiceBtn.style.display = 'none'; // Hide if browser doesn't support
     }
 
-    // Send to Netlify Function
-    aiSendBtn.addEventListener('click', async () => {
-        const query = aiQueryInput.value.trim();
+   // --- LOCAL SMART BOT (100% Factual & Offline) ---
+    aiSendBtn.addEventListener('click', () => {
+        const query = aiQueryInput.value.trim().toLowerCase();
         if (!query) return;
 
         aiSendBtn.disabled = true;
-        aiSendBtn.textContent = "Thinking...";
+        aiSendBtn.textContent = "Calculating...";
         aiResponseArea.style.display = 'none';
 
-        try {
-            // NEW: Send ONLY the question. Do not send the heavy database!
-            const response = await fetch('/.netlify/functions/askDashboardAI', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
-            });
-
-            if (!response.ok) throw new Error("AI failed to respond.");
-            
-            const intentData = await response.json();
-            
-            if (!intentData.isDataQuery) {
-                // If it's just a general question ("Hello", "What is this app?")
-                aiResponseArea.innerHTML = `<strong>AI:</strong> ${intentData.generalAnswer}`;
-            } else {
-                // INTENT PARSING: JAVASCRIPT DOES THE PERFECT MATH
+        // Use a tiny timeout to allow the "Calculating..." UI to show
+        setTimeout(() => {
+            try {
                 let filteredList = activeInventory;
-                const f = intentData.filters;
                 
-                // 1. Filter by Type (G or S)
-                if (f.type) {
-                    filteredList = filteredList.filter(l => l.type === f.type);
-                }
+                // 1. Identify Type (English or Hindi)
+                let isGold = query.includes('gold') || query.includes('sona') || query.includes(' g ');
+                let isSilver = query.includes('silver') || query.includes('chandi') || query.includes(' s ');
                 
-                // 2. Filter by Series and Number Range
-                if (f.series) {
+                if (isGold && !isSilver) filteredList = filteredList.filter(l => l.type === 'G');
+                if (isSilver && !isGold) filteredList = filteredList.filter(l => l.type === 'S');
+
+                // 2. Identify Series (e.g., "Series R" or "R Series")
+                const seriesMatch = query.match(/series\s*([a-z])/i) || query.match(/([a-z])\s*series/i);
+                let seriesName = null;
+                if (seriesMatch) {
+                    seriesName = seriesMatch[1].toUpperCase();
                     filteredList = filteredList.filter(l => {
-                        const match = String(l.no).toUpperCase().match(/^([A-Z]+)\/(\d+)/);
-                        if (!match) return false;
-                        
-                        if (match[1] !== f.series.toUpperCase()) return false;
-                        
-                        const num = parseInt(match[2], 10);
-                        if (f.minNumber !== null && num < f.minNumber) return false;
-                        if (f.maxNumber !== null && num > f.maxNumber) return false;
-                        
-                        return true;
+                        const m = String(l.no).toUpperCase().match(/^([A-Z]+)/);
+                        return m && m[1] === seriesName;
                     });
                 }
 
-                // 3. Execute the Math
-                if (intentData.operation === 'count') {
-                    aiResponseArea.innerHTML = `<strong>AI Result:</strong> I found exactly <b>${filteredList.length}</b> loans matching your criteria.`;
-                } else if (intentData.operation === 'sum') {
-                    const total = filteredList.reduce((acc, curr) => acc + (parseFloat(curr.principal) || 0), 0);
-                    aiResponseArea.innerHTML = `<strong>AI Result:</strong> The total principal amount for these loans is <b>₹${Math.round(total).toLocaleString('en-IN')}</b>.`;
+                // 3. Factual Logic Routing
+                let responseHtml = "";
+                let filterText = "";
+                if (isGold) filterText += "Gold ";
+                if (isSilver) filterText += "Silver ";
+                if (seriesName) filterText += `Series ${seriesName} `;
+                if (!filterText) filterText = "active ";
+                
+                // A. Pending Dues Inquiry
+                if (query.includes('due') || query.includes('baki') || query.includes('pending')) {
+                    responseHtml = `<strong>Bot:</strong> Your current pending dues are <b>₹${Math.round(currentPreviousDues).toLocaleString('en-IN')}</b> (as of ${currentPreviousDuesDate || 'today'}).`;
+                } 
+                // B. Interest Inquiry
+                else if (query.includes('interest') || query.includes('byaj')) {
+                    const rate = parseFloat(document.getElementById('interestRate')?.value) || 1.75;
+                    const today = new Date();
+                    let totalInt = 0;
+                    
+                    filteredList.forEach(l => {
+                        const p = parseFloat(l.principal) || 0;
+                        const loanDate = parseDate(l.date);
+                        let days = loanDate ? days360(loanDate, today) : 0;
+                        if (days < 0) days = 0;
+                        const actualRate = getInterestRateForLoan(l.no, rate);
+                        const calcDays = (days > 0 && days < 30) ? 30 : days;
+                        totalInt += (p * actualRate * calcDays) / 3000;
+                    });
+                    
+                    responseHtml = `<strong>Bot:</strong> The total uncollected interest for ${filterText}loans is approximately <b>₹${Math.round(totalInt).toLocaleString('en-IN')}</b>.`;
                 }
-            }
-            
-            aiResponseArea.style.display = 'block';
-        } catch (err) {
-            console.error(err);
-            aiResponseArea.innerHTML = `<strong>Error:</strong> Could not reach AI.`;
-            aiResponseArea.style.display = 'block';
-        }
+                // C. Principal/Money Inquiry
+                else if (query.includes('principal') || query.includes('amount') || query.includes('value') || query.includes('money') || query.includes('rupee')) {
+                    const totalPrin = filteredList.reduce((acc, curr) => acc + (parseFloat(curr.principal) || 0), 0);
+                    responseHtml = `<strong>Bot:</strong> The total principal amount for ${filterText}loans is <b>₹${Math.round(totalPrin).toLocaleString('en-IN')}</b>.`;
+                }
+                // D. Count Inquiry
+                else if (query.includes('how many') || query.includes('count') || query.includes('number') || query.includes('total loan')) {
+                    responseHtml = `<strong>Bot:</strong> You currently have exactly <b>${filteredList.length}</b> ${filterText}loans.`;
+                }
+                // E. Fallback Default
+                else {
+                    const totalPrin = filteredList.reduce((acc, curr) => acc + (parseFloat(curr.principal) || 0), 0);
+                    responseHtml = `<strong>Bot:</strong> I found <b>${filteredList.length}</b> ${filterText}loans matching your query, with a total principal of <b>₹${Math.round(totalPrin).toLocaleString('en-IN')}</b>.<br><br><i style="font-size:0.85rem; color:#666;">Try asking: "How many Gold loans?", "Total principal in Series R", "What is my uncollected interest?", or "Pending dues?"</i>`;
+                }
 
-        aiSendBtn.disabled = false;
-        aiSendBtn.textContent = "Ask";
-        aiQueryInput.value = '';
+                aiResponseArea.innerHTML = responseHtml;
+                aiResponseArea.style.display = 'block';
+
+            } catch (err) {
+                console.error(err);
+                aiResponseArea.innerHTML = `<strong>Error:</strong> Could not calculate the answer from the database.`;
+                aiResponseArea.style.display = 'block';
+            }
+
+            aiSendBtn.disabled = false;
+            aiSendBtn.textContent = "Ask";
+            aiQueryInput.value = '';
+            
+        }, 150); // Small delay to let the UI update smoothly
     });
 
     // --- NEW: Attach Photo to Existing Report Logic ---
