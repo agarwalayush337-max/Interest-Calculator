@@ -3992,7 +3992,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aiVoiceBtn.style.display = 'none'; // Hide if browser doesn't support
     }
 
-   // --- HYBRID AI BOT (AI parses intent, JS does the Math) ---
+   // --- HYBRID AI BOT (Expanded Execution Engine) ---
     aiSendBtn.addEventListener('click', async () => {
         const query = aiQueryInput.value.trim();
         if (!query) return;
@@ -4010,8 +4010,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) throw new Error("AI failed to respond.");
-            
-            // AI returns a strict JSON object (e.g. { operation: 'sum_principal', filters: { type: 'G' } })
             const aiData = await response.json();
             
             if (!aiData.isDataQuery) {
@@ -4021,7 +4019,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let filteredList = activeInventory;
                 const f = aiData.filters || {};
                 
-                // Apply AI's Extracted Filters
+                // --- APPLY STANDARD FILTERS ---
                 if (f.type) {
                     filteredList = filteredList.filter(l => l.type === f.type);
                 }
@@ -4030,49 +4028,100 @@ document.addEventListener('DOMContentLoaded', () => {
                     filteredList = filteredList.filter(l => {
                         const match = String(l.no).toUpperCase().match(/^([A-Z]+)[^\w]*(\d+)/);
                         if (!match) return false;
-                        
                         if (match[1] !== f.series.toUpperCase()) return false;
-                        
                         const num = parseInt(match[2], 10);
                         if (f.minNumber !== null && num < f.minNumber) return false;
                         if (f.maxNumber !== null && num > f.maxNumber) return false;
-                        
                         return true;
                     });
                 }
 
-                // 3. Generate Factual Response based on Operation
+                // --- PRE-PROCESS DATA FOR COMPLEX MATH ---
+                const today = new Date();
+                const rate = parseFloat(document.getElementById('interestRate')?.value) || 1.75;
+                
+                let processedList = filteredList.map(l => {
+                    const p = parseFloat(l.principal) || 0;
+                    const loanDate = parseDate(l.date);
+                    let days = loanDate ? days360(loanDate, today) : 0;
+                    if (days < 0) days = 0;
+                    const actualRate = getInterestRateForLoan(l.no, rate);
+                    return { ...l, p, days, actualRate, loanDate };
+                });
+
+                // --- APPLY ADVANCED AGE FILTERS ---
+                if (f.daysOldMin !== null && f.daysOldMin !== undefined) processedList = processedList.filter(l => l.days >= f.daysOldMin);
+                if (f.daysOldMax !== null && f.daysOldMax !== undefined) processedList = processedList.filter(l => l.days <= f.daysOldMax);
+
+                // 3. GENERATE FACTUAL RESPONSE BASED ON OPERATION
                 let responseHtml = "";
                 const filterDesc = `${f.type === 'G' ? 'Gold ' : (f.type === 'S' ? 'Silver ' : '')}${f.series ? `Series ${f.series} ` : ''}loans`;
 
-                if (aiData.operation === 'dues') {
+                if (processedList.length === 0 && aiData.operation !== 'dues') {
+                    responseHtml = `<strong>Bot:</strong> I couldn't find any active ${filterDesc} matching those exact criteria.`;
+                } 
+                else if (aiData.operation === 'dues') {
                     responseHtml = `<strong>Bot:</strong> Your current pending dues are <b>₹${Math.round(currentPreviousDues).toLocaleString('en-IN')}</b>.`;
                 } 
+                else if (aiData.operation === 'avg_age') {
+                    const totalDays = processedList.reduce((acc, l) => acc + l.days, 0);
+                    const avg = Math.round(totalDays / processedList.length);
+                    responseHtml = `<strong>Bot:</strong> The average age of the ${processedList.length} matching ${filterDesc} is <b>${avg} Days</b>.`;
+                }
+                else if (aiData.operation === 'future_projection') {
+                    const extraDays = aiData.futureDays || 360; 
+                    let futureInt = 0;
+                    let currentInt = 0;
+                    processedList.forEach(l => {
+                        currentInt += (l.p * l.actualRate * Math.max(30, l.days)) / 3000;
+                        futureInt += (l.p * l.actualRate * Math.max(30, l.days + extraDays)) / 3000;
+                    });
+                    const diff = futureInt - currentInt;
+                    responseHtml = `<strong>Bot:</strong> If you keep these ${processedList.length} ${filterDesc} for another <b>${extraDays} days</b>, the uncollected interest will grow to <b>₹${Math.round(futureInt).toLocaleString('en-IN')}</b>.<br><br><i style="font-size:0.85rem; color:#2a9d8f;">(That is an additional profit of ₹${Math.round(diff).toLocaleString('en-IN')})</i>`;
+                }
+                else if (aiData.operation === 'max_principal' || aiData.operation === 'min_principal') {
+                    const sorted = [...processedList].sort((a, b) => b.p - a.p);
+                    const target = aiData.operation === 'max_principal' ? sorted[0] : sorted[sorted.length - 1];
+                    const word = aiData.operation === 'max_principal' ? 'highest' : 'lowest';
+                    responseHtml = `<strong>Bot:</strong> The ${word} principal amount among ${filterDesc} is <b>₹${Math.round(target.p).toLocaleString('en-IN')}</b> (Loan: <b>${target.no}</b>, dated ${target.date}).`;
+                }
+                else if (aiData.operation === 'oldest_loan' || aiData.operation === 'newest_loan') {
+                    const sorted = [...processedList].sort((a, b) => b.days - a.days);
+                    const target = aiData.operation === 'oldest_loan' ? sorted[0] : sorted[sorted.length - 1];
+                    const word = aiData.operation === 'oldest_loan' ? 'oldest' : 'newest';
+                    responseHtml = `<strong>Bot:</strong> The ${word} loan among ${filterDesc} is <b>${target.no}</b>. It was given on ${target.date} (<b>${target.days} days ago</b>) for ₹${Math.round(target.p).toLocaleString('en-IN')}.`;
+                }
+                else if (aiData.operation === 'avg_principal') {
+                    const totalPrin = processedList.reduce((acc, l) => acc + l.p, 0);
+                    const avg = Math.round(totalPrin / processedList.length);
+                    responseHtml = `<strong>Bot:</strong> The average principal amount for the ${processedList.length} matching ${filterDesc} is <b>₹${avg.toLocaleString('en-IN')}</b>.`;
+                }
                 else if (aiData.operation === 'sum_interest') {
-                    const rate = parseFloat(document.getElementById('interestRate')?.value) || 1.75;
-                    const today = new Date();
                     let totalInt = 0;
-                    
-                    filteredList.forEach(l => {
-                        const p = parseFloat(l.principal) || 0;
-                        const loanDate = parseDate(l.date);
-                        let days = loanDate ? days360(loanDate, today) : 0;
-                        if (days < 0) days = 0;
-                        const actualRate = getInterestRateForLoan(l.no, rate);
-                        const calcDays = (days > 0 && days < 30) ? 30 : days;
-                        totalInt += (p * actualRate * calcDays) / 3000;
+                    processedList.forEach(l => {
+                        const calcDays = (l.days > 0 && l.days < 30) ? 30 : l.days;
+                        totalInt += (l.p * l.actualRate * calcDays) / 3000;
                     });
                     responseHtml = `<strong>Bot:</strong> Uncollected interest for matching ${filterDesc} is <b>₹${Math.round(totalInt).toLocaleString('en-IN')}</b>.`;
                 }
                 else if (aiData.operation === 'sum_principal') {
-                    const totalPrin = filteredList.reduce((acc, curr) => acc + (parseFloat(curr.principal) || 0), 0);
+                    const totalPrin = processedList.reduce((acc, l) => acc + l.p, 0);
                     responseHtml = `<strong>Bot:</strong> The total principal for matching ${filterDesc} is <b>₹${Math.round(totalPrin).toLocaleString('en-IN')}</b>.`;
                 }
                 else if (aiData.operation === 'count') {
-                    responseHtml = `<strong>Bot:</strong> I found exactly <b>${filteredList.length}</b> ${filterDesc} matching your criteria.`;
+                    responseHtml = `<strong>Bot:</strong> I found exactly <b>${processedList.length}</b> ${filterDesc} matching your criteria.`;
+                }
+                else if (aiData.operation === 'list') {
+                    let listHtml = `<ul style="margin-top: 10px; margin-bottom: 0; padding-left: 20px; max-height: 200px; overflow-y: auto; font-size: 0.9rem; background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px 10px 10px 25px;">`;
+                    const sortedList = [...processedList].sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true, sensitivity: 'base' }));
+                    sortedList.forEach(l => {
+                        listHtml += `<li style="margin-bottom: 6px;"><b>${l.no}</b> &bull; ₹${Math.round(l.p).toLocaleString('en-IN')} <span style="color:var(--subtle-text-color); font-size:0.8rem; margin-left: 5px;">(${l.date})</span></li>`;
+                    });
+                    listHtml += `</ul>`;
+                    responseHtml = `<strong>Bot:</strong> Here is the list of <b>${sortedList.length}</b> ${filterDesc} you requested:<br>${listHtml}`;
                 }
                 else {
-                    responseHtml = `<strong>Bot:</strong> I applied your filters and found <b>${filteredList.length}</b> ${filterDesc}.`;
+                    responseHtml = `<strong>Bot:</strong> I applied your filters and found <b>${processedList.length}</b> ${filterDesc}.`;
                 }
 
                 aiResponseArea.innerHTML = responseHtml;
@@ -4089,6 +4138,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aiSendBtn.textContent = "Ask";
         aiQueryInput.value = '';
     });
+    
     // --- NEW: Attach Photo to Existing Report Logic ---
     const attachReceiptBtn = document.getElementById('attachReceiptBtn');
     const attachReceiptInput = document.getElementById('attachReceiptInput');
