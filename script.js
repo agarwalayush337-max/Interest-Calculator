@@ -695,9 +695,9 @@ const renderLoanEntries = (filter = '') => {
         let photoButtonHtml = '';
         if (entryImageUrl) {
             photoButtonHtml = `<button class="btn btn-success" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="window.open('${entryImageUrl}', '_blank')">View Photo</button>`;
+        } else {
+            photoButtonHtml = `<button class="btn btn-secondary" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="triggerListAttachPhoto('${tempId}', false)">📎 Attach</button>`;
         }
-        // Removed the 'else' block so no attach button appears
-
         const li = document.createElement('li');
         li.innerHTML = `
             <div style="flex-grow: 1;">
