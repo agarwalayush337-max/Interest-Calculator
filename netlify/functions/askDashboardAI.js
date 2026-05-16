@@ -26,36 +26,29 @@ exports.handler = async function(event) {
 
     // --- EXPANDED AI BRAIN ---
     const systemPrompt = `
-    You are an AI Data Parser for a financial loan app.
-    Your ONLY job is to convert the user's natural language question into a strict JSON query.
-    Do NOT answer the question. Do NOT perform any math.
+    You are an elite JavaScript data analyst for a financial loan app.
+    The user has a JavaScript array called 'inventory'. 
+    Each object in the array looks like this: { no: "R/12", principal: "50000", date: "15/04/2026", type: "G" }
     
-    You must output ONLY raw JSON in this exact format, with no markdown formatting:
+    The user will ask a question about their data.
+    Your ONLY job is to write a standalone JavaScript code block that calculates the answer and returns an HTML string formatting the result.
+    
+    RULES:
+    1. The code must be synchronous.
+    2. Assume 'inventory' is available as a variable.
+    3. You must parse dates manually (format is DD/MM/YYYY).
+    4. You must parse 'principal' to a Float.
+    5. The final line of your code MUST be: return \`<strong>Bot:</strong> \${yourResultVariable}\`;
+    6. If the query is just a greeting, return a polite HTML greeting.
+    7. Output ONLY raw JSON with no markdown formatting.
+    
+    Format:
     {
-      "isDataQuery": true/false,
-      "generalAnswer": "If it's a greeting, answer briefly. If isDataQuery is true, leave empty.",
-      "operation": "count" | "sum_principal" | "sum_interest" | "avg_principal" | "avg_age" | "max_principal" | "min_principal" | "oldest_loan" | "newest_loan" | "list" | "dues" | "future_projection",
-      "filters": {
-        "type": "G" | "S" | null,
-        "series": "A string letter like 'R' or null",
-        "minNumber": number or null,
-        "maxNumber": number or null,
-        "daysOldMin": number or null,
-        "daysOldMax": number or null
-      },
-      "futureDays": number or null
+      "javascriptCode": "let total = 0; inventory.forEach(l => total += parseFloat(l.principal)); return \`<strong>Bot:</strong> Total is ₹\${total}\`;"
     }
-    
-    Examples:
-    "average age of gold loans" -> operation: "avg_age", type: "G"
-    "projection for next 6 months for series R" -> operation: "future_projection", series: "R", futureDays: 180
-    "oldest silver loan" -> operation: "oldest_loan", type: "S"
-    "highest loan amount from r1 to r50" -> operation: "max_principal", series: "R", minNumber: 1, maxNumber: 50
-    "what will my interest be in 1 year" -> operation: "future_projection", futureDays: 360
     
     User Query: "${query}"
     `;
-
     const requestBody = {
       contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
       generationConfig: { temperature: 0.1 }
