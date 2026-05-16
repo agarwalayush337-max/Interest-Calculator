@@ -694,7 +694,10 @@ const renderLoanEntries = (filter = '') => {
 
         let photoButtonHtml = '';
         if (entryImageUrl) {
-            photoButtonHtml = `<button class="btn btn-success" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="smartViewImage('${entryImageUrl}', '${tempId}', true)">View Photo</button>`;
+            photoButtonHtml = `<button class="btn btn-success" style="width: 100%; justify-content: center; margin-bottom: 5px;" 
+                onmouseenter="preloadImage('${entryImageUrl}')" 
+                ontouchstart="preloadImage('${entryImageUrl}')" 
+                onclick="smartViewImage('${entryImageUrl}', '${tempId}', true)">View Photo</button>`;
         } else {
             photoButtonHtml = `<button class="btn btn-secondary" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="triggerListAttachPhoto('${tempId}', false)">📎 Attach</button>`;
         }
@@ -1535,7 +1538,10 @@ const renderFinalisedTransactions = (filter = '') => {
 
         let photoButtonHtml = '';
         if (report.imageUrl) {
-            photoButtonHtml = `<button class="btn btn-success" onclick="smartViewImage('${report.imageUrl}', '${report.id}', false)">View Photo</button>`;
+            photoButtonHtml = `<button class="btn btn-success" 
+                onmouseenter="preloadImage('${report.imageUrl}')" 
+                ontouchstart="preloadImage('${report.imageUrl}')" 
+                onclick="smartViewImage('${report.imageUrl}', '${report.id}', false)">View Photo</button>`;
         } else {
             photoButtonHtml = `<button class="btn btn-secondary" onclick="triggerListAttachPhoto('${report.id}', true)">📎 Attach</button>`;
         }
@@ -1745,7 +1751,7 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
             }).catch(() => {}); // Ignore network errors
 
             newViewBtn.addEventListener('click', () => {
-                window.open(report.imageUrl, '_blank');
+                openImageModal(report.imageUrl); // Opens instantly in the app!
             });
         } else {
             newViewBtn.style.display = 'none';
@@ -4379,7 +4385,7 @@ window.smartViewImage = async (url, docId, isBatch = false) => {
         const res = await fetch(url, { method: 'HEAD' });
         if (res.ok) {
             closeConfirm();
-            window.open(url, '_blank');
+            openImageModal(url); // Opens instantly in the app!
         } else {
             closeConfirm();
             await showConfirm("Not Found", "This image was deleted from storage. The list will now refresh and switch to 'Attach' mode.", false);
@@ -4471,3 +4477,37 @@ const compressImage = async (file, maxWidth = 1200, quality = 0.7) => {
         reader.onerror = error => reject(error);
     });
 };
+
+// ==========================================
+// JUST-IN-TIME IMAGE PRELOADER
+// ==========================================
+window.preloadedImagesCache = new Set();
+
+window.preloadImage = (url) => {
+    if (!url || window.preloadedImagesCache.has(url)) return;
+    const img = new Image();
+    img.src = url; 
+    window.preloadedImagesCache.add(url);
+};
+
+// ==========================================
+// INSTANT IMAGE VIEWER LOGIC
+// ==========================================
+window.openImageModal = (url) => {
+    const modal = document.getElementById('imageViewerModal');
+    const modalImg = document.getElementById('fullScreenImage');
+    modalImg.src = url;
+    modal.style.display = "flex";
+};
+
+window.closeImageModal = (event) => {
+    if (!event || event.target.id === 'imageViewerModal' || event.target.classList.contains('close-image-modal')) {
+        const modal = document.getElementById('imageViewerModal');
+        modal.style.display = "none";
+        document.getElementById('fullScreenImage').src = "";
+    }
+};
+
+document.addEventListener('keydown', function(event) {
+    if (event.key === "Escape") closeImageModal();
+});
