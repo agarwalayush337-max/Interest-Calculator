@@ -3128,12 +3128,12 @@ const confirmFinaliseWithDues = async () => {
             let uploadedImageUrl = null;
             
             if (file) {
-                const imgRef = storage.ref().child(`finalised_images/${reportId}.jpg`);
+                // Unified folder path and added a timestamp to prevent browser caching
+                const imgRef = storage.ref().child(`report_images/${reportId}_${Date.now()}.jpg`);
                 await imgRef.put(file);
                 uploadedImageUrl = await imgRef.getDownloadURL();
             }
             // ----------------------------------------------
-
             const reportRef = reportsCollection.doc(reportId);
             const reportDoc = await reportRef.get();
             
@@ -4289,27 +4289,62 @@ window.triggerListAttachPhoto = (reportId, isFinalised) => {
                 await imgRef.put(file);
                 const uploadedImageUrl = await imgRef.getDownloadURL();
 
-                // B. Save URL to Database
-                await reportsCollection.doc(reportIdToUpdate).update({
-                    imageUrl: uploadedImageUrl,
-                    lastUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                // B. Save URL to Database (Handling Virtual Batch Entries vs Real Reports)
+                if (reportIdToUpdate.startsWith('temp_entry_')) {
+                    const virtualReport = window[reportIdToUpdate];
+                    let attached = false;
+                    
+                    if (virtualReport && virtualReport.loans) {
+                        for (let loan of virtualReport.loans) {
+                            try {
+                                const docId = `${user.uid}_${String(loan.no).replace(/\//g, '-')}`;
+                                await db.collection('activeInventory').doc(docId).update({
+                                    imageUrl: uploadedImageUrl
+                                });
+                                
+                                // Update local state so it appears immediately
+                                const matchIndex = activeInventory.findIndex(inv => inv.no === loan.no);
+                                if (matchIndex > -1) activeInventory[matchIndex].imageUrl = uploadedImageUrl;
+                                
+                                attached = true;
+                                break; // Success! Only need to attach the image to one loan in the batch
+                            } catch (e) {
+                                // Loan might be finalised or deleted, try the next one
+                            }
+                        }
+                    }
+                    
+                    if (!attached) {
+                        throw new Error("Could not link image to these specific batch loans. They might be archived.");
+                    }
+                    
+                    closeConfirm();
+                    showConfirm("Success", "Image attached to Batch Entry successfully!", false);
+                    renderLoanEntries(document.getElementById('entriesSearchInput')?.value || '');
 
-                // C. Update Local Arrays so you don't have to refresh the page
-                const reportArray = isFinalisedUpdate ? cachedFinalisedReports : cachedReports;
-                const reportIndex = reportArray.findIndex(r => r.id === reportIdToUpdate);
-                if (reportIndex > -1) {
-                    reportArray[reportIndex].imageUrl = uploadedImageUrl;
-                }
-
-                closeConfirm();
-                showConfirm("Success", "Image attached successfully!", false);
-                
-                // D. Re-render the specific list
-                if (isFinalisedUpdate) {
-                    renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
                 } else {
-                    renderRecentTransactions(document.getElementById('reportSearchInput').value);
+                    // Standard Report (Pending / Finalised)
+                    await reportsCollection.doc(reportIdToUpdate).update({
+                        imageUrl: uploadedImageUrl,
+                        lastUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    // C. Update Local Arrays
+                    const reportArray = isFinalisedUpdate ? cachedFinalisedReports : cachedReports;
+                    const reportIndex = reportArray.findIndex(r => r.id === reportIdToUpdate);
+                    if (reportIndex > -1) {
+                        reportArray[reportIndex].imageUrl = uploadedImageUrl;
+                    }
+
+                    closeConfirm();
+                    showConfirm("Success", "Image attached successfully!", false);
+                    
+                    // D. Re-render the specific list
+                    if (isFinalisedUpdate) {
+                        renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
+                    } else {
+                        renderRecentTransactions(document.getElementById('reportSearchInput').value);
+                    }
                 }
 
             } catch (error) {
