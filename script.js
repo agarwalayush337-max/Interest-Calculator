@@ -912,22 +912,6 @@ const askDuesForBatch = (currentVal) => {
     });
 };
 
-// --- NEW: Handle Manual Batch Image Upload ---
-window.handleManualBatchImage = function(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        // Extract just the Base64 data part from the URL
-        const base64 = e.target.result.split(',')[1];
-        currentBatchImageBase64 = base64; // Save it to the global variable
-        
-        // Show the success checkmark
-        document.getElementById('batchImageIndicator').style.display = 'inline';
-    };
-    reader.readAsDataURL(file);
-};
 
 // --- Add this to your script.js ---
 
