@@ -2,7 +2,6 @@ const { GoogleAuth } = require('google-auth-library');
 const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
-  // If a preflight or incorrect request comes in, reject it immediately
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
   try {
@@ -13,7 +12,6 @@ exports.handler = async function(event) {
       return { statusCode: 500, body: JSON.stringify({ error: "Server config missing." }) };
     }
 
-    // 1. EXTRACT THE QUERY HERE
     const { query } = JSON.parse(event.body);
 
     const auth = new GoogleAuth({
@@ -26,7 +24,7 @@ exports.handler = async function(event) {
     const MODEL_ID = 'gemini-2.5-flash-lite'; 
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
-    // 2. DEFINE THE PROMPT HERE (So it knows what 'query' is)
+    // --- EXPANDED AI BRAIN ---
     const systemPrompt = `
     You are an AI Data Parser for a financial loan app.
     Your ONLY job is to convert the user's natural language question into a strict JSON query.
@@ -36,28 +34,31 @@ exports.handler = async function(event) {
     {
       "isDataQuery": true/false,
       "generalAnswer": "If it's a greeting, answer briefly. If isDataQuery is true, leave empty.",
-      "operation": "count" | "sum_principal" | "sum_interest" | "dues",
+      "operation": "count" | "sum_principal" | "sum_interest" | "avg_principal" | "avg_age" | "max_principal" | "min_principal" | "oldest_loan" | "newest_loan" | "list" | "dues" | "future_projection",
       "filters": {
         "type": "G" | "S" | null,
         "series": "A string letter like 'R' or null",
         "minNumber": number or null,
-        "maxNumber": number or null
-      }
+        "maxNumber": number or null,
+        "daysOldMin": number or null,
+        "daysOldMax": number or null
+      },
+      "futureDays": number or null
     }
     
     Examples:
-    "how many s type loan from r/1 to r/100" -> operation: "count", type: "S", series: "R", minNumber: 1, maxNumber: 100
-    "what is my pending baki" -> operation: "dues"
-    "total principal of gold loans" -> operation: "sum_principal", type: "G"
+    "average age of gold loans" -> operation: "avg_age", type: "G"
+    "projection for next 6 months for series R" -> operation: "future_projection", series: "R", futureDays: 180
+    "oldest silver loan" -> operation: "oldest_loan", type: "S"
+    "highest loan amount from r1 to r50" -> operation: "max_principal", series: "R", minNumber: 1, maxNumber: 50
+    "what will my interest be in 1 year" -> operation: "future_projection", futureDays: 360
     
     User Query: "${query}"
     `;
 
     const requestBody = {
       contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
-      generationConfig: {
-        temperature: 0.1 
-      }
+      generationConfig: { temperature: 0.1 }
     };
 
     const response = await fetch(apiUrl, {
@@ -70,9 +71,7 @@ exports.handler = async function(event) {
     });
 
     if (!response.ok) {
-        const errorData = await response.text();
-        console.error("Vertex API Failed:", errorData);
-        return { statusCode: 500, body: JSON.stringify({ error: "Google API Error. Check Netlify Logs." }) };
+        return { statusCode: 500, body: JSON.stringify({ error: "Google API Error." }) };
     }
 
     const data = await response.json();
@@ -80,22 +79,16 @@ exports.handler = async function(event) {
 
     if (!jsonText) throw new Error("No AI output generated.");
 
-    // Clean up any markdown formatting just in case
     const regex = /```json\s*([\s\S]*?)\s*```/;
     const match = jsonText.match(regex);
-    if (match) {
-      jsonText = match[1];
-    }
-
-    const parsedData = JSON.parse(jsonText);
+    if (match) jsonText = match[1];
 
     return {
       statusCode: 200,
-      body: JSON.stringify(parsedData),
+      body: JSON.stringify(JSON.parse(jsonText)),
     };
 
   } catch (error) {
-    console.error('FATAL AI ERROR:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: error.message || 'Internal Server Error' }),
