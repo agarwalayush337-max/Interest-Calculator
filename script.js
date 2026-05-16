@@ -3142,10 +3142,13 @@ const confirmFinaliseWithDues = async () => {
             let uploadedImageUrl = null;
             
             if (file) {
-                // Unified folder path and added a timestamp to prevent browser caching
+                showConfirm("Compressing...", "Optimizing image size...", false);
+                const compressedFile = await compressImage(file); // Compress the image!
+                
                 const imgRef = storage.ref().child(`report_images/${reportId}_${Date.now()}.jpg`);
-                await imgRef.put(file);
+                await imgRef.put(compressedFile); // Upload the compressed version
                 uploadedImageUrl = await imgRef.getDownloadURL();
+                closeConfirm();
             }
             // ----------------------------------------------
             const reportRef = reportsCollection.doc(reportId);
@@ -4287,12 +4290,14 @@ window.triggerListAttachPhoto = (reportId, isFinalised) => {
             showConfirm("Uploading...", "Please wait...", false);
 
             try {
+                showConfirm("Compressing...", "Optimizing image size...", false);
+                const compressedFile = await compressImage(file); // Compress the image!
+                
                 // A. Upload to Firebase (Dynamic Folder)
                 const folder = reportIdToUpdate.startsWith('temp_entry_') ? 'batch_images' : 'report_images';
                 const imgRef = storage.ref().child(`${folder}/${reportIdToUpdate}_${Date.now()}.jpg`);
-                await imgRef.put(file);
+                await imgRef.put(compressedFile); // Upload the compressed version
                 const uploadedImageUrl = await imgRef.getDownloadURL();
-
                 // B. Save URL to Database (Handling Virtual Batch Entries vs Real Reports)
                 if (reportIdToUpdate.startsWith('temp_entry_')) {
                     const virtualReport = window[reportIdToUpdate];
@@ -4412,4 +4417,57 @@ window.smartViewImage = async (url, docId, isBatch = false) => {
         closeConfirm();
         window.open(url, '_blank');
     }
+};
+// ==========================================
+// IMAGE COMPRESSION ENGINE
+// ==========================================
+const compressImage = async (file, maxWidth = 1600, quality = 0.85) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                // Calculate new dimensions (keeping aspect ratio)
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxWidth) {
+                        width *= maxWidth / height;
+                        height = maxWidth;
+                    }
+                }
+
+                // Draw to canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Convert to compressed Blob
+                canvas.toBlob(blob => {
+                    if (blob) {
+                        // Create a new lightweight File object
+                        const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + "_compressed.jpg", {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+                        resolve(compressedFile);
+                    } else {
+                        reject(new Error('Compression failed'));
+                    }
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = error => reject(error);
+        };
+        reader.onerror = error => reject(error);
+    });
 };
