@@ -695,9 +695,8 @@ const renderLoanEntries = (filter = '') => {
         let photoButtonHtml = '';
         if (entryImageUrl) {
             photoButtonHtml = `<button class="btn btn-success" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="window.open('${entryImageUrl}', '_blank')">View Photo</button>`;
-        } else {
-            photoButtonHtml = `<button class="btn btn-secondary" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="triggerListAttachPhoto('${tempId}', false)">📎 Attach</button>`;
         }
+        // Removed the 'else' block so no attach button appears
 
         const li = document.createElement('li');
         li.innerHTML = `
@@ -1741,20 +1740,17 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
     if (viewReceiptBtn && attachReceiptBtn) {
         const newViewBtn = viewReceiptBtn.cloneNode(true);
         viewReceiptBtn.parentNode.replaceChild(newViewBtn, viewReceiptBtn);
+        
+        // Permanently hide the attach button inside the viewer 
+        attachReceiptBtn.style.display = 'none';
 
         if (report.imageUrl) {
             newViewBtn.style.display = 'inline-flex';
-            attachReceiptBtn.style.display = 'none';
             newViewBtn.addEventListener('click', () => {
                 window.open(report.imageUrl, '_blank');
             });
         } else {
             newViewBtn.style.display = 'none';
-            if (!report.isLocal) {
-                attachReceiptBtn.style.display = 'inline-flex';
-            } else {
-                attachReceiptBtn.style.display = 'none';
-            }
         }
     }
     // --- POPULATE DATA (Common for all) ---
