@@ -4421,7 +4421,7 @@ window.smartViewImage = async (url, docId, isBatch = false) => {
 // ==========================================
 // IMAGE COMPRESSION ENGINE
 // ==========================================
-const compressImage = async (file, maxWidth = 1600, quality = 0.85) => {
+const compressImage = async (file, maxWidth = 1200, quality = 0.7) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
