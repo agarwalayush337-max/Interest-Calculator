@@ -4018,13 +4018,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!dynamicCode) {
                  aiResponseArea.innerHTML = `<strong>Bot:</strong> I couldn't write the code to solve that.`;
             } else {
-                // 3. THE MAGIC: Create a new function on the fly and inject your activeInventory
+                // 3. THE MAGIC: Create a new function on the fly and inject BOTH data arrays
                 try {
-                    // This creates a function that accepts 'inventory' as an argument and runs the AI's code
-                    const aiFunction = new Function('inventory', dynamicCode);
+                    // This creates a function that accepts both 'activeInventory' and 'finalisedReports' as arguments
+                    const aiFunction = new Function('activeInventory', 'finalisedReports', dynamicCode);
                     
-                    // Execute the function factually against your local data
-                    const responseHtml = aiFunction(activeInventory);
+                    // Execute the function factually against your local active AND history data
+                    const responseHtml = aiFunction(activeInventory, cachedFinalisedReports);
                     
                     aiResponseArea.innerHTML = responseHtml;
                 } catch (codeError) {
