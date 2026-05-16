@@ -4164,6 +4164,7 @@ const handleBatchScan = async (event) => {
                     
                     // 3. Send the smaller, optimized image to the Server
                     const response = await fetch('/.netlify/functions/scanImage', {
+                        method: 'POST', // <--- ADD THIS LINE
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             image: base64Image, 
