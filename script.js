@@ -694,7 +694,7 @@ const renderLoanEntries = (filter = '') => {
 
         let photoButtonHtml = '';
         if (entryImageUrl) {
-            photoButtonHtml = `<button class="btn btn-success" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="window.open('${entryImageUrl}', '_blank')">View Photo</button>`;
+            photoButtonHtml = `<button class="btn btn-success" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="smartViewImage('${entryImageUrl}', '${tempId}', true)">View Photo</button>`;
         } else {
             photoButtonHtml = `<button class="btn btn-secondary" style="width: 100%; justify-content: center; margin-bottom: 5px;" onclick="triggerListAttachPhoto('${tempId}', false)">📎 Attach</button>`;
         }
@@ -1535,7 +1535,7 @@ const renderFinalisedTransactions = (filter = '') => {
 
         let photoButtonHtml = '';
         if (report.imageUrl) {
-            photoButtonHtml = `<button class="btn btn-success" onclick="window.open('${report.imageUrl}', '_blank')">View Photo</button>`;
+            photoButtonHtml = `<button class="btn btn-success" onclick="smartViewImage('${report.imageUrl}', '${report.id}', false)">View Photo</button>`;
         } else {
             photoButtonHtml = `<button class="btn btn-secondary" onclick="triggerListAttachPhoto('${report.id}', true)">📎 Attach</button>`;
         }
@@ -1725,11 +1725,25 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
         const newViewBtn = viewReceiptBtn.cloneNode(true);
         viewReceiptBtn.parentNode.replaceChild(newViewBtn, viewReceiptBtn);
         
-        // Permanently hide the attach button inside the viewer 
         attachReceiptBtn.style.display = 'none';
 
         if (report.imageUrl) {
             newViewBtn.style.display = 'inline-flex';
+
+            // --- SMART VERIFIER: Checks if image was deleted from Storage ---
+            fetch(report.imageUrl, { method: 'HEAD' }).then(async (res) => {
+                if (!res.ok) { 
+                    // 403 or 404: File is gone! Switch UI instantly.
+                    newViewBtn.style.display = 'none';
+                    if (!report.isLocal) attachReceiptBtn.style.display = 'inline-flex';
+                    
+                    report.imageUrl = null;
+                    await reportsCollection.doc(reportId).update({ 
+                        imageUrl: firebase.firestore.FieldValue.delete() 
+                    });
+                }
+            }).catch(() => {}); // Ignore network errors
+
             newViewBtn.addEventListener('click', () => {
                 window.open(report.imageUrl, '_blank');
             });
@@ -4284,8 +4298,9 @@ window.triggerListAttachPhoto = (reportId, isFinalised) => {
             showConfirm("Uploading...", "Please wait...", false);
 
             try {
-                // A. Upload to Firebase
-                const imgRef = storage.ref().child(`report_images/${reportIdToUpdate}_${Date.now()}.jpg`);
+                // A. Upload to Firebase (Dynamic Folder)
+                const folder = reportIdToUpdate.startsWith('temp_entry_') ? 'batch_images' : 'report_images';
+                const imgRef = storage.ref().child(`${folder}/${reportIdToUpdate}_${Date.now()}.jpg`);
                 await imgRef.put(file);
                 const uploadedImageUrl = await imgRef.getDownloadURL();
 
@@ -4359,4 +4374,53 @@ window.triggerListAttachPhoto = (reportId, isFinalised) => {
     
     // Trigger the file browser
     input.click();
+};
+
+// ==========================================
+// SMART IMAGE VIEWER (Handles Deleted Files)
+// ==========================================
+window.smartViewImage = async (url, docId, isBatch = false) => {
+    showConfirm("Opening...", "Verifying image...", false);
+    try {
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.ok) {
+            closeConfirm();
+            window.open(url, '_blank');
+        } else {
+            closeConfirm();
+            await showConfirm("Not Found", "This image was deleted from storage. The list will now refresh and switch to 'Attach' mode.", false);
+            
+            // Cleanup Batch Entries
+            if (isBatch && docId.startsWith('temp_entry_')) {
+                const virtualReport = window[docId];
+                if (virtualReport && virtualReport.loans) {
+                    for (let loan of virtualReport.loans) {
+                        const activeId = `${user.uid}_${String(loan.no).replace(/\//g, '-')}`;
+                        try {
+                            await db.collection('activeInventory').doc(activeId).update({ imageUrl: firebase.firestore.FieldValue.delete() });
+                            const matchIndex = activeInventory.findIndex(inv => inv.no === loan.no);
+                            if (matchIndex > -1) activeInventory[matchIndex].imageUrl = null;
+                        } catch(e){}
+                    }
+                }
+                renderLoanEntries(document.getElementById('entriesSearchInput')?.value || '');
+            } 
+            // Cleanup Standard Reports
+            else {
+                try {
+                    await reportsCollection.doc(docId).update({ imageUrl: firebase.firestore.FieldValue.delete() });
+                    const idx1 = cachedReports.findIndex(r => r.id === docId);
+                    if(idx1 > -1) cachedReports[idx1].imageUrl = null;
+                    const idx2 = cachedFinalisedReports.findIndex(r => r.id === docId);
+                    if(idx2 > -1) cachedFinalisedReports[idx2].imageUrl = null;
+                    
+                    renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
+                } catch(e){}
+            }
+        }
+    } catch (e) {
+        // Fallback for adblockers blocking fetch requests
+        closeConfirm();
+        window.open(url, '_blank');
+    }
 };
