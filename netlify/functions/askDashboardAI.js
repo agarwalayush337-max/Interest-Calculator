@@ -24,7 +24,7 @@ exports.handler = async function(event) {
     const MODEL_ID = 'gemini-2.5-flash-lite'; 
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
-    // --- EXPANDED AI BRAIN ---
+    // --- UPGRADED SYSTEM PROMPT (Strict Range Rules) ---
     const systemPrompt = `
     You are an elite JavaScript data analyst for a financial loan app.
     The user has a JavaScript array called 'inventory'. 
@@ -38,20 +38,28 @@ exports.handler = async function(event) {
     2. Assume 'inventory' is available as a variable.
     3. You must parse dates manually (format is DD/MM/YYYY).
     4. You must parse 'principal' to a Float.
-    5. The final line of your code MUST be: return \`<strong>Bot:</strong> \${yourResultVariable}\`;
-    6. If the query is just a greeting, return a polite HTML greeting.
+    5. CRITICAL RANGE RULE: If checking a range of loan numbers (e.g., R/1 to R/100), you MUST use a Regex match to extract the letter series and the number, parse the number to an integer, and use mathematical operators (>= and <=). NEVER use .startsWith() or string matching for ranges.
+    6. The final line of your code MUST be: return \`<strong>Bot:</strong> \${yourResultVariable}\`;
     7. Output ONLY raw JSON with no markdown formatting.
     
-    Format:
+    Format Example 1 (Simple):
     {
       "javascriptCode": "let total = 0; inventory.forEach(l => total += parseFloat(l.principal)); return \`<strong>Bot:</strong> Total is ₹\${total}\`;"
+    }
+
+    Format Example 2 (Complex Ranges):
+    {
+      "javascriptCode": "let count = 0; inventory.forEach(l => { if(l.type === 'S') { const match = String(l.no).toUpperCase().match(/^([A-Z]+)[^\\\\w]*(\\d+)/); if(match && match[1] === 'R') { let num = parseInt(match[2], 10); if(num >= 100 && num <= 200) count++; } } }); return \`<strong>Bot:</strong> I found \${count} matching loans.\`;"
     }
     
     User Query: "${query}"
     `;
+
     const requestBody = {
       contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
-      generationConfig: { temperature: 0.1 }
+      generationConfig: {
+        temperature: 0.1 
+      }
     };
 
     const response = await fetch(apiUrl, {
@@ -64,7 +72,9 @@ exports.handler = async function(event) {
     });
 
     if (!response.ok) {
-        return { statusCode: 500, body: JSON.stringify({ error: "Google API Error." }) };
+        const errorData = await response.text();
+        console.error("Vertex API Failed:", errorData);
+        return { statusCode: 500, body: JSON.stringify({ error: "Google API Error. Check Netlify Logs." }) };
     }
 
     const data = await response.json();
@@ -74,14 +84,19 @@ exports.handler = async function(event) {
 
     const regex = /```json\s*([\s\S]*?)\s*```/;
     const match = jsonText.match(regex);
-    if (match) jsonText = match[1];
+    if (match) {
+      jsonText = match[1];
+    }
+
+    const parsedData = JSON.parse(jsonText);
 
     return {
       statusCode: 200,
-      body: JSON.stringify(JSON.parse(jsonText)),
+      body: JSON.stringify(parsedData),
     };
 
   } catch (error) {
+    console.error('FATAL AI ERROR:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: error.message || 'Internal Server Error' }),
