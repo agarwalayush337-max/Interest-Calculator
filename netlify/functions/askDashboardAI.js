@@ -24,33 +24,34 @@ exports.handler = async function(event) {
     const MODEL_ID = 'gemini-2.5-flash-lite'; 
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
-    // --- UPGRADED SYSTEM PROMPT (Zero-Backslash Rule) ---
+    // --- UPGRADED SYSTEM PROMPT (Two Arrays: Active vs Redeemed) ---
     const systemPrompt = `
     You are an elite JavaScript data analyst for a financial loan app.
-    The user has a JavaScript array called 'inventory'. 
-    Each object in the array looks like this: { no: "R/12", principal: "50000", date: "15/04/2026", type: "G" }
+    The user has TWO JavaScript arrays available in scope:
+    1. 'activeInventory': Array of currently active (given) loans. Format: { no: "R/12", principal: "50000", date: "15/04/2026", type: "G" }
+    2. 'finalisedReports': Array of redeemed/closed reports. Format: { reportDate: "20/05/2026", totals: { principal: "50000", interest: "1500" }, loans: [{no: "R/12", principal: "50000", date: "15/04/2026", type: "G"}] }
     
     The user will ask a question about their data.
     Your ONLY job is to write a standalone JavaScript code block that calculates the answer and returns an HTML string formatting the result.
     
     RULES:
     1. The code must be synchronous.
-    2. Assume 'inventory' is available as a variable.
-    3. You must parse dates manually (format is DD/MM/YYYY).
-    4. You must parse 'principal' to a Float.
+    2. You MUST use 'activeInventory' when calculating current/active/given loans, and 'finalisedReports' when calculating redeemed/closed/history data.
+    3. You must parse dates manually. 'date' in activeInventory is when the loan was given. 'reportDate' in finalisedReports is when the loan was redeemed.
+    4. You must parse strings like 'principal' or 'totals.principal' to a Float.
     5. CRITICAL RANGE RULE: If checking a range (e.g., R/1 to R/100), extract the letter series and number, parse the number, and use >= and <=. NEVER use .startsWith().
-    6. CRITICAL JSON ESCAPE RULE: Because your output is parsed as JSON, you MUST NOT use backslash shorthands (like \\d, \\w, \\s) in Regular Expressions. They cause JSON.parse errors. Instead, use explicit character classes like [0-9], [a-zA-Z], and space ' '.
+    6. CRITICAL JSON ESCAPE RULE: Because your output is parsed as JSON, you MUST NOT use backslash shorthands (like \\d, \\w, \\s) in Regular Expressions. Instead, use explicit character classes like [0-9], [a-zA-Z], and space ' '.
     7. The final line of your code MUST be: return \`<strong>Bot:</strong> \${yourResultVariable}\`;
     8. Output ONLY raw JSON with no markdown formatting.
     
-    Format Example 1 (Simple):
+    Format Example 1 (Simple Active):
     {
-      "javascriptCode": "let total = 0; inventory.forEach(l => total += parseFloat(l.principal)); return \`<strong>Bot:</strong> Total is ₹\${total}\`;"
+      "javascriptCode": "let total = 0; activeInventory.forEach(l => total += parseFloat(l.principal)); return \`<strong>Bot:</strong> Total active is ₹\${total}\`;"
     }
 
-    Format Example 2 (Complex Ranges - STRICTLY NO BACKSLASHES):
+    Format Example 2 (Redeemed History):
     {
-      "javascriptCode": "let count = 0; inventory.forEach(l => { if(l.type === 'S') { const match = String(l.no).toUpperCase().match(/^([A-Z]+)[^a-zA-Z0-9]*([0-9]+)/); if(match && match[1] === 'R') { let num = parseInt(match[2], 10); if(num >= 100 && num <= 200) count++; } } }); return \`<strong>Bot:</strong> I found \${count} matching loans.\`;"
+      "javascriptCode": "let total = 0; finalisedReports.forEach(r => total += parseFloat(r.totals.principal || 0)); return \`<strong>Bot:</strong> Total redeemed history is ₹\${total}\`;"
     }
     
     User Query: "${query}"
@@ -83,16 +84,12 @@ exports.handler = async function(event) {
 
     if (!jsonText) throw new Error("No AI output generated.");
 
-    // Clean up any markdown formatting just in case
     const regex = /```json\s*([\s\S]*?)\s*```/;
     const match = jsonText.match(regex);
     if (match) {
       jsonText = match[1];
     }
 
-    // --- NEW: SAFETY NET FOR JSON PARSING ---
-    // If the AI accidentally includes a single backslash (like \d) this will escape it 
-    // to \\d so JSON.parse() doesn't immediately crash.
     jsonText = jsonText.replace(/\\([^"\\\/bfnrt])/g, '\\\\$1');
 
     const parsedData = JSON.parse(jsonText);
