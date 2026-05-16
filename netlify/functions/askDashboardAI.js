@@ -24,7 +24,7 @@ exports.handler = async function(event) {
     const MODEL_ID = 'gemini-2.5-flash-lite'; 
     const apiUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
-    // --- UPGRADED SYSTEM PROMPT (Strict Range Rules) ---
+    // --- UPGRADED SYSTEM PROMPT (Zero-Backslash Rule) ---
     const systemPrompt = `
     You are an elite JavaScript data analyst for a financial loan app.
     The user has a JavaScript array called 'inventory'. 
@@ -38,18 +38,19 @@ exports.handler = async function(event) {
     2. Assume 'inventory' is available as a variable.
     3. You must parse dates manually (format is DD/MM/YYYY).
     4. You must parse 'principal' to a Float.
-    5. CRITICAL RANGE RULE: If checking a range of loan numbers (e.g., R/1 to R/100), you MUST use a Regex match to extract the letter series and the number, parse the number to an integer, and use mathematical operators (>= and <=). NEVER use .startsWith() or string matching for ranges.
-    6. The final line of your code MUST be: return \`<strong>Bot:</strong> \${yourResultVariable}\`;
-    7. Output ONLY raw JSON with no markdown formatting.
+    5. CRITICAL RANGE RULE: If checking a range (e.g., R/1 to R/100), extract the letter series and number, parse the number, and use >= and <=. NEVER use .startsWith().
+    6. CRITICAL JSON ESCAPE RULE: Because your output is parsed as JSON, you MUST NOT use backslash shorthands (like \\d, \\w, \\s) in Regular Expressions. They cause JSON.parse errors. Instead, use explicit character classes like [0-9], [a-zA-Z], and space ' '.
+    7. The final line of your code MUST be: return \`<strong>Bot:</strong> \${yourResultVariable}\`;
+    8. Output ONLY raw JSON with no markdown formatting.
     
     Format Example 1 (Simple):
     {
       "javascriptCode": "let total = 0; inventory.forEach(l => total += parseFloat(l.principal)); return \`<strong>Bot:</strong> Total is ₹\${total}\`;"
     }
 
-    Format Example 2 (Complex Ranges):
+    Format Example 2 (Complex Ranges - STRICTLY NO BACKSLASHES):
     {
-      "javascriptCode": "let count = 0; inventory.forEach(l => { if(l.type === 'S') { const match = String(l.no).toUpperCase().match(/^([A-Z]+)[^\\\\w]*(\\d+)/); if(match && match[1] === 'R') { let num = parseInt(match[2], 10); if(num >= 100 && num <= 200) count++; } } }); return \`<strong>Bot:</strong> I found \${count} matching loans.\`;"
+      "javascriptCode": "let count = 0; inventory.forEach(l => { if(l.type === 'S') { const match = String(l.no).toUpperCase().match(/^([A-Z]+)[^a-zA-Z0-9]*([0-9]+)/); if(match && match[1] === 'R') { let num = parseInt(match[2], 10); if(num >= 100 && num <= 200) count++; } } }); return \`<strong>Bot:</strong> I found \${count} matching loans.\`;"
     }
     
     User Query: "${query}"
@@ -82,11 +83,17 @@ exports.handler = async function(event) {
 
     if (!jsonText) throw new Error("No AI output generated.");
 
+    // Clean up any markdown formatting just in case
     const regex = /```json\s*([\s\S]*?)\s*```/;
     const match = jsonText.match(regex);
     if (match) {
       jsonText = match[1];
     }
+
+    // --- NEW: SAFETY NET FOR JSON PARSING ---
+    // If the AI accidentally includes a single backslash (like \d) this will escape it 
+    // to \\d so JSON.parse() doesn't immediately crash.
+    jsonText = jsonText.replace(/\\([^"\\\/bfnrt])/g, '\\\\$1');
 
     const parsedData = JSON.parse(jsonText);
 
