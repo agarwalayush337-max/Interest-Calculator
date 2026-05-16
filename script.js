@@ -1737,18 +1737,18 @@ const viewReport = (reportId, isEditable, isFinalised = false, originTab = 'calc
             newViewBtn.style.display = 'inline-flex';
 
             // --- SMART VERIFIER: Checks if image was deleted from Storage ---
-            fetch(report.imageUrl, { method: 'HEAD' }).then(async (res) => {
-                if (!res.ok) { 
-                    // 403 or 404: File is gone! Switch UI instantly.
-                    newViewBtn.style.display = 'none';
-                    if (!report.isLocal) attachReceiptBtn.style.display = 'inline-flex';
-                    
-                    report.imageUrl = null;
-                    await reportsCollection.doc(reportId).update({ 
-                        imageUrl: firebase.firestore.FieldValue.delete() 
-                    });
-                }
-            }).catch(() => {}); // Ignore network errors
+            const checkerImg = new Image();
+            checkerImg.onerror = async () => {
+                newViewBtn.style.display = 'none';
+                if (!report.isLocal) attachReceiptBtn.style.display = 'inline-flex';
+                
+                report.imageUrl = null;
+                await reportsCollection.doc(reportId).update({ 
+                    imageUrl: firebase.firestore.FieldValue.delete() 
+                });
+            };
+            // Setting the src triggers the download instantly, preloading the image AND checking if it exists!
+            checkerImg.src = report.imageUrl;
 
             newViewBtn.addEventListener('click', () => {
                 openImageModal(report.imageUrl); // Opens instantly in the app!
@@ -4379,50 +4379,51 @@ window.triggerListAttachPhoto = (reportId, isFinalised) => {
 // ==========================================
 // SMART IMAGE VIEWER (Handles Deleted Files)
 // ==========================================
-window.smartViewImage = async (url, docId, isBatch = false) => {
-    showConfirm("Opening...", "Verifying image...", false);
-    try {
-        const res = await fetch(url, { method: 'HEAD' });
-        if (res.ok) {
-            closeConfirm();
-            openImageModal(url); // Opens instantly in the app!
-        } else {
-            closeConfirm();
-            await showConfirm("Not Found", "This image was deleted from storage. The list will now refresh and switch to 'Attach' mode.", false);
-            
-            // Cleanup Batch Entries
-            if (isBatch && docId.startsWith('temp_entry_')) {
-                const virtualReport = window[docId];
-                if (virtualReport && virtualReport.loans) {
-                    for (let loan of virtualReport.loans) {
-                        const activeId = `${user.uid}_${String(loan.no).replace(/\//g, '-')}`;
-                        try {
-                            await db.collection('activeInventory').doc(activeId).update({ imageUrl: firebase.firestore.FieldValue.delete() });
-                            const matchIndex = activeInventory.findIndex(inv => inv.no === loan.no);
-                            if (matchIndex > -1) activeInventory[matchIndex].imageUrl = null;
-                        } catch(e){}
-                    }
+window.smartViewImage = (url, docId, isBatch = false) => {
+    // 1. Open the modal instantly! No waiting, no "Verifying" box.
+    openImageModal(url);
+    
+    // 2. Smart Verification via Image Object (Instant CDN load, avoids CORS/fetch latency)
+    const modalImg = document.getElementById('fullScreenImage');
+    
+    // If the image fails to load (e.g., 403 or 404 from Firebase)
+    modalImg.onerror = async () => {
+        closeImageModal();
+        await showConfirm("Not Found", "This image was deleted from storage. The list will now refresh and switch to 'Attach' mode.", false);
+        
+        // Cleanup Batch Entries
+        if (isBatch && docId.startsWith('temp_entry_')) {
+            const virtualReport = window[docId];
+            if (virtualReport && virtualReport.loans) {
+                for (let loan of virtualReport.loans) {
+                    const activeId = `${user.uid}_${String(loan.no).replace(/\//g, '-')}`;
+                    try {
+                        await db.collection('activeInventory').doc(activeId).update({ imageUrl: firebase.firestore.FieldValue.delete() });
+                        const matchIndex = activeInventory.findIndex(inv => inv.no === loan.no);
+                        if (matchIndex > -1) activeInventory[matchIndex].imageUrl = null;
+                    } catch(e){}
                 }
-                renderLoanEntries(document.getElementById('entriesSearchInput')?.value || '');
-            } 
-            // Cleanup Standard Reports
-            else {
-                try {
-                    await reportsCollection.doc(docId).update({ imageUrl: firebase.firestore.FieldValue.delete() });
-                    const idx1 = cachedReports.findIndex(r => r.id === docId);
-                    if(idx1 > -1) cachedReports[idx1].imageUrl = null;
-                    const idx2 = cachedFinalisedReports.findIndex(r => r.id === docId);
-                    if(idx2 > -1) cachedFinalisedReports[idx2].imageUrl = null;
-                    
-                    renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
-                } catch(e){}
             }
+            renderLoanEntries(document.getElementById('entriesSearchInput')?.value || '');
+        } 
+        // Cleanup Standard Reports
+        else {
+            try {
+                await reportsCollection.doc(docId).update({ imageUrl: firebase.firestore.FieldValue.delete() });
+                const idx1 = cachedReports.findIndex(r => r.id === docId);
+                if(idx1 > -1) cachedReports[idx1].imageUrl = null;
+                const idx2 = cachedFinalisedReports.findIndex(r => r.id === docId);
+                if(idx2 > -1) cachedFinalisedReports[idx2].imageUrl = null;
+                
+                renderFinalisedTransactions(document.getElementById('finalisedReportSearchInput').value);
+            } catch(e){}
         }
-    } catch (e) {
-        // Fallback for adblockers blocking fetch requests
-        closeConfirm();
-        window.open(url, '_blank');
-    }
+    };
+    
+    modalImg.onload = () => {
+        // Cleanup error handler if it loads successfully
+        modalImg.onerror = null;
+    };
 };
 // ==========================================
 // IMAGE COMPRESSION ENGINE
