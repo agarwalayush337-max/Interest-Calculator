@@ -160,6 +160,109 @@ const getCustomerNameById = (id) => {
     return match ? match.name : '';
 };
 
+// --- FIRESTORE CUSTOMERS COLLECTION SYNC HELPERS ---
+const saveCustomerToCloud = async (cust) => {
+    if (!db || !user || !cust || !cust.id) return;
+    try {
+        await db.collection('customers').doc(cust.id).set({
+            id: cust.id,
+            name: cust.name,
+            phone: cust.phone || '',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    } catch (e) {
+        console.warn("Could not save customer to cloud:", e);
+    }
+};
+
+const updateCustomerNameInCloud = async (custId, newName) => {
+    if (!db || !user || !custId || !newName) return;
+    try {
+        let batch = db.batch();
+        let batchOps = 0;
+
+        // 1. Active Inventory
+        const activeSnap = await db.collection('activeInventory').where("customerId", "==", custId).get();
+        activeSnap.docs.forEach(doc => {
+            batch.update(doc.ref, { customerName: newName });
+            batchOps++;
+        });
+
+        // 2. Shared Reports
+        const reportsSnap = await db.collection('sharedReports').where("customerId", "==", custId).get();
+        reportsSnap.docs.forEach(doc => {
+            batch.update(doc.ref, { customerName: newName });
+            batchOps++;
+        });
+
+        if (batchOps > 0) {
+            await batch.commit();
+        }
+
+        // Update local caches
+        if (typeof activeInventory !== 'undefined' && Array.isArray(activeInventory)) {
+            activeInventory.forEach(inv => {
+                if (inv.customerId === custId) inv.customerName = newName;
+            });
+        }
+        if (typeof cachedFinalisedReports !== 'undefined' && Array.isArray(cachedFinalisedReports)) {
+            cachedFinalisedReports.forEach(rep => {
+                if (rep.customerId === custId) rep.customerName = newName;
+            });
+        }
+    } catch (e) {
+        console.warn("Could not update customer name across cloud docs:", e);
+    }
+};
+
+const deleteCustomerFromCloud = async (custId) => {
+    if (!db || !user || !custId) return;
+    try {
+        await db.collection('customers').doc(custId).delete();
+    } catch (e) {
+        console.warn("Could not delete customer from cloud:", e);
+    }
+};
+
+const loadCustomersFromCloud = async () => {
+    if (!db || !user) return;
+    try {
+        let snapshot;
+        try {
+            snapshot = await db.collection('customers').get();
+        } catch (e) {
+            snapshot = await db.collection('customers').get({ source: 'cache' });
+        }
+
+        if (snapshot && !snapshot.empty) {
+            const cloudCustomers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const localCustomers = getStoredCustomers();
+
+            const mergedMap = new Map();
+            localCustomers.forEach(c => mergedMap.set(c.id, c));
+            cloudCustomers.forEach(c => mergedMap.set(c.id, c));
+
+            const mergedList = Array.from(mergedMap.values());
+            saveStoredCustomers(mergedList);
+            populateCustomerDropdown();
+            if (typeof populateDevSeriesCustSelect === 'function') populateDevSeriesCustSelect();
+            if (typeof populateDevCompoundCustSelect === 'function') populateDevCompoundCustSelect();
+            if (typeof renderDevCustomerListUI === 'function') renderDevCustomerListUI();
+        } else {
+            const localCustomers = getStoredCustomers();
+            if (localCustomers.length > 0) {
+                const batch = db.batch();
+                localCustomers.forEach(c => {
+                    batch.set(db.collection('customers').doc(c.id), c, { merge: true });
+                });
+                await batch.commit();
+            }
+        }
+    } catch (err) {
+        console.warn("Error syncing customers from cloud:", err);
+    }
+};
+
 const populateCustomerDropdown = () => {
     const selectEl = document.getElementById('globalCustomerSelect');
     if (!selectEl) return;
@@ -224,6 +327,7 @@ window.deleteCustomerProfile = (id) => {
     let customers = getStoredCustomers();
     customers = customers.filter(c => c.id !== id);
     saveStoredCustomers(customers);
+    if (typeof deleteCustomerFromCloud === 'function') deleteCustomerFromCloud(id);
     if (activeCustomerId === id) {
         activeCustomerId = 'ALL';
     }
@@ -4431,6 +4535,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Prompt Initial Customer Selection Screen on App Launch
         renderInitialCustomerSelectionModal();
         
+        // --- NEW: Sync Customers Collection from Cloud ---
+        loadCustomersFromCloud();
+        
         // --- NEW: Fetch Customer Dues (with Offline Cache Fallback) ---
         loadCustomerDuesFromCloud().then(() => {
             const duesInfo = getCustomerDues(activeCustomerId);
@@ -5919,22 +6026,30 @@ const initDevModeModule = () => {
             const editingId = document.getElementById('devEditingCustId').value;
             let customers = getStoredCustomers();
 
+            let targetCust = null;
             if (editingId) {
                 const idx = customers.findIndex(c => c.id === editingId);
                 if (idx > -1) {
                     customers[idx].name = name;
                     customers[idx].phone = phone;
+                    targetCust = customers[idx];
                 }
             } else {
-                customers.push({
+                targetCust = {
                     id: 'cust_' + Date.now(),
                     name: name,
                     phone: phone,
                     createdAt: new Date().toISOString()
-                });
+                };
+                customers.push(targetCust);
             }
 
             saveStoredCustomers(customers);
+            if (targetCust) {
+                saveCustomerToCloud(targetCust);
+                if (editingId) updateCustomerNameInCloud(editingId, name);
+            }
+
             populateCustomerDropdown();
             populateDevSeriesCustSelect();
             populateDevCompoundCustSelect();
