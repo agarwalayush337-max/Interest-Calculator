@@ -4597,8 +4597,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         loginOverlay.style.display = 'none';
         appContainer.style.display = 'block';
 
-        // Prompt Initial Customer Selection Screen on App Launch
-        renderInitialCustomerSelectionModal();
+        // Set default active customer workspace directly to Rajesh Ji Powakhali on App Launch
+        const rajeshId = getRajeshCustomerId();
+        selectActiveCustomer(rajeshId);
         
         // --- NEW: Sync Customers Collection from Cloud ---
         loadCustomersFromCloud();
