@@ -6109,30 +6109,49 @@ const initDevModeModule = () => {
 
     if (backupBtn) {
         backupBtn.addEventListener('click', async () => {
-            if (!db || !user) return alert("Please make sure you are logged in and online.");
-            showConfirm("Exporting Backup...", "Fetching database records from Cloud Firestore...", false);
+            if (!user) return alert("Please make sure you are logged in.");
+            showConfirm("Exporting Backup...", "Fetching database records from Cloud Firestore & local storage...", false);
 
             try {
                 const backup = {
                     exportDate: new Date().toISOString(),
                     exportedBy: user.email || user.uid,
+                    customers: getStoredCustomers(),
+                    customerSeriesRates: getAllCustomerSeriesRates(),
+                    customerCompoundRules: getAllCustomerCompoundRules(),
+                    customerDuesLocal: getAllCustomerDuesLocal(),
+                    autofillLimit: getStoredAutofillLimit(),
                     activeInventory: [],
                     sharedReports: [],
-                    customerDues: [],
-                    globalSettings: []
+                    customerDuesCloud: []
                 };
 
-                const activeSnap = await db.collection('activeInventory').get();
-                activeSnap.docs.forEach(doc => backup.activeInventory.push({ id: doc.id, ...doc.data() }));
+                // 1. Active Inventory
+                if (db) {
+                    try {
+                        const activeSnap = await db.collection('activeInventory').get();
+                        activeSnap.docs.forEach(doc => backup.activeInventory.push({ id: doc.id, ...doc.data() }));
+                    } catch (e) {
+                        backup.activeInventory = activeInventory || [];
+                    }
 
-                const reportsSnap = await db.collection('sharedReports').get();
-                reportsSnap.docs.forEach(doc => backup.sharedReports.push({ id: doc.id, ...doc.data() }));
+                    // 2. Shared Reports
+                    try {
+                        const reportsSnap = await db.collection('sharedReports').get();
+                        reportsSnap.docs.forEach(doc => backup.sharedReports.push({ id: doc.id, ...doc.data() }));
+                    } catch (e) {
+                        backup.sharedReports = cachedFinalisedReports || [];
+                    }
 
-                const duesSnap = await db.collection('customerDues').get();
-                duesSnap.docs.forEach(doc => backup.customerDues.push({ id: doc.id, ...doc.data() }));
-
-                const settingsSnap = await db.collection('globalSettings').get();
-                settingsSnap.docs.forEach(doc => backup.globalSettings.push({ id: doc.id, ...doc.data() }));
+                    // 3. Customer Dues Cloud
+                    try {
+                        const duesSnap = await db.collection('customerDues').get();
+                        duesSnap.docs.forEach(doc => backup.customerDuesCloud.push({ id: doc.id, ...doc.data() }));
+                    } catch (e) {}
+                } else {
+                    backup.activeInventory = activeInventory || [];
+                    backup.sharedReports = cachedFinalisedReports || [];
+                }
 
                 closeConfirm();
 
