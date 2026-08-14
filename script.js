@@ -4244,6 +4244,7 @@ const confirmFinaliseWithDues = async () => {
             batch.set(duesHistoryRef, {
                 amount: newDues,
                 date: reportData.reportDate,
+                customerId: reportData.customerId || activeCustomerId || getRajeshCustomerId(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 source: 'Finalise Report: ' + reportId,
                 updatedBy: user.email || user.uid
@@ -4277,6 +4278,7 @@ const confirmFinaliseWithDues = async () => {
                         batch.set(redeemedRef, {
                             ...loan, // Copy Number, Principal, Date, Type
                             userId: user.uid,
+                            customerId: reportData.customerId || activeCustomerId || getRajeshCustomerId(),
                             originalReportId: reportId,
                             redeemedDate: reportData.reportDate,
                             redeemedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -6046,47 +6048,55 @@ const initDevModeModule = () => {
             try {
                 let updatedCount = 0;
 
-                // 1. Tag Active Inventory
-                try {
-                    const activeSnap = await db.collection('activeInventory').get();
-                    if (!activeSnap.empty) {
-                        const batch = db.batch();
-                        let batchCount = 0;
-                        activeSnap.docs.forEach(doc => {
-                            const data = doc.data();
-                            if (!data.customerId) {
-                                batch.update(doc.ref, { customerId: rajeshId, customerName: rajeshName });
-                                batchCount++;
-                                updatedCount++;
+                const tagCollectionDocsToCustomer = async (collectionName) => {
+                    let count = 0;
+                    try {
+                        const snap = await db.collection(collectionName).get();
+                        if (!snap.empty) {
+                            let batch = db.batch();
+                            let batchOps = 0;
+
+                            for (const doc of snap.docs) {
+                                const data = doc.data();
+                                if (!data.customerId) {
+                                    batch.update(doc.ref, { customerId: rajeshId, customerName: rajeshName });
+                                    batchOps++;
+                                    count++;
+
+                                    if (batchOps >= 450) {
+                                        await batch.commit();
+                                        batch = db.batch();
+                                        batchOps = 0;
+                                    }
+                                }
                             }
-                        });
-                        if (batchCount > 0) await batch.commit();
+
+                            if (batchOps > 0) {
+                                await batch.commit();
+                            }
+                        }
+                    } catch (e) {
+                        console.warn(`Could not tag collection ${collectionName}:`, e);
                     }
-                } catch (e1) {
-                    console.warn("Could not tag activeInventory:", e1);
-                }
+                    return count;
+                };
+
+                // 1. Tag Active Inventory
+                updatedCount += await tagCollectionDocsToCustomer('activeInventory');
 
                 // 2. Tag Shared Reports (Pending & Finalised)
-                try {
-                    const reportsSnap = await db.collection('sharedReports').get();
-                    if (!reportsSnap.empty) {
-                        const batch = db.batch();
-                        let batchCount = 0;
-                        reportsSnap.docs.forEach(doc => {
-                            const data = doc.data();
-                            if (!data.customerId) {
-                                batch.update(doc.ref, { customerId: rajeshId, customerName: rajeshName });
-                                batchCount++;
-                                updatedCount++;
-                            }
-                        });
-                        if (batchCount > 0) await batch.commit();
-                    }
-                } catch (e2) {
-                    console.warn("Could not tag sharedReports:", e2);
-                }
+                updatedCount += await tagCollectionDocsToCustomer('sharedReports');
 
-                // 3. Tag Dues
+                // 3. Tag Redeemed Inventory
+                updatedCount += await tagCollectionDocsToCustomer('redeemedInventory');
+
+                // 4. Tag Batch Entries
+                updatedCount += await tagCollectionDocsToCustomer('batchEntries');
+
+                // 5. Tag Dues History Ledger
+                updatedCount += await tagCollectionDocsToCustomer('duesHistory');
+
+                // 6. Tag Dues
                 saveCustomerDuesLocal(rajeshId, currentPreviousDues, currentPreviousDuesDate);
                 try {
                     const custDuesRef = db.collection('customerDues').doc(rajeshId);
