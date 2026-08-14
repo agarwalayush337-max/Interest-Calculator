@@ -6047,46 +6047,58 @@ const initDevModeModule = () => {
                 let updatedCount = 0;
 
                 // 1. Tag Active Inventory
-                const activeSnap = await db.collection('activeInventory').get();
-                if (!activeSnap.empty) {
-                    const batch = db.batch();
-                    let batchCount = 0;
-                    activeSnap.docs.forEach(doc => {
-                        const data = doc.data();
-                        if (!data.customerId) {
-                            batch.update(doc.ref, { customerId: rajeshId, customerName: rajeshName });
-                            batchCount++;
-                            updatedCount++;
-                        }
-                    });
-                    if (batchCount > 0) await batch.commit();
+                try {
+                    const activeSnap = await db.collection('activeInventory').get();
+                    if (!activeSnap.empty) {
+                        const batch = db.batch();
+                        let batchCount = 0;
+                        activeSnap.docs.forEach(doc => {
+                            const data = doc.data();
+                            if (!data.customerId) {
+                                batch.update(doc.ref, { customerId: rajeshId, customerName: rajeshName });
+                                batchCount++;
+                                updatedCount++;
+                            }
+                        });
+                        if (batchCount > 0) await batch.commit();
+                    }
+                } catch (e1) {
+                    console.warn("Could not tag activeInventory:", e1);
                 }
 
                 // 2. Tag Shared Reports (Pending & Finalised)
-                const reportsSnap = await db.collection('sharedReports').get();
-                if (!reportsSnap.empty) {
-                    const batch = db.batch();
-                    let batchCount = 0;
-                    reportsSnap.docs.forEach(doc => {
-                        const data = doc.data();
-                        if (!data.customerId) {
-                            batch.update(doc.ref, { customerId: rajeshId, customerName: rajeshName });
-                            batchCount++;
-                            updatedCount++;
-                        }
-                    });
-                    if (batchCount > 0) await batch.commit();
+                try {
+                    const reportsSnap = await db.collection('sharedReports').get();
+                    if (!reportsSnap.empty) {
+                        const batch = db.batch();
+                        let batchCount = 0;
+                        reportsSnap.docs.forEach(doc => {
+                            const data = doc.data();
+                            if (!data.customerId) {
+                                batch.update(doc.ref, { customerId: rajeshId, customerName: rajeshName });
+                                batchCount++;
+                                updatedCount++;
+                            }
+                        });
+                        if (batchCount > 0) await batch.commit();
+                    }
+                } catch (e2) {
+                    console.warn("Could not tag sharedReports:", e2);
                 }
 
                 // 3. Tag Dues
                 saveCustomerDuesLocal(rajeshId, currentPreviousDues, currentPreviousDuesDate);
-                const custDuesRef = db.collection('customerDues').doc(rajeshId);
-                await custDuesRef.set({
-                    amount: currentPreviousDues,
-                    date: currentPreviousDuesDate,
-                    customerId: rajeshId,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                try {
+                    const custDuesRef = db.collection('customerDues').doc(rajeshId);
+                    await custDuesRef.set({
+                        amount: currentPreviousDues,
+                        date: currentPreviousDuesDate,
+                        customerId: rajeshId,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch (e3) {
+                    console.warn("Could not tag customerDues:", e3);
+                }
 
                 closeConfirm();
                 await loadInventory();
