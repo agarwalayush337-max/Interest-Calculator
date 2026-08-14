@@ -1,0 +1,798 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interest Calculator</title>
+    <meta name="theme-color" content="#E0E5EC">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="icon" href="icon-192x192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="loginOverlay">
+        <div class="login-box">
+            <h1>Interest Calculator</h1>
+            <p id="loginMessage">Sign in to access your synced reports.</p>
+            <button class="btn" id="googleSignInBtn">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,5 12,5C14.6,5 16.14,6.35 16.81,7.02L18.83,5.18C17.11,3.76 14.85,3 12,3C7.5,3 4,6.58 4,12C4,17.42 7.5,21 12,21C17,21 20.7,17.5 20.7,12.33C20.7,11.67 20.7,11.34 20.7,11.1H21.35Z"/></svg>
+                Sign in with Google
+            </button>
+        </div>
+    </div>
+
+    <div class="container" id="appContainer">
+        <header>
+            <h1>Interest Calculator</h1>
+            <div class="header-right">
+                <div class="customer-select-wrapper">
+                    <select id="globalCustomerSelect">
+                        <option value="ALL">🌐 All Customers (Global)</option>
+                    </select>
+                </div>
+                <div id="syncStatus"></div>
+                <span id="authStatus"></span>
+                <button class="btn btn-secondary" id="signOutBtn">Sign Out</button>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="calculatorTab">Calculator</button>
+            <button class="tab-button" data-tab="transactionsTab">Transactions</button>
+            <button class="tab-button" data-tab="inventoryTab">Search/Entry</button>
+            <button class="tab-button" data-tab="dashboardTab">Dashboard</button>
+        </div>
+
+       <div id="calculatorTab" class="tab-content active">
+            <div class="main-content" id="calculatorMainContent">
+                <div class="input-group">
+                    <div class="input-field" id="todayDateContainer">
+                        <label for="todayDate">Today's Date</label>
+                        <input type="text" id="todayDate" placeholder="DD/MM/YYYY">
+                    </div>
+                    <div class="input-field" id="interestRateContainer">
+                        <label for="interestRate">Interest Rate (%)</label>
+                        <input type="number" id="interestRate" value="1.75" step="0.01">
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="loanTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">SL <span class="desktop-text">NO</span></th>
+                                
+                                <th>No</th>
+                                
+                                <th>Principal</th>
+                                
+                                <th>Date</th>
+                                
+                                <th>Duration <span class="desktop-text">(Days)</span></th>
+                                
+                                <th>Interest</th>
+                                
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div class="action-bar" id="mainActionBar">
+                    <button class="btn btn-primary" id="addRowBtn">Add Loan</button>
+                    <button class="btn btn-primary" id="scanImageBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
+                        Scan Image
+                    </button>
+                    <input type="file" id="imageUploadInput" accept="image/*" style="display: none;">
+                    <button class="btn btn-secondary" id="saveBtn">Save</button>
+                    <button class="btn btn-secondary" id="exportPdfBtn">Export PDF</button>
+                    <button class="btn btn-danger" id="clearSheetBtn">Clear Sheet</button>
+                </div>
+                 <div class="action-bar" id="viewModeActionBar" style="display: none;">
+                    <button class="btn btn-secondary" id="exitViewModeBtn">Back to Calculator</button>
+                    <button class="btn btn-primary" id="exportViewPdfBtn">Export PDF</button>
+                    <button class="btn btn-success" id="viewReceiptBtn" style="display: none;">View Photo</button>
+                </div>
+
+                <div class="totals-summary">
+                    <div class="total-item">
+                        <h3>Total Principal</h3>
+                        <p id="totalPrincipal">0</p>
+                    </div>
+                    <div class="total-item">
+                        <h3>Total Interest</h3>
+                        <p id="totalInterest">0</p>
+                    </div>
+                    <div class="total-item">
+                        <h3>Final Total Amount</h3>
+                        <p id="finalTotal">0</p>
+                    </div>
+                </div>
+                
+                <div class="print-header">
+                    <h1 id="printTitle">Interest Report</h1>
+                    <p id="printDate"></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="transactionsTab" class="tab-content">
+            <div class="main-content">
+                
+                <div id="transactionCalculatorMount" style="display: none;"></div>
+        
+                <div class="toggle-container">
+                    <div class="segment-control">
+                        <input type="radio" name="txType" id="txPending" value="pending" checked onclick="toggleTxView('pending')">
+                        <label for="txPending">Pending</label>
+                        
+                        <input type="radio" name="txType" id="txFinalised" value="finalised" onclick="toggleTxView('finalised')">
+                        <label for="txFinalised">Finalised</label>
+
+                        <input type="radio" name="txType" id="txEntries" value="entries" onclick="toggleTxView('entries')">
+                        <label for="txEntries">Entries</label>
+                        
+                        <div class="segment-marker"></div>
+                    </div>
+                </div>
+        
+                <div id="pendingView">
+                    <div class="input-field search-bar" id="recentSearchContainer">
+                        <label>Search Reports</label>
+                        <input type="search" id="reportSearchInput" placeholder="Search Pending...">
+                    </div>
+                    <div id="recentTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                    <ul id="recentTransactionsList"></ul>
+                </div>
+        
+                <div id="finalisedView" style="display: none;">
+                    <div class="input-field search-bar" id="finalisedSearchContainer">
+                        <label>Search Finalised</label>
+                        <input type="search" id="finalisedReportSearchInput" placeholder="Search Finalised...">
+                    </div>
+                    <div id="finalisedTransactionsLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                    <ul id="finalisedTransactionsList"></ul>
+                </div>
+                <div id="entriesView" style="display: none;">
+                    <div class="input-field search-bar" id="entriesSearchContainer">
+                        <label>Search Entries</label>
+                        <input type="search" id="entriesSearchInput" placeholder="Search by Date (e.g. 13/04)...">
+                    </div>
+                    <ul class="transaction-list" id="loanEntriesList" style="list-style: none; padding: 0;"></ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboardTab" class="tab-content">
+            <div class="main-content">
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 1.5rem; align-items: center; background: white; padding: 10px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                    <input type="text" id="aiQueryInput" placeholder="Ask AI about your data..." style="flex-grow: 1; border: none; outline: none; font-size: 1rem; padding: 5px;">
+                    <button id="aiVoiceBtn" class="btn btn-primary" style="padding: 8px 12px; border-radius: 50%;">🎤</button>
+                    <button id="aiSendBtn" class="btn btn-success" style="padding: 8px 15px;">Ask</button>
+                </div>
+                <div id="aiResponseArea" style="display: none; margin-bottom: 1.5rem; padding: 15px; background: #e3f2fd; color: #1976d2; border-radius: 12px; font-weight: 500; font-size: 0.95rem; border-left: 4px solid #1976d2;"></div>
+
+                <div class="dashboard-header">
+                    <h2>Live Portfolio</h2>
+                    <span class="live-badge">● Live Updates (1.75%)</span>
+                </div>
+
+                <div class="net-worth-card">
+                    <div class="net-worth-header">Total Estimated Value</div>
+                    <div class="net-worth-amount" id="dashNetWorth">₹0</div>
+                    <div class="net-worth-breakdown">
+                        <div class="nw-item">
+                            <span class="nw-label">Active Principal</span>
+                            <span class="nw-val" id="dashPrincipal">0</span>
+                        </div>
+                        <div class="nw-divider"></div>
+                        <div class="nw-item">
+                            <span class="nw-label">Uncollected Interest</span>
+                            <span class="nw-val interest-text" id="dashInterest">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📊</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Total Loans</span>
+                            <span class="kpi-val" id="kpiCount">0</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">💰</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Avg Loan Size</span>
+                            <span class="kpi-val" id="kpiAvgSize">₹0</span>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon">⏳</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Avg Active Age</span>
+                            <span class="kpi-val" id="kpiAvgAge">0 Days</span>
+                            <div id="kpiAvgAgeSplit" style="font-size: 0.7rem; color: #666; margin-top: 2px;">
+                                G: 0d | S: 0d
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="kpi-card" onclick="toggleRedemptionAge()" style="cursor: pointer; position: relative;" title="Click to change timeframe">
+                        <div class="kpi-icon">🔄</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label" id="redemptionLabel">Avg Redemption (All)</span>
+                            <span class="kpi-val" id="kpiChurn">0 Days</span>
+                            <div style="font-size: 0.65rem; color: #2a9d8f; font-weight: 600; margin-top: 2px;">Tap to change time</div>
+                        </div>
+                    </div>
+                
+                    <div class="kpi-card" onclick="toggleEffectiveRate()" style="cursor: pointer; position: relative;" title="Click to change timeframe">
+                        <div class="kpi-icon">🎯</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label" id="effectiveRateLabel">Effective Rate (All)</span>
+                            <span class="kpi-val" id="kpiEffectiveRate">0.00%</span>
+                            <div style="font-size: 0.65rem; color: #2a9d8f; font-weight: 600; margin-top: 2px;">Tap to change time</div>
+                        </div>
+                    </div>
+                
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📈</div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Proj. Monthly Int.</span>
+                            <span class="kpi-val" id="kpiMonthly">₹0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-grid">
+                    <div class="chart-container">
+                        <h3>Portfolio Mix (Active)</h3>
+                        <div style="height: 200px; position: relative;">
+                            <canvas id="mixChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Risk / Aging (Active)</h3>
+                        <div style="height: 200px; position: relative;">
+                            <canvas id="agingChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container dashboard-full-width">
+                        <div class="chart-header-row">
+                            <h3>Portfolio Deployment Trend</h3>
+                            <div class="chart-filters">
+                                <button class="btn-mini" onclick="updateGrowthChart('30', this)">30D</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('90', this)">3M</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('180', this)">6M</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('365', this)">1Y</button>
+                                <button class="btn-mini" onclick="updateGrowthChart('ALL', this)">All</button>
+                            </div>
+                        </div>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="growthChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="margin: 3rem 0; border: 0; border-top: 1px solid #ddd;">
+
+                <div class="dashboard-header">
+                    <h2>Historical Analysis</h2>
+                </div>
+
+                <div class="dashboard-filters">
+                    <div class="date-range-picker">
+                        <div class="input-field">
+                            <label for="dashboardStartDate">Start Date</label>
+                            <input type="text" id="dashboardStartDate" placeholder="DD/MM/YYYY">
+                        </div>
+                        <div class="input-field">
+                            <label for="dashboardEndDate">End Date</label>
+                            <input type="text" id="dashboardEndDate" placeholder="DD/MM/YYYY">
+                        </div>
+                    </div>
+                    <div class="quick-filter-buttons">
+                        <button class="btn btn-secondary" id="last30DaysBtn">Last 30 Days</button>
+                        <button class="btn btn-secondary" id="currentFyBtn">Current F.Y.</button>
+                        <button class="btn btn-secondary" id="prevFyBtn">Prev. F.Y.</button>
+                    </div>
+                    <button class="btn btn-primary" id="applyDateFilterBtn">Apply Filter</button>
+                </div>
+
+                <div class="dashboard-card" style="padding: 1.5rem; margin-top: 20px; background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase;">Loan Given</div>
+                            <div id="histGiven" style="font-size: 1.5rem; font-weight: 700; color: var(--danger-color);">₹0</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase;">Principal Collected</div>
+                            <div id="histPrin" style="font-size: 1.5rem; font-weight: 700; color: var(--success-color);">₹0</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase;">Interest Collected</div>
+                            <div id="histInt" style="font-size: 1.5rem; font-weight: 700; color: var(--warning-color);">₹0</div>
+                        </div>
+                    </div>
+                    <div style="height: 350px;">
+                        <canvas id="historicalCashflowChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-card" style="margin-top: 2rem; padding: 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0;">📂 Active Loans by Series</h3>
+                    </div>
+                    <div style="height: 250px; position: relative;">
+                        <canvas id="seriesBreakdownChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="top-lists-grid" style="margin-top: 1.5rem;">
+                    <div class="list-card warning-border">
+                        <h3>⚠️ Oldest Active Loans</h3>
+                        <ul class="dashboard-list" id="oldestLoansList"></ul>
+                    </div>
+                    <div class="list-card success-border">
+                        <h3>💎 Top Value (Prin + Int)</h3>
+                        <ul class="dashboard-list" id="highValueList"></ul>
+                    </div>
+                    <div class="list-card" style="border-top: 4px solid #d90429;">
+                        <h3>🔥 Top Interest Generated</h3>
+                        <ul class="dashboard-list" id="highestInterestList"></ul>
+                    </div>
+                </div>
+
+                <div id="dashboardLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                <p id="dashboardMessage" style="display: none; text-align: center; color: #666; margin-top: 20px;"></p>
+            </div>
+        </div>        
+        <div id="inventoryTab" class="tab-content">
+            <div class="main-content">
+                
+                <div class="toggle-container">
+                    <div class="segment-control">
+                        <input type="radio" name="invType" id="invSearch" value="search" checked onclick="toggleInventoryView('search')">
+                        <label for="invSearch">Loan Search</label>
+                        
+                        <input type="radio" name="invType" id="invEntry" value="entry" onclick="toggleInventoryView('entry')">
+                        <label for="invEntry">Loan Entry</label>
+                        
+                        <div class="segment-marker"></div>
+                    </div>
+                </div>
+        
+                <div id="invSearchView">
+                    <h2>Loan Search</h2>
+        
+                    <div class="search-filters-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px;">
+                <div class="search-filters" style="margin-bottom: 0;">
+                    <button class="btn btn-secondary active-filter" data-filter="all">All</button>
+                    <button class="btn btn-success" data-filter="available">Available</button>
+                    <button class="btn btn-warning" data-filter="not-available">Not Available</button>
+                </div>
+                
+                <div class="modern-toggle-container">
+                    <label for="autoFillToggle" class="toggle-label">Auto-fill Old Inventory (~₹50,000)</label>
+                    <label class="modern-switch">
+                        <input type="checkbox" id="autoFillToggle">
+                        <span class="modern-slider"></span>
+                    </label>
+                </div>
+            </div>
+        
+                    <div class="table-container">
+                        <table id="loanSearchTable">
+                            <thead>
+                                <tr><th>SL NO</th><th>Status</th><th>Loan No</th><th>Principal</th><th>Finalised Date</th><th></th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+        
+                    <div class="action-bar" id="searchActionBar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 1rem;">
+    
+                        <button class="btn btn-secondary" id="addSearchRowBtn" style="padding: 12px 15px; font-size: 0.9rem;">
+                            Add Row
+                        </button>
+                    
+                        <button class="btn btn-primary" id="scanNumbersBtn" style="padding: 12px 15px; font-size: 0.9rem; display: flex; align-items: center;">
+                            <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 0 24 24" width="18px" fill="currentColor" style="margin-right: 5px;"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M19.5 8.5c-0.83 0-1.5 0.67-1.5 1.5s0.67 1.5 1.5 1.5 1.5-0.67 1.5-1.5-0.67-1.5-1.5-1.5zM12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z m0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z m-4-4h8v-1c0-1.33-2.67-2-4-2s-4 0.67-4 2v1z"></path><circle cx="12" cy="10" r="1.5"></circle></svg>
+                            Scan for Numbers
+                        </button>
+                    
+                        <button class="btn btn-secondary" id="downloadErasedBtn" style="display:none; padding: 8px 15px; font-size: 0.9rem;">Download List</button>
+                    
+                        <button class="btn btn-danger" id="clearSearchSheetBtn" style="padding: 8px 15px; font-size: 0.9rem;">Clear Sheet</button>
+                    
+                        <div style="display: none;">
+                            <input type="hidden" id="publicSheetInput" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vRqmKLvcVqOhmK-chMuP7HCgKW0ijSUXhMnZOwIY7XlRSgfXv_PjHK8ObCjPjIr6H853vr9ptn0prjk/pub?gid=0&single=true&output=csv">
+                            <canvas id="scanCanvas"></canvas>
+                            <input type="file" id="numberImageUploadInput" accept="image/*">
+                        </div>
+                    </div>
+                    <div class="totals-summary" id="searchTotalsSummary" style="margin-top: 2rem;">
+                        <div class="total-item">
+                            <h3>Total Principal</h3>
+                            <p id="searchTotalPrincipal">₹0</p>
+                        </div>
+                        <div class="total-item">
+                            <h3>Total Interest</h3>
+                            <p id="searchTotalInterest">₹0</p>
+                        </div>
+                        <div class="total-item">
+                            <h3>Final Total Amount</h3>
+                            <p id="searchFinalTotal">₹0</p>
+                        </div>
+                    </div>
+
+                    <div id="loanSearchLoader" class="loader-container" style="display: none;"><div class="loader"></div></div>
+                </div> <div id="invEntryView" style="display: none;">
+                    <div class="input-group" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+    
+                        <div class="input-field" style="width: 120px;"> 
+                            <label for="batchDate">Batch Date</label>
+                            <input type="text" id="batchDate" placeholder="DD/MM/YYYY">
+                        </div>
+                    
+                        <div class="input-field" style="width: 80px;">
+                            <label for="batchSeries">Series</label>
+                            <select id="batchSeries" style="width: 100%; padding: 0.75rem; border: none; border-radius: 8px; background: var(--background-color); box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark); text-align: center;">
+                                <option value="R">R</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                            </select>
+                        </div>
+                    
+                    </div>
+                
+                    <div class="table-container">
+                        <table id="batchTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">SL</th>
+                                    <th style="min-width: 120px;">Loan No</th> 
+                                    <th>Principal</th>
+                                    <th style="width: 60px;">Type</th>
+                                    <th>Details</th>
+                                    <th style="width: 30px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                
+                    <div class="totals-summary" style="margin-top: 2rem;">
+                        <div class="total-item">
+                            <h3>Batch Total</h3>
+                            <p id="batchTotalDisplay">₹0</p>
+                        </div>
+                    </div>
+                
+                    <div class="action-bar" style="display: flex; justify-content: flex-start; gap: 15px; margin-top: 1rem; flex-wrap: wrap; align-items: center;">
+
+                        <button class="btn btn-success" id="saveBatchBtn" style="padding: 10px 20px;">
+                            Save Entries
+                        </button>
+                    
+                        <button class="btn btn-primary" id="scanBatchBtn" style="display: flex; align-items: center; padding: 10px 20px;">
+                            <svg viewBox="0 0 24 24" width="20" height="20" style="margin-right:6px"><path fill="currentColor" d="M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4zm6 9l-4 5h12l-3-4-2.03 2.71L10 13zm7-4.5c0-.83-.67-1.5-1.5-1.5S14 7.67 14 8.5s.67 1.5 1.5 1.5S17 9.33 17 8.5zM20 2h-7v2h7v7h2V4c0-1.1-.9-2-2-2zm0 18h-7v2h7c1.1 0 2-.9 2-2v-7h-2v7zM4 13H2v7c0 1.1.9 2 2 2h7v-2H4v-7z"/></svg>
+                            Scan Image
+                        </button>
+                    
+                        <button class="btn btn-danger" id="clearBatchBtn" style="padding: 10px 20px;">
+                            Clear Sheet
+                        </button>
+                        
+                    </div>
+                </div>
+        
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h2 id="confirmTitle">Confirmation</h2>
+            <p id="confirmMessage">Are you sure?</p>
+            <div class="modal-actions">
+                <button id="confirmCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmOkBtn" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="duesModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h2>Finalise & Update Dues</h2>
+            <p>Enter the pending dues amount to carry forward:</p>
+            
+            <input type="number" id="duesInput" placeholder="0" 
+                   style="width: 100%; padding: 10px; font-size: 1.2rem; margin: 15px 0; border: 2px solid #ddd; border-radius: 6px;">
+            
+            <div style="text-align: left; margin-bottom: 15px;">
+                <label style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 600;">Attach Ledger Photo (Optional):</label>
+                <input type="file" id="finaliseImageInput" accept="image/*" style="width: 100%; margin-top: 5px;">
+                
+                <div id="finaliseImagePreviewContainer" style="display: none; margin-top: 10px; align-items: center; gap: 10px;">
+                    <img id="finaliseImagePreview" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; cursor: pointer; box-shadow: 2px 2px 6px var(--shadow-dark), -2px -2px 6px var(--shadow-light); border: 2px solid var(--primary-color);" title="Click to enlarge">
+                    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--subtle-text-color); font-weight: 600;">🔍 Click preview to enlarge</span>
+                        <button id="finaliseRemoveImageBtn" type="button" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.75rem; color: var(--danger-color);">✕ Remove</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button id="duesCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="duesConfirmBtn" class="btn btn-success">Save & Finalise</button>
+            </div>
+        </div>
+    </div>
+    <div id="customerModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 500px; width: 90%;">
+            <h2 id="customerModalTitle">Customer Management</h2>
+            <p style="color: var(--subtle-text-color); margin-bottom: 1rem;">Add, edit, or remove customer profiles:</p>
+            
+            <div class="form-card">
+                <input type="hidden" id="editingCustId" value="">
+                <div class="input-field" style="text-align: left; margin-bottom: 12px;">
+                    <label>Customer Name *</label>
+                    <input type="text" id="custNameInput" placeholder="e.g. Rajesh Kumar">
+                </div>
+                <div class="input-field" style="text-align: left; margin-bottom: 12px;">
+                    <label>Phone Number (Optional)</label>
+                    <input type="tel" id="custPhoneInput" placeholder="e.g. 9876543210">
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+                    <button id="custCancelEditBtn" class="btn btn-secondary" style="display: none; padding: 6px 14px; font-size: 0.85rem;">Cancel Edit</button>
+                    <button id="custSaveBtn" class="btn btn-primary" style="padding: 6px 16px; font-size: 0.85rem;">Save Customer</button>
+                </div>
+            </div>
+
+            <div style="text-align: left; max-height: 220px; overflow-y: auto; margin-bottom: 1.5rem; padding: 0 4px;">
+                <label style="font-size: 0.85rem; color: var(--subtle-text-color); font-weight: 700; text-transform: uppercase;">Saved Customers</label>
+                <ul id="customerListUI" style="list-style: none; padding: 0; margin-top: 8px;"></ul>
+            </div>
+
+            <div class="modal-actions">
+                <button id="custCloseModalBtn" class="btn btn-secondary">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="assignCustomerModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 480px; width: 90%;">
+            <h2>Assign Customer to Report</h2>
+            <p style="color: var(--subtle-text-color); margin-bottom: 1.25rem;">You are saving under Global View. Please select which customer this report belongs to:</p>
+            
+            <div class="input-field" style="text-align: left; margin-bottom: 1.5rem;">
+                <label>Select Customer</label>
+                <select id="assignCustSelect" style="width: 100%; padding: 0.75rem 1rem; border: none; border-radius: 10px; font-size: 1rem; background-color: var(--background-color); box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark), inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light); font-weight: 600;">
+                </select>
+            </div>
+
+            <div class="modal-actions" style="flex-wrap: wrap; gap: 10px; justify-content: flex-end;">
+                <button id="assignCancelBtn" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.9rem;">Cancel</button>
+                <button id="assignConfirmBtn" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.9rem;">Assign & Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Initial Startup Customer Select Modal -->
+    <div id="initialCustomerModal" class="modal-overlay" style="display: none; z-index: 10005;">
+        <div class="modal-box" style="max-width: 480px; width: 92%; padding: 1.75rem 1.25rem;">
+            <div style="text-align: center; margin-bottom: 1.25rem;">
+                <div style="font-size: 2.2rem; margin-bottom: 0.25rem;">💼</div>
+                <h2 style="font-size: 1.4rem; margin-bottom: 0.35rem; color: var(--text-color);">Select Active Customer</h2>
+                <p style="color: var(--subtle-text-color); font-size: 0.9rem; margin: 0;">Select a customer profile to open your workspace:</p>
+            </div>
+
+            <div id="initialCustomerListUI" style="max-height: 280px; overflow-y: auto; margin-bottom: 1.25rem; padding: 4px;">
+                <!-- Dynamically populated customer cards -->
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-direction: column;">
+                <button id="initialSelectGlobalBtn" class="btn btn-secondary" style="width: 100%; padding: 0.8rem; font-weight: 600; font-size: 0.95rem; border-radius: 10px;">
+                    🌐 All Customers (Global View)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Developer Mode Control Center Modal -->
+    <div id="devModeModal" class="modal-overlay" style="display: none; z-index: 10010;">
+        <div class="modal-box" style="max-width: 600px; width: 94%; max-height: 90vh; overflow-y: auto; padding: 1.5rem 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 0.75rem;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.5rem;">🛠️</span>
+                    <div style="text-align: left;">
+                        <h2 style="font-size: 1.3rem; margin: 0; color: var(--text-color);">Developer Control Center</h2>
+                        <span style="font-size: 0.75rem; color: var(--primary-color); font-weight: 700;">TRIPLE-TAP UNLOCKED</span>
+                    </div>
+                </div>
+                <button id="closeDevModalBtn" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.9rem;">✕</button>
+            </div>
+
+            <!-- Dev Navigation Tabs -->
+            <div class="dev-tabs" style="display: flex; gap: 6px; margin-bottom: 1.25rem; flex-wrap: wrap; background: rgba(0,0,0,0.03); padding: 4px; border-radius: 10px;">
+                <button class="dev-tab-btn active" data-devtab="devCustTab" style="flex: 1; min-width: 90px; padding: 8px; font-size: 0.85rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer;">👥 Customers</button>
+                <button class="dev-tab-btn" data-devtab="devSeriesTab" style="flex: 1; min-width: 90px; padding: 8px; font-size: 0.85rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer;">📈 Series Rates</button>
+                <button class="dev-tab-btn" data-devtab="devCompoundTab" style="flex: 1; min-width: 90px; padding: 8px; font-size: 0.85rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer;">🔄 Compound Rule</button>
+                <button class="dev-tab-btn" data-devtab="devAutofillTab" style="flex: 1; min-width: 90px; padding: 8px; font-size: 0.85rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer;">⚡ Auto-Fill Limit</button>
+            </div>
+
+            <!-- Dev Tab 1: Customer Management -->
+            <div id="devCustTab" class="dev-tab-content" style="display: block;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h4 style="margin: 0; text-align: left;">Customer Profile Management</h4>
+                        <p style="color: var(--subtle-text-color); font-size: 0.85rem; margin: 2px 0 0 0; text-align: left;">Manage client profiles:</p>
+                    </div>
+                    <button id="devOpenAddCustBtn" class="btn btn-primary" style="padding: 6px 14px; font-size: 0.85rem;">➕ Add Customer</button>
+                </div>
+
+                <div id="devCustFormContainer" class="form-card" style="margin-top: 0; display: none;">
+                    <input type="hidden" id="devEditingCustId" value="">
+                    <div class="input-field" style="text-align: left; margin-bottom: 10px;">
+                        <label>Customer Name *</label>
+                        <input type="text" id="devCustNameInput" placeholder="e.g. Rajesh Kumar">
+                    </div>
+                    <div class="input-field" style="text-align: left; margin-bottom: 10px;">
+                        <label>Phone Number (Optional)</label>
+                        <input type="tel" id="devCustPhoneInput" placeholder="e.g. 9876543210">
+                    </div>
+                    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;">
+                        <button id="devCustCancelEditBtn" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;">Cancel</button>
+                        <button id="devCustSaveBtn" class="btn btn-primary" style="padding: 6px 14px; font-size: 0.85rem;">Save Profile</button>
+                    </div>
+                </div>
+
+                <div style="text-align: left; max-height: 240px; overflow-y: auto; margin-top: 0.5rem;">
+                    <label style="font-size: 0.8rem; color: var(--subtle-text-color); font-weight: 700; text-transform: uppercase;">Saved Customers</label>
+                    <ul id="devCustomerListUI" style="list-style: none; padding: 0; margin-top: 6px;"></ul>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: 1rem;">
+                    <button id="devBackupBtn" class="btn btn-primary" style="flex: 1; padding: 10px; font-weight: 600; font-size: 0.85rem; border-radius: 8px;">
+                        📥 Download Backup (JSON)
+                    </button>
+                    <button id="devRestoreBtn" class="btn btn-secondary" style="flex: 1; padding: 10px; font-weight: 600; font-size: 0.85rem; border-radius: 8px;">
+                        📤 Restore Backup (JSON)
+                    </button>
+                    <input type="file" id="devRestoreFileInput" accept=".json" style="display: none;">
+                </div>
+
+                <button id="devMigrateRajeshBtn" class="btn btn-secondary" style="width: 100%; margin-top: 0.75rem; padding: 10px; font-weight: 600; font-size: 0.85rem; border-radius: 8px;">
+                    🏷️ Tag All Legacy Data to Rajesh Ji Powakhali
+                </button>
+            </div>
+
+            <!-- Dev Tab 2: Series Rates Config (Customer Specific) -->
+            <div id="devSeriesTab" class="dev-tab-content" style="display: none;">
+                <h4 style="margin-top: 0; margin-bottom: 0.5rem; text-align: left;">Customer Series Rates</h4>
+                <p style="color: var(--subtle-text-color); font-size: 0.85rem; margin-bottom: 1rem; text-align: left;">Set specific monthly interest rates per loan series for each customer:</p>
+                
+                <div class="input-field" style="text-align: left; margin-bottom: 1rem;">
+                    <label>Select Target Customer</label>
+                    <select id="devSeriesCustSelect" style="width: 100%; padding: 0.65rem 1rem; border: none; border-radius: 10px; font-size: 0.95rem; background-color: var(--background-color); box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light); font-weight: 600;">
+                    </select>
+                </div>
+
+                <div class="form-card" style="margin-top: 0;">
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <div style="flex: 1; text-align: left;">
+                            <label style="font-size: 0.85rem; font-weight: 600;">Series Prefix (e.g. R, S)</label>
+                            <input type="text" id="devSeriesLetterInput" placeholder="R" style="text-transform: uppercase; width: 100%; padding: 8px; border-radius: 8px; border: none; background: var(--background-color); box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);">
+                        </div>
+                        <div style="flex: 1; text-align: left;">
+                            <label style="font-size: 0.85rem; font-weight: 600;">Monthly Rate (%)</label>
+                            <input type="number" step="0.01" id="devSeriesRateInput" placeholder="1.70" style="width: 100%; padding: 8px; border-radius: 8px; border: none; background: var(--background-color); box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);">
+                        </div>
+                    </div>
+                    <button id="devSaveSeriesRateBtn" class="btn btn-primary" style="width: 100%; padding: 8px; font-size: 0.85rem;">Save Series Rate for Customer</button>
+                </div>
+
+                <div style="text-align: left; max-height: 180px; overflow-y: auto; margin-top: 1rem;">
+                    <label style="font-size: 0.8rem; color: var(--subtle-text-color); font-weight: 700; text-transform: uppercase;">Active Series Rules for Selected Customer</label>
+                    <ul id="devSeriesListUI" style="list-style: none; padding: 0; margin-top: 6px;"></ul>
+                </div>
+            </div>
+
+            <!-- Dev Tab 3: Compound Interest Rule Config -->
+            <div id="devCompoundTab" class="dev-tab-content" style="display: none;">
+                <h4 style="margin-top: 0; margin-bottom: 0.5rem; text-align: left;">Customer Compound Interest Rules</h4>
+                <p style="color: var(--subtle-text-color); font-size: 0.85rem; margin-bottom: 1rem; text-align: left;">Set compounding rest periods (e.g. 1 Year, 2 Years, 3 Years) per customer:</p>
+                
+                <div class="input-field" style="text-align: left; margin-bottom: 1rem;">
+                    <label>Select Target Customer</label>
+                    <select id="devCompoundCustSelect" style="width: 100%; padding: 0.65rem 1rem; border: none; border-radius: 10px; font-size: 0.95rem; background-color: var(--background-color); box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light); font-weight: 600;">
+                    </select>
+                </div>
+
+                <div class="form-card" style="margin-top: 0;">
+                    <div class="input-field" style="text-align: left; margin-bottom: 12px;">
+                        <label style="font-size: 0.85rem; font-weight: 600;">Compound Rest Period</label>
+                        <select id="devCompoundYearsInput" style="width: 100%; padding: 0.65rem 1rem; border: none; border-radius: 10px; font-size: 0.95rem; background-color: var(--background-color); box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light); font-weight: 600;">
+                            <option value="0">❌ No Compounding (Simple Interest)</option>
+                            <option value="1">1️⃣ Every 1 Year (12 Months / Annual Rest)</option>
+                            <option value="2">2️⃣ Every 2 Years (24 Months / Biennial Rest)</option>
+                            <option value="3">3️⃣ Every 3 Years (36 Months / Triennial Rest)</option>
+                            <option value="4">4️⃣ Every 4 Years (48 Months)</option>
+                            <option value="5">5️⃣ Every 5 Years (60 Months)</option>
+                        </select>
+                    </div>
+                    <button id="devSaveCompoundBtn" class="btn btn-primary" style="width: 100%; padding: 8px; font-size: 0.85rem;">Save Compound Rule for Customer</button>
+                </div>
+
+                <div style="text-align: left; max-height: 180px; overflow-y: auto; margin-top: 1rem;">
+                    <label style="font-size: 0.8rem; color: var(--subtle-text-color); font-weight: 700; text-transform: uppercase;">Active Compound Rules</label>
+                    <ul id="devCompoundListUI" style="list-style: none; padding: 0; margin-top: 6px;"></ul>
+                </div>
+            </div>
+
+            <!-- Dev Tab 4: Auto-Fill Limit Config -->
+            <div id="devAutofillTab" class="dev-tab-content" style="display: none;">
+                <h4 style="margin-top: 0; margin-bottom: 0.5rem; text-align: left;">Auto-Fill Old Inventory Limit</h4>
+                <p style="color: var(--subtle-text-color); font-size: 0.85rem; margin-bottom: 1rem; text-align: left;">Set the target liquidation threshold for loan search:</p>
+                
+                <div class="form-card" style="margin-top: 0;">
+                    <div class="input-field" style="text-align: left; margin-bottom: 12px;">
+                        <label>Target Auto-Fill Threshold (₹)</label>
+                        <input type="number" id="devAutofillLimitInput" placeholder="50000" value="50000">
+                    </div>
+                    <button id="devSaveAutofillBtn" class="btn btn-primary" style="width: 100%; padding: 10px; font-weight: 600;">Save Threshold Limit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageViewerModal" class="image-modal" style="display: none;" onclick="closeImageModal(event)">
+        <span class="close-image-modal" onclick="closeImageModal(event)">&times;</span>
+        <img class="image-modal-content" id="fullScreenImage">
+    </div>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-functions-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script> 
+    <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

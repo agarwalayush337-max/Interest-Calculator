@@ -1,0 +1,1185 @@
+
+:root {
+    --primary-color: #3D52D5;
+    --background-color: #E0E5EC;
+    --text-color: #3D3D3D;
+    --subtle-text-color: #9B9B9B;
+    --danger-color: #D90429;
+    --success-color: #2a9d8f;
+    --warning-color: #fca311;
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --shadow-light: #ffffff;
+    --shadow-dark: #a3b1c6;
+    --shadow-distance: 6px;
+    --shadow-blur: 16px;
+}
+body {
+    font-family: var(--font-family);
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 1rem;
+    font-size: 16px;
+}
+#appContainer { display: none; }
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: var(--background-color);
+    border-radius: 20px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    overflow: hidden;
+}
+/* Login Overlay */
+#loginOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--background-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+.login-box {
+    padding: 3rem;
+    text-align: center;
+    border-radius: 20px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+.login-box h1 { font-size: 2rem; margin-bottom: 1rem; }
+.login-box p { color: var(--subtle-text-color); margin-bottom: 2rem; }
+#googleSignInBtn {
+    background-color: #4285F4;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1.5rem;
+}
+#googleSignInBtn:hover:not(:disabled) { background-color: #357ae8; }
+#googleSignInBtn svg { width: 24px; height: 24px; }
+header {
+    padding: 1.5rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
+.header-right { display: flex; align-items: center; gap: 1rem; }
+#authStatus { font-size: 0.9rem; color: var(--subtle-text-color); font-weight: 500; }
+.tabs { display: flex; padding: 0 1rem; border-bottom: 1px solid rgba(0,0,0,0.05); flex-wrap: wrap; }
+.tab-button {
+    flex-grow: 1;
+    padding: 1rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--subtle-text-color);
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+}
+.tab-button.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.main-content { padding: 2rem; }
+.input-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+    align-items: start;
+}
+.input-field label { font-weight: 600; margin-bottom: 0.5rem; display: block; font-size: 0.9rem; white-space: nowrap; }
+.input-field.search-bar { margin-bottom: 1.5rem; }
+.input-field input {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    box-sizing: border-box;
+    background-color: var(--background-color);
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    transition: box-shadow 0.2s ease;
+}
+.input-field input:focus {
+    outline: none;
+    box-shadow: inset 3px 3px 7px var(--shadow-dark),
+               inset -3px -3px 7px var(--shadow-light),
+               0 0 0 2px var(--primary-color);
+}
+.input-field input:read-only { cursor: not-allowed; }
+
+/* --- REMOVE ALL NUMBER INPUT SPINNERS / STEPPERS / SLIDERS --- */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none !important; 
+    margin: 0 !important; 
+}
+input[type=number] {
+    -moz-appearance: textfield !important;
+    appearance: textfield !important;
+}
+.table-container { 
+    overflow-x: auto; 
+    border-radius: 12px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th, td { padding: 1rem; border-bottom: 1px solid rgba(0,0,0,0.05); vertical-align: middle; }
+th { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: var(--subtle-text-color); }
+td input {
+    width: 100%;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-size: 1rem;
+    background: transparent;
+}
+td input:focus { outline: none; background: #fff; }
+td input:read-only { cursor: default; }
+td input.no { min-width: 60px; text-transform: uppercase; }
+td input.date { min-width: 120px; }
+td.read-only { font-weight: 500; font-size: 1rem; }
+.action-bar { display: flex; gap: 1rem; margin: 1.5rem 0; flex-wrap: wrap; }
+.btn {
+    padding: 0.65rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+.btn svg { vertical-align: middle; }
+.btn:active {
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+.btn:disabled { cursor: not-allowed; opacity: 0.7; }
+.btn-primary { background-color: var(--primary-color); color: white; }
+.btn-primary:hover:not(:disabled) { background-color: #4c6ef5; }
+.btn-secondary { background-color: var(--background-color); color: var(--text-color); }
+.btn-secondary:hover:not(:disabled) { background-color: #d1d9e6; }
+.btn-danger { background-color: var(--danger-color); color: white; }
+.btn-danger:hover:not(:disabled) { background-color: #f83c4f; }
+.btn-success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+    background-color: #248a7e; /* A slightly darker green for hover */
+}
+.totals-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+.total-item {
+    padding: 1.5rem;
+    text-align: center;
+    border-radius: 12px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+.total-item h3 { margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--subtle-text-color); font-weight: 600; text-transform: uppercase; }
+.total-item p { margin: 0; font-size: 1.75rem; font-weight: 700; color: var(--text-color); }
+
+/* --- Consolidated List Styles --- */
+#recentTransactionsList, 
+#finalisedTransactionsList {
+    list-style: none;
+    padding: 0;
+}
+#recentTransactionsList li,
+#finalisedTransactionsList li {
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+#recentTransactionsList li span,
+#finalisedTransactionsList li span {
+    font-weight: 600;
+    flex-grow: 1;
+}
+#recentTransactionsList .button-group,
+#finalisedTransactionsList .button-group {
+    display: flex;
+    gap: 0.7rem;
+}
+#recentTransactionsList li.unsynced span::after {
+    content: ' (unsynced)';
+    font-style: italic;
+    font-weight: 400;
+    color: var(--warning-color);
+}
+
+/* Dashboard Styles */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+.chart-container {
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+.chart-container h3 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+    color: var(--subtle-text-color);
+}
+/* Sync Status Indicator */
+#syncStatus {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+#syncStatus::before {
+    content: '';
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+#syncStatus.online {
+    color: var(--success-color);
+    background: var(--background-color);
+    box-shadow: inset 3px 3px 5px var(--shadow-dark), inset -3px -3px 5px var(--shadow-light);
+}
+#syncStatus.online::before { background-color: var(--success-color); }
+#syncStatus.offline {
+    color: var(--warning-color);
+    background: var(--background-color);
+    box-shadow: inset 3px 3px 5px var(--shadow-dark), inset -3px -3px 5px var(--shadow-light);
+}
+#syncStatus.offline::before { background-color: var(--warning-color); }
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    backdrop-filter: blur(5px);
+}
+.modal-box {
+    background: var(--background-color);
+    padding: 2rem;
+    border-radius: 20px;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+}
+.modal-box h2 { margin-top: 0; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; }
+
+/* Loader Styles */
+.loader-container { display: flex; justify-content: center; padding: 2rem; }
+.loader {
+    border: 5px solid var(--background-color);
+    border-top: 5px solid var(--primary-color);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Print Styles */
+@media print {
+    body { padding: 0; background: white; color: black; }
+    .container, .login-box, .total-item, #recentTransactionsList li, .table-container { box-shadow: none; border-radius: 0; border: none; background: white; }
+    header, .tabs, .action-bar, #recentTransactionsTab, .btn-danger, #loanTable th:last-child, td:last-child, .dashboard-grid, .search-bar { display: none; }
+    .main-content { padding: 0; }
+    .input-group { display: none !important; }
+    .print-header { display: block !important; text-align: center; margin-bottom: 2rem; }
+    .print-header h1 { margin: 0; font-size: 1.5rem; color: black; }
+    .print-header p { margin: 0.25rem 0 0 0; font-size: 1rem; color: #555; }
+    #loanTable input { border: none; background: transparent; padding: 0; width: 100%; color: black; }
+    tr { page-break-inside: avoid; }
+    th, td { border-bottom: 1px solid #ccc; }
+}
+.print-header { display: none; }
+
+/* --- Width Adjustments --- */
+#interestRateContainer { width: 100px; }
+#todayDateContainer { max-width: 110px; }
+#recentSearchContainer,
+#finalisedSearchContainer,
+#entriesSearchContainer { 
+    max-width: 270px; 
+}
+/* --- Responsive Styles for Mobile --- */
+@media screen and (max-width: 768px) {
+    
+    /* Reduce padding for more space on small screens */
+    body {
+        padding: 0.5rem;
+    }
+    .main-content {
+        padding: 1rem;
+    }
+
+    /* Stack the main header items vertically */
+    header {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    /* Make the top input boxes stack cleanly */
+    .input-group {
+        grid-template-columns: 1fr; /* Stack instead of side-by-side */
+    }
+    #todayDateContainer, #interestRateContainer {
+        width: auto;
+        max-width: none;
+    }
+
+    /* --- New Table Style: Horizontal Scroll --- */
+    .table-container {
+        /* This is the key property. It adds a scrollbar if the content is too wide. */
+        overflow-x: auto;
+
+        /* This helps scrolling feel smoother on touch devices */
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Ensure the table itself uses all the space it needs and inputs don't wrap */
+    table {
+        white-space: nowrap;
+    }
+}
+/* Dashboard Filter Styles */
+.dashboard-filters {
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 12px;
+    background-color: var(--background-color);
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.5rem;
+}
+
+.date-range-picker {
+    display: flex;
+    gap: 1rem;
+    flex-grow: 1;
+}
+
+.quick-filter-buttons {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+#applyDateFilterBtn {
+    padding: 0.75rem 1.5rem; /* Make apply button more prominent */
+}
+
+/* Responsive adjustments for filters */
+@media screen and (max-width: 768px) {
+    .date-range-picker {
+        flex-direction: column;
+        width: 100%;
+    }
+}
+/* --- Loan Search Tab Styles --- */
+.search-filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.search-filters .btn {
+    opacity: 0.7; /* Make non-active filters slightly transparent */
+}
+
+.search-filters .btn.active-filter {
+    opacity: 1;
+    /* Use inset shadow to show the button is "pressed" */
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+
+.btn-warning {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background-color: #e8950f; /* Slightly darker orange for hover */
+}
+
+#loanSearchTable .status-cell {
+    font-weight: 600;
+    text-align: center;
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    color: white;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+#loanSearchTable .status-available {
+    background-color: var(--success-color);
+}
+
+#loanSearchTable .status-not-available {
+    background-color: var(--warning-color);
+}
+
+#loanSearchTable .status-searching {
+     background-color: var(--subtle-text-color);
+}
+/* --- Uppercase Loan Number Inputs --- */
+#loanTable input.no,
+#loanSearchTable input.search-no {
+    text-transform: uppercase;
+}
+/* For smaller buttons inside tables */
+.btn-sm {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+}
+/* Styling for status cell content */
+/* Aligns content in the status column cells to the middle */
+#loanSearchTable .status-cell {
+    text-align: center;
+    vertical-align: middle;
+}
+
+/* This no longer needs flexbox for alignment */
+.status-not-available span {
+    display: block; /* Ensures the text and button are on separate lines */
+    margin-bottom: 5px;
+}
+
+/* Updated style for the "View Report" button */
+.btn-flat-sm {
+    box-shadow: none !important; /* Remove shadow */
+    background-color: #ffffff; /* White background */
+    color: #3d3d3d; /* Blue text for contrast */
+    border: 1px solid #e0e0e0; /* A very light border */
+    font-size: 0.75rem;
+    padding: 0.2em 0.5em;
+    font-weight: 600;
+}
+
+.btn-flat-sm:hover {
+    background-color: #f5f5f5; /* A light grey for hover */
+    box-shadow: none !important;
+}
+
+/* --- Transaction & Inventory Toggle Styles --- */
+.toggle-container { display: flex; justify-content: center; margin-bottom: 1.5rem; }
+
+/* Default Base (Used perfectly by Inventory 2-Way Toggle) */
+.segment-control {
+    background: #e0e5ec; position: relative; display: inline-flex;
+    border-radius: 8px; padding: 4px; 
+    box-shadow: inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff;
+}
+.segment-control input { display: none; }
+.segment-control label {
+    padding: 8px 25px; cursor: pointer; z-index: 2; font-weight: 600; 
+    font-size: 0.9rem; color: #777; transition: color 0.3s; text-align: center;
+}
+.segment-control input:checked + label { color: #3D52D5; }
+.segment-marker {
+    position: absolute; top: 4px; bottom: 4px; left: 4px; 
+    width: calc(50% - 4px); /* Default for 2 items */
+    background: #e0e5ec; border-radius: 6px;
+    box-shadow: 3px 3px 6px #a3b1c6, -3px -3px 6px #ffffff;
+    transition: transform 0.3s ease; z-index: 1;
+}
+
+/* OVERRIDE: Specific rules for Transactions Tab (3-Way Toggle) */
+#transactionsTab .segment-control {
+    display: flex; width: 100%; max-width: 350px;
+}
+#transactionsTab .segment-control label {
+    flex: 1; padding: 8px 0;
+}
+#transactionsTab .segment-marker {
+    width: calc(33.333% - 2.66px); /* Exact math to eliminate the gap */
+}
+
+/* Toggle Animations */
+#txPending:checked ~ .segment-marker { transform: translateX(0); }
+#txFinalised:checked ~ .segment-marker { transform: translateX(100%); }
+#txEntries:checked ~ .segment-marker { transform: translateX(200%); }
+#invEntry:checked ~ .segment-marker { transform: translateX(100%); }
+
+/* Unified List Heights */
+#recentTransactionsList li,
+#finalisedTransactionsList li,
+#loanEntriesList li {
+    padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 1rem;
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+               calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+}
+
+
+/* --- Auto-Fill Highlights --- */
+input.found-gold { background-color: #fcf4cf !important; color: #333; font-weight: 700; border: 1px solid #f1c40f; }
+input.found-silver { background-color: #e0e0e0 !important; color: #000; font-weight: 700; border: 1px solid #999; }
+
+/* --- Fix Calculator Mobile Layout (Side-by-Side + Gap) --- */
+/* --- Fix Calculator Mobile Layout (Smaller Boxes + Big Gap) --- */
+@media (max-width: 768px) {
+    /* 1. Container Settings - Updated selector to work in Transactions Tab too */
+    #calculatorTab .input-group,
+    #transactionCalculatorMount .input-group {
+        display: flex !important;
+        flex-direction: row !important;
+        
+        /* INCREASE THIS NUMBER to make gap wider and boxes smaller */
+        gap: 110px !important; 
+        
+        /* Optional: Add padding to sides to shrink boxes even more */
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    /* 2. Box Settings */
+    #calculatorTab .input-field,
+    #transactionCalculatorMount .input-field {
+        flex: 1 !important;      /* Keeps them equal size */
+        width: auto !important;
+        min-width: 0;
+        margin-bottom: 0 !important;
+    }
+}
+/* --- Fix Mobile Tabs to 2x2 Grid --- */
+.tabs {
+    display: flex;
+    flex-wrap: wrap; 
+    justify-content: center;
+}
+
+.tab-button {
+    flex: 0 0 50%; /* Forces 2 items per row */
+    box-sizing: border-box;
+    text-align: center;
+    border-bottom: 2px solid transparent; 
+}
+
+/* --- Entry Table & Batch Header Styles --- */
+.entry-header {
+    background-color: #f1f3f5;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid #ddd;
+    box-shadow: inset 2px 2px 5px #ccc, inset -2px -2px 5px #fff;
+}
+#batchTable th { font-size: 0.8rem; letter-spacing: 0.5px; text-transform: uppercase; }
+#batchTable select { 
+    width: 100%; 
+    padding: 0px !important;
+    border: none; 
+    background: transparent; 
+    font-weight: 600; 
+    cursor: pointer;
+    font-size: 1.1rem !important;
+    text-indent: 2px;
+}
+
+/* New: Mobile Detail Box Scaling */
+@media (max-width: 768px) {
+    .batch-note {
+        min-width: 130px !important;
+        font-size: 0.95rem !important;
+    }
+    #batchTable td:nth-child(5) {
+        width: 180px !important;
+    }
+}
+/* ADD THIS to make the Search/Entry toggle move */
+#invEntry:checked ~ .segment-marker { transform: translateX(100%); }
+
+/* =========================================
+   MOBILE FIX: TRANSACTION CARDS
+   (Stacks text on top, buttons below)
+   ========================================= */
+@media (max-width: 768px) {
+    /* 1. Force the card to stack vertically */
+    #recentTransactionsList li, 
+    #finalisedTransactionsList li {
+        flex-direction: column !important; 
+        align-items: flex-start !important;
+        gap: 12px !important;
+        padding: 15px !important;
+        height: auto !important; /* Let it grow */
+    }
+
+    /* 2. Make the text full width */
+    #recentTransactionsList li span,
+    #finalisedTransactionsList li span {
+        width: 100% !important;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    /* 3. Stretch the button container */
+    .button-group {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        gap: 10px !important; /* Reduced gap to save space */
+    }
+
+    /* 4. Make buttons equal size & touch-friendly */
+    .button-group button {
+        flex: 1 !important; 
+               /* Grow to fill space */
+        /* FORCE CENTER ALIGNMENT */
+        display: flex !important;           
+        justify-content: center !important; 
+        align-items: center !important;
+        
+        padding: 8px 2px !important; /* Less side padding */
+        font-size: 16px !important;  /* Smaller font to fit "Finalise" */
+        white-space: nowrap !important; /* Prevent text wrapping */
+        min-width: 0 !important;   /* Prevent flex overflow */
+    }
+}
+
+@media screen and (max-width: 768px) {
+    
+    /* 1. Hide the extra text (SL NO -> SL, Duration (Days) -> Duration) */
+    .desktop-text {
+        display: none !important;
+    }
+
+    /* 2. Fix "No" Column Alignment (Header + Input Box) */
+    #loanTable th:nth-child(2),       /* The Header 'No' */
+    #loanTable td:nth-child(2) input { /* The Input Box */
+        text-align: center !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* 3. Ensure SL column is tight but readable (Your settings) */
+    #loanTable th:first-child,
+    #loanTable td:first-child {
+        width: 35px !important;
+        padding-left: 10px !important;
+        padding-right: 5px !important;
+        text-align: center !important;
+    }
+
+    /* ============================
+       DATE COLUMN SPECIFIC FIXES
+       ============================ */
+
+    /* 1. Center the Date Header & Reduce Right Padding (Gap to Duration) */
+    #loanTable th:nth-child(4) {
+        text-align: center !important;
+        padding-right: 2px !important; /* REDUCED GAP HERE */
+    }
+    #loanTable td:nth-child(4) {
+        padding-right: 2px !important; /* REDUCED GAP HERE */
+    }
+
+    /* 2. Shrink Date Box Width (But keep Input Text Size Normal) */
+    #loanTable input.date {
+        width: 95px !important;       
+        min-width: 0 !important;
+        text-align: center;
+        padding: 5px 0 !important;
+        font-size: 1rem !important;   
+    }
+
+    /* 3. Reduce ONLY the "DD/MM/YYYY" Placeholder Font Size */
+    #loanTable input.date::placeholder {
+        font-size: 0.9rem !important; 
+        color: #999;
+    }
+
+    /* 6. DURATION COLUMN (Reduced Width & Padding) */
+    #loanTable th:nth-child(5),
+    #loanTable td:nth-child(5) {
+        width: 45px !important;  /* Reduced from 50px */
+        text-align: center !important;
+        white-space: normal !important; 
+        line-height: 1.1;
+        padding-left: 2px !important;  /* Tighter to Date */
+        padding-right: 5px !important; /* Tighter to Interest */
+    }
+
+    /* 7. INTEREST COLUMN (Reduced Width & Padding) */
+    #loanTable th:nth-child(6),
+    #loanTable td:nth-child(6) {
+        width: 50px !important; /* Reduced from 55px */
+        text-align: center !important;
+        padding-left: 10    px !important; /* Tighter to Duration */
+    }
+}
+
+
+
+/* =========================================
+   ADVANCED DASHBOARD STYLES
+   ========================================= */
+.dashboard-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
+}
+.live-badge {
+    background: #e3f2fd; color: #1976d2; padding: 4px 8px; 
+    border-radius: 12px; font-size: 0.8rem; font-weight: 600;
+}
+
+/* 1. Net Worth Card */
+.net-worth-card {
+    background: linear-gradient(135deg, #3D52D5, #2a9d8f);
+    color: white; padding: 1.5rem; border-radius: 16px;
+    box-shadow: 0 10px 20px rgba(61, 82, 213, 0.3); margin-bottom: 2rem;
+    text-align: center;
+}
+.net-worth-header { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;}
+.net-worth-amount { font-size: 2.5rem; font-weight: 800; margin-bottom: 1.5rem; }
+.net-worth-breakdown {
+    display: flex; justify-content: center; align-items: center; 
+    background: rgba(255,255,255,0.15); border-radius: 12px; padding: 10px;
+}
+.nw-item { padding: 0 15px; text-align: left; }
+.nw-label { display: block; font-size: 0.75rem; opacity: 0.8; }
+.nw-val { display: block; font-size: 1.1rem; font-weight: 600; }
+.interest-text { color: #ffeaa7; }
+.nw-divider { width: 1px; height: 30px; background: rgba(255,255,255,0.3); }
+
+/* 2. Charts & Grids */
+.dashboard-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
+    gap: 1.5rem; margin-bottom: 2rem;
+}
+
+/* 3. Top Lists */
+.top-lists-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+    gap: 1.5rem;
+}
+.list-card {
+    background: white; padding: 1.5rem; border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.list-card h3 { margin-top: 0; font-size: 1rem; color: #555; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+.warning-border { border-top: 4px solid #fca311; }
+.success-border { border-top: 4px solid #2a9d8f; }
+
+.dashboard-list { list-style: none; padding: 0; margin: 0; }
+.dashboard-list li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid #f5f5f5;
+}
+.dashboard-list li:last-child { border-bottom: none; }
+
+.list-main { display: flex; flex-direction: column; }
+.list-no { font-weight: 700; font-size: 0.95rem; color: #333; }
+.list-sub { font-size: 0.8rem; color: #888; }
+.list-val { font-weight: 600; color: #3D52D5; text-align: right; }
+.list-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+.tag-g { background: #fff9c4; color: #fbc02d; }
+.tag-s { background: #eeeeee; color: #616161; }
+
+@media (max-width: 768px) {
+    .net-worth-amount { font-size: 2rem; }
+    .nw-val { font-size: 1rem; }
+}
+
+/* =========================================
+   DASHBOARD MINI BUTTONS
+   ========================================= */
+/*
+.chart-header-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;
+}
+.chart-header-row h3 { margin: 0; padding: 0; border: none; }
+
+.chart-filters { display: flex; gap: 5px; }
+
+/* New Class for Small Chart Buttons */
+/*
+.btn-mini {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #555;
+    transition: all 0.2s;
+}
+.btn-mini:hover { background: #f5f5f5; }
+.btn-mini.active {
+    background: #3D52D5;
+    color: white;
+    border-color: #3D52D5;
+}
+
+/* Make History Chart span full width on PC */
+/*
+.dashboard-full-width { grid-column: 1 / -1; }*/
+
+
+/* =========================================
+   DASHBOARD KPIs (Average Metrics)
+   ========================================= */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.kpi-card {
+    background: white;
+    padding: 1rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-left: 4px solid #3D52D5;
+}
+
+.kpi-icon {
+    font-size: 1.5rem;
+    background: #f0f4ff;
+    width: 40px; height: 40px;
+    display: flex; justify-content: center; align-items: center;
+    border-radius: 50%;
+}
+
+.kpi-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.kpi-label {
+    font-size: 0.75rem;
+    color: #888;
+}
+
+.kpi-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #333;
+}
+
+/* --- Chart Header & Filters --- */
+.chart-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.chart-header-row h3 {
+    margin: 0;
+    padding: 0;
+    border: none;
+    font-size: 1rem;
+    color: var(--subtle-text-color);
+}
+.chart-filters {
+    display: flex;
+    gap: 5px;
+}
+.btn-mini {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #555;
+    transition: all 0.2s;
+}
+.btn-mini:hover {
+    background: #f5f5f5;
+}
+.btn-mini.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+/* --- Modern Toggle & Highlights --- */
+.modern-toggle-container {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--background-color);
+    padding: 8px 16px; border-radius: 30px;
+    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+}
+.toggle-label {
+    font-size: 0.9rem; font-weight: 600; cursor: pointer; color: var(--subtle-text-color);
+    transition: color 0.3s ease;
+}
+.modern-switch {
+    position: relative; display: inline-block; width: 44px; height: 24px;
+}
+.modern-switch input { opacity: 0; width: 0; height: 0; }
+.modern-slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc; transition: .4s; border-radius: 24px;
+    box-shadow: inset 2px 2px 4px rgba(0,0,0,0.2);
+}
+.modern-slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background-color: white; transition: .4s; border-radius: 50%;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+.modern-switch input:checked + .modern-slider { background-color: var(--primary-color); }
+.modern-switch input:checked + .modern-slider:before { transform: translateX(20px); }
+.modern-switch input:checked ~ .toggle-label { color: var(--primary-color); }
+
+.auto-added-row {
+    background-color: rgba(61, 82, 213, 0.08) !important; 
+    border-left: 4px solid var(--primary-color);
+}
+/* ========================================== */
+/* INSTANT IMAGE VIEWER STYLES                */
+/* ========================================== */
+.image-modal {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 10000; /* Sit on top of everything */
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.85); /* Dark background */
+    backdrop-filter: blur(5px); /* Modern frosted glass effect */
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.image-modal-content {
+    margin: auto;
+    display: block;
+    max-width: 95%;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    animation: zoomIn 0.25s ease-out; /* Smooth pop-in */
+}
+
+.close-image-modal {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    color: #fff;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10001;
+    transition: 0.2s;
+}
+
+.close-image-modal:hover {
+    color: #ccc;
+}
+
+@keyframes zoomIn {
+    from {transform: scale(0.8); opacity: 0;}
+    to {transform: scale(1); opacity: 1;}
+}
+
+/* --- NEUMORPHIC CUSTOMER SWITCHER & MODAL STYLES --- */
+.customer-select-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+#globalCustomerSelect {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 0.65rem 2.4rem 0.65rem 1.1rem;
+    border: none;
+    border-radius: 10px;
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+                inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233D52D5'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.8rem center;
+    background-size: 1.2rem;
+}
+
+#globalCustomerSelect:focus {
+    outline: none;
+    box-shadow: inset 3px 3px 7px var(--shadow-dark),
+                inset -3px -3px 7px var(--shadow-light),
+                0 0 0 2px var(--primary-color);
+}
+
+/* Neumorphic Customer Modal Card Styling */
+#customerModal .modal-box {
+    background-color: var(--background-color) !important;
+    border-radius: 20px !important;
+    box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+                calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light) !important;
+    border: none !important;
+}
+
+#customerModal .form-card {
+    background-color: var(--background-color);
+    border-radius: 14px;
+    padding: 1.25rem;
+    box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--shadow-dark),
+                inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--shadow-light);
+    margin: 1.25rem 0;
+}
+
+#customerListUI li {
+    background: var(--background-color) !important;
+    border-radius: 8px !important;
+    box-shadow: 3px 3px 8px var(--shadow-dark), -3px -3px 8px var(--shadow-light) !important;
+    border: none !important;
+    margin-bottom: 8px !important;
+    padding: 10px 14px !important;
+}
+
+/* --- CUSTOMER SWITCH ULTRA-SMOOTH GPU-ACCELERATED BLUR TRANSITION --- */
+@keyframes custSwitchBlur {
+    0% {
+        filter: blur(0px);
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    35% {
+        filter: blur(8px);
+        opacity: 0.35;
+        transform: translate3d(0, 0, 0) scale(0.985);
+    }
+    100% {
+        filter: blur(0px);
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+.customer-switch-transition {
+    will-change: filter, opacity, transform;
+    backface-visibility: hidden;
+    animation: custSwitchBlur 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes selectPulse {
+    0% { box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light), 0 0 0 0 rgba(61, 82, 213, 0.4); }
+    50% { box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light), 0 0 0 6px rgba(61, 82, 213, 0); }
+    100% { box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light), 0 0 0 0 rgba(61, 82, 213, 0); }
+}
+
+.select-pulse {
+    animation: selectPulse 0.4s ease-out;
+}
+
+/* Initial Customer Selector Card Styles */
+.initial-cust-card {
+    background-color: var(--background-color);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.85rem;
+    cursor: pointer;
+    box-shadow: 4px 4px 10px var(--shadow-dark),
+                -4px -4px 10px var(--shadow-light);
+    transition: all 0.2s ease;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.initial-cust-card:hover, .initial-cust-card:active {
+    transform: translateY(-2px);
+    box-shadow: inset 3px 3px 7px var(--shadow-dark),
+                inset -3px -3px 7px var(--shadow-light);
+}
+
+/* Developer Control Center Styles */
+.dev-tab-btn {
+    background-color: var(--background-color);
+    color: var(--subtle-text-color);
+    transition: all 0.2s ease;
+}
+.dev-tab-btn.active {
+    background-color: var(--primary-color) !important;
+    color: white !important;
+    box-shadow: 2px 2px 6px var(--shadow-dark) !important;
+}
+
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .header-right {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+}
+
