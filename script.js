@@ -3199,7 +3199,8 @@ const updateSearchTotals = () => {
 
             const actualRate = getInterestRateForLoan(loanNo, globalRate);
             const calcDays = (days > 0 && days < 30) ? 30 : days;
-            const interest = calculateInterest(p, actualRate, calcDays, loan.customerId);
+            const custId = match ? match.customerId : activeCustomerId;
+            const interest = calculateInterest(p, actualRate, calcDays, custId);
 
             totalPrin += p;
             totalInt += interest;
