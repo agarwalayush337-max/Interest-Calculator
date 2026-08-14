@@ -135,6 +135,24 @@ let effectiveRateTimeframeIndex = 0; // NEW: Track Effective Rate timeframe
 const CUSTOMERS_KEY = 'interest_calc_customers_v1';
 let activeCustomerId = 'ALL';
 
+const generateCleanCustomerId = (name, existingCustomers = []) => {
+    if (!name) return 'cust_' + Date.now();
+    const cleanSlug = name.toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    let baseId = 'cust_' + (cleanSlug || Date.now());
+    let candidateId = baseId;
+    let counter = 2;
+
+    while (existingCustomers.some(c => c.id === candidateId)) {
+        candidateId = `${baseId}_${counter}`;
+        counter++;
+    }
+
+    return candidateId;
+};
+
 const getStoredCustomers = () => {
     try {
         const stored = localStorage.getItem(CUSTOMERS_KEY);
@@ -258,8 +276,55 @@ const loadCustomersFromCloud = async () => {
                 await batch.commit();
             }
         }
+        migrateToCleanCustomerIds();
     } catch (err) {
         console.warn("Error syncing customers from cloud:", err);
+    }
+};
+
+const migrateToCleanCustomerIds = () => {
+    let customers = getStoredCustomers();
+    let changed = false;
+
+    customers.forEach((c, idx) => {
+        if (c.id && c.id.match(/^cust_\d{10,}$/)) {
+            const cleanId = generateCleanCustomerId(c.name, customers.filter(other => other.id !== c.id));
+            const oldId = c.id;
+            customers[idx].id = cleanId;
+            changed = true;
+
+            if (activeCustomerId === oldId) activeCustomerId = cleanId;
+
+            if (typeof db !== 'undefined' && db && typeof user !== 'undefined' && user) {
+                (async () => {
+                    try {
+                        const batch = db.batch();
+                        batch.delete(db.collection('customers').doc(oldId));
+                        batch.set(db.collection('customers').doc(cleanId), {
+                            id: cleanId, name: c.name, phone: c.phone || '', updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+
+                        const activeSnap = await db.collection('activeInventory').where("customerId", "==", oldId).get();
+                        activeSnap.docs.forEach(doc => batch.update(doc.ref, { customerId: cleanId }));
+
+                        const reportsSnap = await db.collection('sharedReports').where("customerId", "==", oldId).get();
+                        reportsSnap.docs.forEach(doc => batch.update(doc.ref, { customerId: cleanId }));
+
+                        await batch.commit();
+                    } catch (e) {
+                        console.warn("Could not migrate customer ID in cloud:", e);
+                    }
+                })();
+            }
+        }
+    });
+
+    if (changed) {
+        saveStoredCustomers(customers);
+        populateCustomerDropdown();
+        if (typeof populateDevSeriesCustSelect === 'function') populateDevSeriesCustSelect();
+        if (typeof populateDevCompoundCustSelect === 'function') populateDevCompoundCustSelect();
+        if (typeof renderDevCustomerListUI === 'function') renderDevCustomerListUI();
     }
 };
 
@@ -6036,7 +6101,7 @@ const initDevModeModule = () => {
                 }
             } else {
                 targetCust = {
-                    id: 'cust_' + Date.now(),
+                    id: generateCleanCustomerId(name, customers),
                     name: name,
                     phone: phone,
                     createdAt: new Date().toISOString()
