@@ -1756,15 +1756,20 @@ window.viewEntryReport = (dateString) => {
 // NEW: Toggle between Search and Entry Views
 const toggleInventoryView = (mode) => {
     const isSearch = (mode === 'search');
-    document.getElementById('invSearch').checked = isSearch;
-    document.getElementById('invEntry').checked = !isSearch;
+    const invSearch = document.getElementById('invSearch');
+    if (invSearch) invSearch.checked = isSearch;
+    const invEntry = document.getElementById('invEntry');
+    if (invEntry) invEntry.checked = !isSearch;
     
-    document.getElementById('invSearchView').style.display = isSearch ? 'block' : 'none';
-    document.getElementById('invEntryView').style.display = !isSearch ? 'block' : 'none';
+    const invSearchView = document.getElementById('invSearchView');
+    if (invSearchView) invSearchView.style.display = isSearch ? 'block' : 'none';
+    const invEntryView = document.getElementById('invEntryView');
+    if (invEntryView) invEntryView.style.display = !isSearch ? 'block' : 'none';
 
     // If switching to Entry, auto-fill today's date
-    if (!isSearch && !document.getElementById('batchDate').value) {
-        document.getElementById('batchDate').value = formatDateToDDMMYYYY(new Date());
+    const batchDateEl = document.getElementById('batchDate');
+    if (!isSearch && batchDateEl && !batchDateEl.value) {
+        batchDateEl.value = formatDateToDDMMYYYY(new Date());
     }
 };
 
@@ -3621,22 +3626,24 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     if (typeof window.updateRedemptionKPI === 'function') window.updateRedemptionKPI();
     if (typeof window.updateEffectiveRateKPI === 'function') window.updateEffectiveRateKPI();
 
-    // --- PREVENT FLICKER: Skip if only updating growth chart ---
-    if (!onlyUpdateGrowthChart) {
-
     // --- RENDER TEXT ---
-    document.getElementById('kpiCount').textContent = count; 
-    document.getElementById('kpiAvgSize').textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
-    document.getElementById('kpiAvgAge').textContent = `${avgAgeTotal} Days`;
+    const countEl = document.getElementById('kpiCount');
+    if (countEl) countEl.textContent = count; 
+    const avgSizeEl = document.getElementById('kpiAvgSize');
+    if (avgSizeEl) avgSizeEl.textContent = `₹${Math.round(avgSize).toLocaleString('en-IN')}`;
+    const avgAgeEl = document.getElementById('kpiAvgAge');
+    if (avgAgeEl) avgAgeEl.textContent = `${avgAgeTotal} Days`;
     const splitEl = document.getElementById('kpiAvgAgeSplit');
-    if(splitEl) splitEl.textContent = `G: ${avgAgeG}d | S: ${avgAgeS}d`;
+    if (splitEl) splitEl.textContent = `G: ${avgAgeG}d | S: ${avgAgeS}d`;
     
-    // (Note: kpiChurn and effectiveRate are now handled exclusively by their updater functions)
-    
-    if (document.getElementById('kpiMonthly')) document.getElementById('kpiMonthly').textContent = `₹${Math.round(totalMonthlyIncome).toLocaleString('en-IN')}`;
-    document.getElementById('dashNetWorth').textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
-    document.getElementById('dashPrincipal').textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
-    document.getElementById('dashInterest').textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
+    const monthlyEl = document.getElementById('kpiMonthly');
+    if (monthlyEl) monthlyEl.textContent = `₹${Math.round(totalMonthlyIncome).toLocaleString('en-IN')}`;
+    const netWorthEl = document.getElementById('dashNetWorth');
+    if (netWorthEl) netWorthEl.textContent = `₹${Math.round(totalPrincipal + totalInterest).toLocaleString('en-IN')}`;
+    const dashPrinEl = document.getElementById('dashPrincipal');
+    if (dashPrinEl) dashPrinEl.textContent = `₹${Math.round(totalPrincipal).toLocaleString('en-IN')}`;
+    const dashIntEl = document.getElementById('dashInterest');
+    if (dashIntEl) dashIntEl.textContent = `+ ₹${Math.round(totalInterest).toLocaleString('en-IN')}`;
 
     // --- CHARTS ---
     if (pieChartInstance) pieChartInstance.destroy();
@@ -3645,47 +3652,51 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     const currencyTooltip = {
         callbacks: {
             label: function(context) {
-                let value = context.raw || 0;
-                let c = context.dataset.counts ? context.dataset.counts[context.dataIndex] : 0;
-                return ` ₹${value.toLocaleString('en-IN')} (${c} Nos)`;
+                const label = context.label || '';
+                const value = context.raw || 0;
+                const c = context.dataset.counts ? context.dataset.counts[context.dataIndex] : 0;
+                return ` ${label}: ₹${value.toLocaleString('en-IN')} (${c} Nos)`;
             }
         }
     };
 
-    const mixCtx = document.getElementById('mixChart').getContext('2d');
-    pieChartInstance = new Chart(mixCtx, {
-        type: 'doughnut',
-        data: { 
-            labels: ['Gold', 'Silver'], 
-            datasets: [{ 
-                data: [mixStats.goldVal, mixStats.silverVal], counts: [mixStats.goldCount, mixStats.silverCount],
-                backgroundColor: ['#fca311', '#adb5bd'], borderWidth: 0 
-            }] 
-        },
-        options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: currencyTooltip } }
-    });
+    const mixEl = document.getElementById('mixChart');
+    if (mixEl) {
+        const mixCtx = mixEl.getContext('2d');
+        pieChartInstance = new Chart(mixCtx, {
+            type: 'doughnut',
+            data: { 
+                labels: ['Gold', 'Silver'], 
+                datasets: [{ 
+                    data: [mixStats.goldVal, mixStats.silverVal], counts: [mixStats.goldCount, mixStats.silverCount],
+                    backgroundColor: ['#fca311', '#adb5bd'], borderWidth: 0 
+                }] 
+            },
+            options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: currencyTooltip } }
+        });
+    }
 
-    const agingCtx = document.getElementById('agingChart').getContext('2d');
-    barChartInstance = new Chart(agingCtx, {
-        type: 'bar',
-        data: { 
-            labels: ['< 2 Yrs', '2-3 Yrs', '> 3 Yrs'], 
-            datasets: [{ 
-                data: [agingStats.normalVal, agingStats.midVal, agingStats.oldVal], 
-                counts: [agingStats.normalCount, agingStats.midCount, agingStats.oldCount],
-                backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'], borderRadius: 4 
-            }] 
-        },
-        options: { 
-            maintainAspectRatio: false, 
-            // --- THE FIX: Make the entire vertical column hoverable ---
-            interaction: { mode: 'index', intersect: false }, 
-            plugins: { legend: { display: false }, tooltip: currencyTooltip }, 
-            scales: { y: { beginAtZero: true, display: false } } 
-        }
-    });
-    
-    } // <--- CLOSES THE PREVENT FLICKER BLOCK
+    const agingEl = document.getElementById('agingChart');
+    if (agingEl) {
+        const agingCtx = agingEl.getContext('2d');
+        barChartInstance = new Chart(agingCtx, {
+            type: 'bar',
+            data: { 
+                labels: ['< 2 Yrs', '2-3 Yrs', '> 3 Yrs'], 
+                datasets: [{ 
+                    data: [agingStats.normalVal, agingStats.midVal, agingStats.oldVal], 
+                    counts: [agingStats.normalCount, agingStats.midCount, agingStats.oldCount],
+                    backgroundColor: ['#2a9d8f', '#e9c46a', '#e76f51'], borderRadius: 4 
+                }] 
+            },
+            options: { 
+                maintainAspectRatio: false, 
+                interaction: { mode: 'index', intersect: false }, 
+                plugins: { legend: { display: false }, tooltip: currencyTooltip }, 
+                scales: { y: { beginAtZero: true, display: false } } 
+            }
+        });
+    }
 
     // --- UPDATE GROWTH CHART (Fixed) ---
     if (window.growthChartInstance) window.growthChartInstance.destroy();
@@ -3761,8 +3772,10 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             chartData.push(dailyValue);
         }
         
-        const growthCtx = document.getElementById('growthChart').getContext('2d');
-        window.growthChartInstance = new Chart(growthCtx, {
+        const growthChartEl = document.getElementById('growthChart');
+        if (growthChartEl) {
+            const growthCtx = growthChartEl.getContext('2d');
+            window.growthChartInstance = new Chart(growthCtx, {
             type: 'line',
             data: {
                 labels: chartLabels,
@@ -3794,9 +3807,6 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
         });
     }
 
-    // --- PREVENT FLICKER: Skip lists if only updating growth chart ---
-    if (!onlyUpdateGrowthChart) {
-
     // --- TOP LISTS ---
     const activeSorted = getScopedActiveInventory().map(loan => {
          const p = parseFloat(loan.principal) || 0;
@@ -3814,18 +3824,24 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     });
 
     const oldestLoans = [...activeSorted].sort((a, b) => b.days - a.days).slice(0, 5);
-    document.getElementById('oldestLoansList').innerHTML = oldestLoans.map(l => {
-        const years = (l.days / 365).toFixed(1);
-        const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
-        return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.principal).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(₹${Math.round(l.totalValue).toLocaleString('en-IN')})</div></div></li>`;
-    }).join('');
+    const oldestLoansEl = document.getElementById('oldestLoansList');
+    if (oldestLoansEl) {
+        oldestLoansEl.innerHTML = oldestLoans.map(l => {
+            const years = (l.days / 365).toFixed(1);
+            const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
+            return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.principal).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(₹${Math.round(l.totalValue).toLocaleString('en-IN')})</div></div></li>`;
+        }).join('');
+    }
     
     const highValueLoans = [...activeSorted].sort((a, b) => b.totalValue - a.totalValue).slice(0, 5);
-    document.getElementById('highValueList').innerHTML = highValueLoans.map(l => {
-        const years = (l.days / 365).toFixed(1);
-        const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
-        return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')})</div></div></li>`;
-    }).join('');
+    const highValueEl = document.getElementById('highValueList');
+    if (highValueEl) {
+        highValueEl.innerHTML = highValueLoans.map(l => {
+            const years = (l.days / 365).toFixed(1);
+            const tagClass = l.type === 'G' ? 'tag-g' : 'tag-s';
+            return `<li><div class="list-main"><span class="list-no">${l.no} <span class="list-tag ${tagClass}">${l.type}</span></span><span class="list-sub">${l.date} (${years} Years)</span></div><div class="list-val">₹${Math.round(l.totalValue).toLocaleString('en-IN')}<div style="font-size:0.75rem; color:#888; margin-top:3px;">(Prin: ₹${Math.round(l.principal).toLocaleString('en-IN')})</div></div></li>`;
+        }).join('');
+    }
 
     // --- NEW: Top Highest Interest Loans ---
     const highestInterestListEl = document.getElementById('highestInterestList');
@@ -3994,8 +4010,9 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
         });
     }
 
-    } // <--- CLOSES THE TOP LISTS BLOCK
+    } // <--- CLOSES PREVENT FLICKER BLOCK
 };
+
 // 3. HISTORICAL STATS (DEFINED HERE TO FIX ERROR)
 const renderHistoricalStats = () => {
     const startDate = parseDate(dashboardStartDateEl.value);
@@ -4629,13 +4646,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (parsed) e.target.value = formatDateToDDMMYYYY(parsed);
         updateAllCalculations();
     });
-    reportSearchInput.addEventListener('input', e => { renderRecentTransactions(e.target.value); });
-    document.getElementById('finalisedReportSearchInput').addEventListener('input', e => { 
-        renderFinalisedTransactions(e.target.value); 
-    });
+    if (reportSearchInput) {
+        reportSearchInput.addEventListener('input', e => { renderRecentTransactions(e.target.value); });
+    }
+    const finSearchInput = document.getElementById('finalisedReportSearchInput');
+    if (finSearchInput) {
+        finSearchInput.addEventListener('input', e => { 
+            renderFinalisedTransactions(e.target.value); 
+        });
+    }
 
     // --- NEW: Loan Entries Search Listener ---
-    document.getElementById('entriesSearchInput').addEventListener('input', e => { renderLoanEntries(e.target.value); });
+    const entriesSearchInput = document.getElementById('entriesSearchInput');
+    if (entriesSearchInput) {
+        entriesSearchInput.addEventListener('input', e => { renderLoanEntries(e.target.value); });
+    }
     window.addEventListener('online', updateSyncStatus);
     window.addEventListener('offline', updateSyncStatus);
     // ---------------------------------------------------------
@@ -5135,7 +5160,9 @@ const filterHistory = (mode) => {
     // 4. Render Chart
     if (window.historyChartInstance) window.historyChartInstance.destroy();
 
-    const histCtx = document.getElementById('historyChart').getContext('2d');
+    const historyChartEl = document.getElementById('historyChart');
+    if (!historyChartEl) return;
+    const histCtx = historyChartEl.getContext('2d');
     window.historyChartInstance = new Chart(histCtx, {
         type: 'line',
         data: {
