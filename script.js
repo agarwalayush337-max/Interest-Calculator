@@ -116,7 +116,18 @@ const loadBatchEntries = async () => {
         cachedBatchEntries = {};
         snapshot.docs.forEach(doc => {
             const data = doc.data();
-            if (data.date) cachedBatchEntries[data.date] = data;
+            if (data.date) {
+                // Key by date (for legacy batch entries of Rajesh Ji)
+                if (!cachedBatchEntries[data.date] || data.imageUrl) {
+                    cachedBatchEntries[data.date] = data;
+                }
+                // Key by customerId_date (for customer-isolated batch entries)
+                if (data.customerId) {
+                    cachedBatchEntries[`${data.customerId}_${data.date}`] = data;
+                }
+                // Key by doc ID
+                cachedBatchEntries[doc.id] = data;
+            }
         });
     } catch (e) {
         console.error("Error loading batch entries:", e);
@@ -1679,14 +1690,20 @@ filteredDates.forEach(entry => {
             loans: sortedLoans
         };
 
-        // --- NEW: Setup the Attach/View Photo Button for Batch Entries ---
+        // --- Setup the Attach/View Photo Button for Batch Entries ---
         let entryImageUrl = null;
         
-        if (cachedBatchEntries[entry.date] && cachedBatchEntries[entry.date].imageUrl) {
+        const rajeshId = getRajeshCustomerId();
+        const currentCustId = (activeCustomerId && activeCustomerId !== 'ALL') ? activeCustomerId : rajeshId;
+
+        // 1. Check customer-specific batch entry image first
+        const custBatch = cachedBatchEntries[`${currentCustId}_${entry.date}`];
+        if (custBatch && custBatch.imageUrl) {
+            entryImageUrl = custBatch.imageUrl;
+        } 
+        // 2. Fall back to date-level batch entry image (for legacy batch entries of Rajesh Ji)
+        else if (cachedBatchEntries[entry.date] && cachedBatchEntries[entry.date].imageUrl) {
             entryImageUrl = cachedBatchEntries[entry.date].imageUrl;
-        } else {
-            const loanWithImage = sortedLoans.find(l => l.imageUrl);
-            if (loanWithImage) entryImageUrl = loanWithImage.imageUrl;
         }
 
         let photoButtonHtml = '';
@@ -5710,19 +5727,27 @@ window.triggerListAttachPhoto = (reportId, isFinalised) => {
                 // B. Save URL to Database (Handling Virtual Batch Entries vs Real Reports)
                 if (reportIdToUpdate.startsWith('temp_entry_')) {
                     const virtualReport = window[reportIdToUpdate];
-                    const rawDate = virtualReport.reportDate; // e.g. "17/05/2026"
+                    const rajeshId = getRajeshCustomerId();
+                    const currentCustId = (activeCustomerId && activeCustomerId !== 'ALL') ? activeCustomerId : rajeshId;
                     const batchDocId = `${user.uid}_${rawDate.replace(/\//g, '-')}`;
+                    const custBatchDocId = `${user.uid}_${currentCustId}_${rawDate.replace(/\//g, '-')}`;
 
-                    // Update the dedicated permanent Batch Entries collection
-                    await db.collection('batchEntries').doc(batchDocId).set({
+                    const batchPayload = {
                         date: rawDate,
+                        customerId: currentCustId,
+                        customerName: getCustomerNameById(currentCustId),
                         imageUrl: uploadedImageUrl,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
+                    };
+
+                    // Update both legacy and customer-isolated batch entry documents in Firebase
+                    await db.collection('batchEntries').doc(custBatchDocId).set(batchPayload, { merge: true });
+                    await db.collection('batchEntries').doc(batchDocId).set(batchPayload, { merge: true });
                     
-                    // Update Local Cache instantly
+                    // Update Local Cache instantly under all lookup keys
                     if (!cachedBatchEntries[rawDate]) cachedBatchEntries[rawDate] = { date: rawDate };
                     cachedBatchEntries[rawDate].imageUrl = uploadedImageUrl;
+                    cachedBatchEntries[`${currentCustId}_${rawDate}`] = { ...cachedBatchEntries[rawDate], imageUrl: uploadedImageUrl };
                     virtualReport.imageUrl = uploadedImageUrl; 
 
                     closeConfirm();
