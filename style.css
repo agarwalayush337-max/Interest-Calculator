@@ -84,6 +84,9 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
     color: var(--subtle-text-color);
     transition: all 0.2s ease;
     border-bottom: 3px solid transparent;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
 }
 .tab-button.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
 .tab-content { display: none; }

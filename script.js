@@ -2055,9 +2055,9 @@ const saveBatchEntries = async () => {
 
     const batch = db.batch();
 
-    // --- NEW: Save to Permanent 'Batch Entries' Collection ---
+    // --- Save to Permanent 'batchEntries' Collection in Firebase ---
     const batchDateStr = document.getElementById('batchDate').value || formatDateToDDMMYYYY(new Date());
-    const batchDocId = `${user.uid}_${batchDateStr.replace(/\//g, '-')}`;
+    const batchDocId = `${user.uid}_${activeCustomerId}_${batchDateStr.replace(/\//g, '-')}`;
     const batchEntryRef = db.collection('batchEntries').doc(batchDocId);
     
     // Sort the entries NUMBER WISE before saving
@@ -2065,18 +2065,21 @@ const saveBatchEntries = async () => {
     
     const batchData = {
         date: batchDateStr,
+        customerId: activeCustomerId,
+        customerName: getCustomerNameById(activeCustomerId),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        loans: entries // <--- FIX: Actually save the loan details!
+        loans: entries, // Saves each loan no, amount/principal, type, details
+        userId: user.uid
     };
     if (uploadedImageUrl) batchData.imageUrl = uploadedImageUrl;
     
-    batch.set(batchEntryRef, batchData, { merge: true }); // Merge ensures we don't wipe an existing image for today
+    batch.set(batchEntryRef, batchData, { merge: true }); // Merge ensures we don't wipe existing fields
     // ---------------------------------------------------------
     
     entries.forEach(entry => {
         const docId = `${user.uid}_${entry.no.replace(/\//g, '-')}`;
         const docRef = db.collection('activeInventory').doc(docId);
-        // FIX: Add the timestamp securely to the individual document payload instead
+        // Save individual active inventory items WITHOUT tagging image URL on individual loans
         batch.set(docRef, {
             ...entry,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2085,7 +2088,7 @@ const saveBatchEntries = async () => {
     // Update Customer Dues in Firestore & Local
     saveCustomerDuesToCloud(batch, activeCustomerId, finalDues, finalDuesDate);
 
-    // --- NEW: Save to Permanent History Ledger ---
+    // --- Save to Permanent History Ledger ---
     const duesHistoryRef = db.collection('duesHistory').doc(); // Auto-generates unique ID
     batch.set(duesHistoryRef, {
         amount: finalDues,
@@ -2110,6 +2113,15 @@ const saveBatchEntries = async () => {
         currentPreviousDues = finalDues;
         currentPreviousDuesDate = finalDuesDate;
 
+        // Instant Local Cache Sync for Batch Entries so 'View Photo' button appears immediately
+        if (!cachedBatchEntries[batchDateStr]) cachedBatchEntries[batchDateStr] = { date: batchDateStr };
+        cachedBatchEntries[batchDateStr].customerId = activeCustomerId;
+        cachedBatchEntries[batchDateStr].customerName = getCustomerNameById(activeCustomerId);
+        cachedBatchEntries[batchDateStr].loans = entries;
+        if (uploadedImageUrl) cachedBatchEntries[batchDateStr].imageUrl = uploadedImageUrl;
+
+        await loadBatchEntries();
+
         await showConfirm("Success", `Saved ${entries.length} items. Dues: ₹${finalDues}`, false);
         
         // Clear Table and Reset
@@ -2131,6 +2143,115 @@ const saveBatchEntries = async () => {
     } catch (error) {
         console.error("Batch Save Error:", error);
         await showConfirm("Error", "Failed to save. Check internet.", false);
+    }
+};
+
+// --- HISTORICAL BATCH ENTRIES MIGRATION HELPER ---
+window.migrateHistoricBatchEntries = async () => {
+    if (!user) return alert("Please sign in first to run migration.");
+    
+    const confirmRun = await showConfirm(
+        "Migrate Historic Batch Entries",
+        "This will scan all historical loans (active inventory & past reports) and create matching documents in the 'batchEntries' Firebase collection. Proceed?"
+    );
+    if (!confirmRun) return;
+
+    showConfirm("Migrating...", "Scanning past loans and grouping by date & customer...", false);
+
+    try {
+        const grouped = {};
+
+        // 1. Group active inventory
+        const activeSnap = await db.collection('activeInventory').get();
+        activeSnap.docs.forEach(doc => {
+            const data = doc.data();
+            const dateStr = data.date || formatDateToDDMMYYYY(new Date());
+            const custId = data.customerId || getRajeshCustomerId();
+            const groupKey = `${user.uid}_${custId}_${dateStr.replace(/\//g, '-')}`;
+
+            if (!grouped[groupKey]) {
+                grouped[groupKey] = {
+                    date: dateStr,
+                    customerId: custId,
+                    customerName: data.customerName || getCustomerNameById(custId),
+                    loans: [],
+                    userId: user.uid
+                };
+            }
+            grouped[groupKey].loans.push({
+                no: data.no,
+                principal: data.principal,
+                type: data.type || 'S',
+                details: data.details || ''
+            });
+        });
+
+        // 2. Group finalised / historical reports
+        const reportsSnap = await db.collection('sharedReports').get();
+        reportsSnap.docs.forEach(doc => {
+            const data = doc.data();
+            const dateStr = data.reportDate || data.date;
+            if (!dateStr) return;
+            const custId = data.customerId || getRajeshCustomerId();
+            const groupKey = `${user.uid}_${custId}_${dateStr.replace(/\//g, '-')}`;
+
+            if (!grouped[groupKey]) {
+                grouped[groupKey] = {
+                    date: dateStr,
+                    customerId: custId,
+                    customerName: data.customerName || getCustomerNameById(custId),
+                    loans: [],
+                    userId: user.uid
+                };
+            }
+            if (data.imageUrl && !grouped[groupKey].imageUrl) {
+                grouped[groupKey].imageUrl = data.imageUrl;
+            }
+            const loansArr = data.loans || data.items || [];
+            if (Array.isArray(loansArr)) {
+                loansArr.forEach(l => {
+                    const exists = grouped[groupKey].loans.some(existing => existing.no === l.no);
+                    if (!exists) {
+                        grouped[groupKey].loans.push({
+                            no: l.no,
+                            principal: l.principal,
+                            type: l.type || 'S',
+                            details: l.details || ''
+                        });
+                    }
+                });
+            }
+        });
+
+        // 3. Commit to Firebase batchEntries in chunks
+        const keys = Object.keys(grouped);
+        let count = 0;
+        
+        for (let i = 0; i < keys.length; i += 400) {
+            const chunk = keys.slice(i, i + 400);
+            const batch = db.batch();
+            chunk.forEach(key => {
+                const docRef = db.collection('batchEntries').doc(key);
+                const payload = {
+                    ...grouped[key],
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                batch.set(docRef, payload, { merge: true });
+                count++;
+            });
+            await batch.commit();
+        }
+
+        await loadBatchEntries();
+        if (typeof refreshActiveViewForCustomer === 'function') refreshActiveViewForCustomer();
+
+        closeConfirm();
+        showConfirm("Migration Complete", `Successfully created/updated ${count} historic batch entry documents in Firebase 'batchEntries' collection!`, false);
+
+    } catch (err) {
+        console.error("Migration error:", err);
+        closeConfirm();
+        showConfirm("Migration Error", err.message, false);
     }
 };
 
@@ -3574,16 +3695,32 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
             totalPrincipal += p; 
             totalInterest += interest;
 
-            // --- FIX: Increment Counts Alongside Values (360-Day Math) ---
-            if (days < 720) { // 2 Years * 360
-                agingStats.normalVal += p; 
-                agingStats.normalCount++; 
-            } else if (days < 1080) { // 3 Years * 360
-                agingStats.midVal += p; 
-                agingStats.midCount++; 
-            } else { 
-                agingStats.oldVal += p; 
-                agingStats.oldCount++; 
+            // --- DYNAMIC RISK / AGING CATEGORIES ---
+            // Old Customer (Rajesh Ji): < 2 Yrs (720d), 2-3 Yrs (720-1080d), > 3 Yrs (1080d+)
+            // New Customer: < 6 Months (180d), 6M - 1 Yr (180-360d), > 1 Year (360d+)
+            const isRajeshCustomer = (activeCustomerId === getRajeshCustomerId() || activeCustomerId === 'cust_rajesh_powakhali' || activeCustomerId === 'ALL');
+            if (isRajeshCustomer) {
+                if (days < 720) {
+                    agingStats.normalVal += p; 
+                    agingStats.normalCount++; 
+                } else if (days < 1080) { 
+                    agingStats.midVal += p; 
+                    agingStats.midCount++; 
+                } else { 
+                    agingStats.oldVal += p; 
+                    agingStats.oldCount++; 
+                }
+            } else {
+                if (days < 180) { 
+                    agingStats.normalVal += p; 
+                    agingStats.normalCount++; 
+                } else if (days < 360) { 
+                    agingStats.midVal += p; 
+                    agingStats.midCount++; 
+                } else { 
+                    agingStats.oldVal += p; 
+                    agingStats.oldCount++; 
+                }
             }
         }
     });
@@ -3614,7 +3751,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
     }
 
     // --- UPDATE KPIs ---
-    const count = activeInventory.length;
+    const count = scopedActive.length;
     const avgSize = count > 0 ? totalPrincipal / count : 0;
     // monthlyIncome is now calculated perfectly inside the loop above
 
@@ -3678,11 +3815,14 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
 
     const agingEl = document.getElementById('agingChart');
     if (agingEl) {
+        const isRajeshCustomer = (activeCustomerId === getRajeshCustomerId() || activeCustomerId === 'cust_rajesh_powakhali' || activeCustomerId === 'ALL');
+        const agingLabels = isRajeshCustomer ? ['< 2 Yrs', '2-3 Yrs', '> 3 Yrs'] : ['< 6 Months', '6M - 1 Yr', '> 1 Year'];
+
         const agingCtx = agingEl.getContext('2d');
         barChartInstance = new Chart(agingCtx, {
             type: 'bar',
             data: { 
-                labels: ['< 2 Yrs', '2-3 Yrs', '> 3 Yrs'], 
+                labels: agingLabels, 
                 datasets: [{ 
                     data: [agingStats.normalVal, agingStats.midVal, agingStats.oldVal], 
                     counts: [agingStats.normalCount, agingStats.midCount, agingStats.oldCount],
@@ -3871,7 +4011,7 @@ const renderLiveStats = (onlyUpdateGrowthChart = false) => {
         const seriesStats = {};
         let totalActivePrincipal = 0;
 
-        activeInventory.forEach(loan => {
+        scopedActive.forEach(loan => {
             const p = parseFloat(loan.principal) || 0;
             if (p <= 0) return;
 
@@ -5982,13 +6122,16 @@ const initDevModeModule = () => {
 
     if (!modal) return;
 
-    // Triple Tap Detection on Dashboard Tab Button
+    // Triple Tap Detection on Dashboard Tab Button (Mobile PWA & Desktop)
     let tapCount = 0;
     let lastTapTime = 0;
 
     const setupTripleTap = () => {
         const dashBtn = document.querySelector('[data-tab="dashboardTab"]');
         if (!dashBtn) return;
+
+        dashBtn.style.touchAction = 'manipulation';
+        dashBtn.style.userSelect = 'none';
 
         const handleTap = (e) => {
             const now = Date.now();
@@ -6001,11 +6144,22 @@ const initDevModeModule = () => {
 
             if (tapCount === 3) {
                 tapCount = 0;
+                if (e && e.cancelable) e.preventDefault();
                 openDevModeModal();
             }
         };
 
-        dashBtn.addEventListener('click', handleTap);
+        // Mobile touch event (prevents native double-tap / triple-tap zoom)
+        dashBtn.addEventListener('touchend', (e) => {
+            handleTap(e);
+        }, { passive: false });
+
+        // Desktop mouse event
+        dashBtn.addEventListener('click', (e) => {
+            if (e.pointerType === 'mouse' || !('ontouchstart' in window)) {
+                handleTap(e);
+            }
+        });
     };
     setupTripleTap();
 
