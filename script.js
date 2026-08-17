@@ -1690,7 +1690,7 @@ filteredDates.forEach(entry => {
             loans: sortedLoans
         };
 
-        // --- Setup the Attach/View Photo Button for Batch Entries ---
+        // --- Setup the Attach/View Photo Button strictly for Batch Entries ---
         let entryImageUrl = null;
         
         const rajeshId = getRajeshCustomerId();
@@ -4534,7 +4534,7 @@ const confirmFinaliseWithDues = async () => {
                 reportName: newName,
                 finalisedDues: newDues,
                 finalisedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                imageUrl: uploadedImageUrl || reportData.imageUrl || null // NEW: Save the image URL
+                imageUrl: uploadedImageUrl || reportData.imageUrl || null
             });
 
             // B. Update Customer Dues in Firestore & Local
