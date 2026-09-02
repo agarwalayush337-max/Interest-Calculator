@@ -1,6 +1,14 @@
 # netlify.toml
-[functions]
-  directory = "netlify/functions"
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[dev]
+  publish = "."
+  functions = "netlify/functions"
+  port = 8888
+  autoLaunch = true
+
 # --- Fix for iOS PWA Login (Reverse Proxy) ---
 [[redirects]]
   from = "/__/auth/*"

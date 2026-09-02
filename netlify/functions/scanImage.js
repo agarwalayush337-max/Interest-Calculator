@@ -1,6 +1,7 @@
 // File: netlify/functions/scanImage.js
 const { GoogleAuth } = require('google-auth-library');
-const fetch = require('node-fetch');
+const _nodeFetch = require('node-fetch');
+const fetch = typeof _nodeFetch === 'function' ? _nodeFetch : (_nodeFetch.default || globalThis.fetch);
 
 exports.handler = async function(event) {
   const { GCP_PROJECT_ID, GOOGLE_CREDENTIALS } = process.env;

@@ -1412,28 +1412,70 @@ const applyValuationRules = (principalText, rawType, rawDetails) => {
     return { type: rawType, details: rawDetails };
 };
 
-const handleImageScan = async (fileOrEvent) => {
-    const file = fileOrEvent.target ? fileOrEvent.target.files[0] : fileOrEvent;
+// --- HELPER FOR NETLIFY SERVERLESS FUNCTIONS (Safe Error Parsing & Local Dev Handling) ---
+const callNetlifyFunction = async (endpoint, payload) => {
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-    if (!file) return;
-    showConfirm('Scanning Image...', 'Please wait while the document is being analyzed.', false);
+        if (!response.ok) {
+            let errorText = '';
+            try {
+                const errData = await response.json();
+                errorText = errData.error || errData.message || '';
+            } catch (e) {
+                // Response was not JSON (e.g. 404 HTML page returned by basic local static server)
+            }
+
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (isLocal && (response.status === 404 || response.status === 500)) {
+                // Provide instant local mock data for testing image scanning without GCP credentials or Netlify CLI
+                if (endpoint.includes('scanImage')) {
+                    console.warn("Netlify function returned " + response.status + " on localhost: Returning mock local dev scan result.");
+                    return {
+                        loans: [
+                            { no: 'G/101', principal: 50000, type: 'G', details: 'Sample Gold Ring', date: formatDateToDDMMYYYY(new Date()) },
+                            { no: 'S/201', principal: 15000, type: 'S', details: 'Sample Silver Payal', date: formatDateToDDMMYYYY(new Date()) }
+                        ],
+                        loanNumbers: [
+                            { no: 'G/101', principal: 50000, date: formatDateToDDMMYYYY(new Date()) },
+                            { no: 'S/201', principal: 15000, date: formatDateToDDMMYYYY(new Date()) }
+                        ]
+                    };
+                }
+                throw new Error('Local server function error (' + response.status + '). ' + (errorText || 'Check GCP credentials or run `netlify link`.'));
+            }
+
+            throw new Error(errorText || `Server error (${response.status} ${response.statusText}).`);
+        }
+
+        return await response.json();
+    } catch (err) {
+        throw err;
+    }
+};
+
+const handleImageScan = async (fileOrEvent) => {
+    const rawFile = fileOrEvent.target ? fileOrEvent.target.files[0] : fileOrEvent;
+
+    if (!rawFile) return;
+    showConfirm('Optimizing Image...', 'Compressing image for scanning...', false);
     
     try {
+        const file = await compressImage(rawFile, 1200, 0.7);
         const reader = new FileReader();
         reader.onload = async () => {
             try {
+                showConfirm('Scanning Image...', 'Analyzing document with AI...', false);
                 const base64Image = reader.result.split(',')[1];
-                const response = await fetch('/.netlify/functions/scanImage', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image, mimeType: file.type })
+                const result = await callNetlifyFunction('/.netlify/functions/scanImage', { 
+                    image: base64Image, 
+                    mimeType: 'image/jpeg' 
                 });
                 closeConfirm();
-                if (!response.ok) {
-                    const errorInfo = await response.json();
-                    throw new Error(errorInfo.error || 'The scan failed. The server responded with an error.');
-                }
-                const result = await response.json();
                 fillTableFromScan(result.loans);
             } catch (fetchError) {
                 console.error("ERROR inside onload:", fetchError);
@@ -1453,7 +1495,7 @@ const handleImageScan = async (fileOrEvent) => {
         await showConfirm('Error', error.message, false);
     }
     
-    if (fileOrEvent.target) {
+    if (fileOrEvent && fileOrEvent.target) {
         imageUploadInput.value = '';
     }
 };
@@ -3472,51 +3514,54 @@ const performLoanSearch = (inputElement) => {
 
 // Handle Image Scan for Loan Search Tab
 const handleNumberScan = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+    const rawFile = event.target.files[0];
+    if (!rawFile) return;
 
-    // 1. Setup Canvas
-    scanCanvas = document.getElementById('scanCanvas');
-    scanCtx = scanCanvas.getContext('2d');
-    const img = new Image();
-    
-    showConfirm('Scanning...', 'Analyzing document structure...', false);
+    showConfirm('Optimizing Image...', 'Compressing image for scanning...', false);
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-        try {
-            // Load image into Image Object and Canvas
-            img.src = reader.result;
-            await new Promise(r => img.onload = r);
-            
-            // Resize canvas to match image
-            scanCanvas.width = img.width;
-            scanCanvas.height = img.height;
-            scanCtx.drawImage(img, 0, 0);
+    try {
+        const file = await compressImage(rawFile, 1200, 0.7);
+        // 1. Setup Canvas
+        scanCanvas = document.getElementById('scanCanvas');
+        scanCtx = scanCanvas.getContext('2d');
+        const img = new Image();
+        
+        showConfirm('Scanning...', 'Analyzing document structure...', false);
 
-            // Send to Gemini
-            const base64Image = reader.result.split(',')[1];
-            const response = await fetch('/.netlify/functions/scanImage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: base64Image, mimeType: file.type, scanType: 'loan_numbers' })
-            });
-            
-            closeConfirm();
-            if (!response.ok) throw new Error((await response.json()).error);
-            
-            const result = await response.json();
-            
-            currentScanCoordinates = result.loanNumbers || [];
-            
-            fillSearchTableFromScan(result.loanNumbers);
-            
-        } catch (error) {
-            closeConfirm();
-            await showConfirm('Error', error.message, false);
-        }
-    };
-    reader.readAsDataURL(file);
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                // Load image into Image Object and Canvas
+                img.src = reader.result;
+                await new Promise(r => img.onload = r);
+                
+                // Resize canvas to match image
+                scanCanvas.width = img.width;
+                scanCanvas.height = img.height;
+                scanCtx.drawImage(img, 0, 0);
+
+                // Send to Gemini via Netlify Function
+                const base64Image = reader.result.split(',')[1];
+                const result = await callNetlifyFunction('/.netlify/functions/scanImage', { 
+                    image: base64Image, 
+                    mimeType: 'image/jpeg', 
+                    scanType: 'loan_numbers' 
+                });
+                
+                closeConfirm();
+                currentScanCoordinates = result.loanNumbers || [];
+                fillSearchTableFromScan(result.loanNumbers);
+                
+            } catch (error) {
+                closeConfirm();
+                await showConfirm('Error', error.message, false);
+            }
+        };
+        reader.readAsDataURL(file);
+    } catch (err) {
+        closeConfirm();
+        await showConfirm('Error', err.message, false);
+    }
     numberImageUploadInput.value = '';
 };
 
@@ -5002,22 +5047,19 @@ const generateSortedImage = () => {
         // Find the "Truth" in your Database
         const match = getScopedActiveInventory().find(inv => normalizeLoanNo(inv.no) === normalizeLoanNo(item.no));
         
-        // NEW: Tag the number if it's auto-added
         let finalNo = item.no;
-        if (item.isOld) finalNo += "*"; // <--- Changed from [OLD] to *
+        if (item.isOld) finalNo += "*";
 
         if (match) {
-            // FOUND: Use Database Values (Ignore Scan Errors)
             return { 
-                no: finalNo, // Uses tagged number
+                no: finalNo, 
                 principal: String(match.principal), 
                 date: match.date, 
                 detail: match.type || "?" 
             };
         } else {
-            // NOT FOUND: Fallback to what's in the table (Scanned Data)
             return { 
-                no: finalNo, // Uses tagged number
+                no: finalNo, 
                 principal: item.principal ? String(item.principal) : '-', 
                 date: item.date || '-', 
                 detail: "?" 
@@ -5032,7 +5074,34 @@ const generateSortedImage = () => {
         return a.no.localeCompare(b.no, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    // B. Create Canvas (High Definition Setup)
+    // B. Calculate Totals (Total Principal, Total Interest, Grand Total)
+    let totalPrincipal = 0;
+    let totalInterest = 0;
+    const globalRate = parseFloat(document.getElementById('interestRate')?.value) || 1.75;
+    const todayObj = new Date();
+
+    processedList.forEach(item => {
+        const p = parseFloat(String(item.principal).replace(/,/g, '')) || 0;
+        totalPrincipal += p;
+
+        if (p > 0 && item.date && item.date !== '-') {
+            const loanDate = parseDate(item.date);
+            if (loanDate) {
+                let days = days360(loanDate, todayObj);
+                if (days < 0) days = 0;
+                const calcDays = (days > 0 && days < 30) ? 30 : days;
+                const actualRate = getInterestRateForLoan(item.no, globalRate);
+                const custId = activeCustomerId;
+                const interest = calculateInterest(p, actualRate, calcDays, custId);
+                totalInterest += interest;
+            }
+        }
+    });
+
+    const roundedInterest = Math.round(totalInterest / 10) * 10;
+    const grandTotal = Math.round(totalPrincipal + roundedInterest);
+
+    // C. Create Canvas (High Definition Setup)
     const reportCanvas = document.createElement('canvas');
     const ctx = reportCanvas.getContext('2d', { willReadFrequently: true });
     
@@ -5044,28 +5113,32 @@ const generateSortedImage = () => {
     const dateHeaderHeight = 40; 
     const columnHeaderHeight = 50; 
     const totalHeaderHeight = dateHeaderHeight + columnHeaderHeight;
-    const padding = 200; 
+    
+    // Count unique categories to adjust logicalHeight
+    const categoriesCount = new Set(processedList.map(i => i.detail)).size;
+    const categoryHeaderTotalHeight = categoriesCount * 45;
+    const footerHeight = 120; 
     
     const logicalWidth = 900;
-    const logicalHeight = totalHeaderHeight + (processedList.length * 60) + padding;
+    const logicalHeight = totalHeaderHeight + categoryHeaderTotalHeight + (processedList.length * rowHeight) + footerHeight;
 
     reportCanvas.width = logicalWidth * scale;
     reportCanvas.height = logicalHeight * scale;
 
     ctx.scale(scale, scale);
 
-    // C. Draw White Background
+    // D. Draw White Background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
-    // D. Draw Today's Date
+    // E. Draw Today's Date
     const today = new Date().toLocaleDateString('en-GB');
     ctx.fillStyle = "#333";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "right";
     ctx.fillText(today, logicalWidth - 20, 25); 
 
-    // E. Draw Column Headers
+    // F. Draw Column Headers
     const headerY = dateHeaderHeight;
     ctx.fillStyle = "#f1f3f5";
     ctx.fillRect(0, headerY, logicalWidth, columnHeaderHeight);
@@ -5092,7 +5165,7 @@ const generateSortedImage = () => {
     ctx.strokeStyle = "#333";
     ctx.stroke();
 
-    // F. Draw Rows
+    // G. Draw Rows
     let y = totalHeaderHeight + 35;
     let currentCategory = null;
     let slCounter = 1;
@@ -5143,15 +5216,70 @@ const generateSortedImage = () => {
         y += rowHeight;
     });
 
-    // G. Download/Share
+    // H. Draw Single-Row Accounting Totals (Double Underline & Column Aligned in Solid Black)
+    y -= 10; // Position directly beneath the last row
+    
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1.5;
+
+    // 1. Draw 2 horizontal parallel lines (Double Underline under totals columns only: Amount, Date, Detail)
+    const totalLineStartX = 300;
+    const totalLineEndX = 880;
+
+    ctx.beginPath();
+    ctx.moveTo(totalLineStartX, y + 10);
+    ctx.lineTo(totalLineEndX, y + 10);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(totalLineStartX, y + 15);
+    ctx.lineTo(totalLineEndX, y + 15);
+    ctx.stroke();
+
+    // 2. Draw Totals in ONE ROW directly aligned with columns (Uniform Bold 22px Black Font)
+    const totalRowY = y + 45;
+    ctx.fillStyle = "#000000";
+    ctx.font = "bold 22px sans-serif";
+
+    // A. Under AMOUNT column (colX.amt = 450, right aligned): Total Principal
+    ctx.textAlign = "right";
+    ctx.fillText(Math.round(totalPrincipal).toLocaleString('en-IN'), colX.amt, totalRowY);
+
+    // B. Under DATE column (colX.date = 550, left aligned): Total Interest
+    ctx.textAlign = "left";
+    ctx.fillText(`Int: ${roundedInterest.toLocaleString('en-IN')}`, colX.date, totalRowY);
+
+    // C. Under DETAIL column (right aligned at 880px to prevent right-edge clipping): Grand Total Amount
+    ctx.textAlign = "right";
+    ctx.fillText(`Tot: ${grandTotal.toLocaleString('en-IN')}`, totalLineEndX, totalRowY);
+
+    // 3. Draw closing single horizontal line beneath totals row (under totals columns only)
+    ctx.beginPath();
+    ctx.moveTo(totalLineStartX, totalRowY + 12);
+    ctx.lineTo(totalLineEndX, totalRowY + 12);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // I. Download (Desktop) / Share (Mobile)
     reportCanvas.toBlob((blob) => {
         const fileName = `Sorted_List_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: 'image/png' });
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // Strict mobile check (phones/tablets only)
+        const isMobilePhone = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile/i.test(navigator.userAgent);
 
-        if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file], title: 'Sorted Loan List' }).catch(console.error);
+        if (isMobilePhone && navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file], title: 'Sorted Loan List' }).catch(() => {
+                // Fallback to direct download if mobile web share is cancelled
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
         } else {
+            // Direct download for desktop laptops & computers
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = fileName;
@@ -5571,23 +5699,12 @@ const handleBatchScan = async (event) => {
                     currentBatchImageBase64 = base64Image;
                     
                     // 3. Send the smaller, optimized image to the Server
-                    const response = await fetch('/.netlify/functions/scanImage', {
-                        method: 'POST', // <--- ADD THIS LINE
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            image: base64Image, 
-                            mimeType: 'image/jpeg', // Force jpeg since we compressed it
-                            scanType: 'loan_entry' 
-                        })
+                    const result = await callNetlifyFunction('/.netlify/functions/scanImage', { 
+                        image: base64Image, 
+                        mimeType: 'image/jpeg', // Force jpeg since we compressed it
+                        scanType: 'loan_entry' 
                     });
 
-                    // 4. Improved Error Handling (Reads actual server error instead of generic text)
-                    if (!response.ok) {
-                        const errData = await response.json().catch(() => ({}));
-                        throw new Error(errData.error || "Upload limit exceeded. Try taking the photo from further back.");
-                    }
-                    
-                    const result = await response.json();
                     const loans = result.loans; 
 
                     if (!loans || loans.length === 0) {
